@@ -76,6 +76,7 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
     extern const int UNKNOWN_TABLE;
     extern const int ALL_REPLICAS_ARE_STALE;
+    extern const int NOT_IMPLEMENTED;
 }
 
 namespace FailPoints
@@ -848,9 +849,23 @@ static ASTPtr makeExplain(const ExplainPlanOptions & options, ASTPtr query)
 {
     auto explain_settings = make_intrusive<ASTSetQuery>();
     explain_settings->is_standalone = false;
-    explain_settings->changes =  options.toSettingsChanges();
+    explain_settings->changes = options.toSettingsChanges();
 
     auto explain_query = make_intrusive<ASTExplainQuery>(ASTExplainQuery::ExplainKind::QueryPlan);
+    explain_query->setExplainedQuery(query);
+    explain_query->setSettings(explain_settings);
+
+    return explain_query;
+}
+
+static ASTPtr makeExplainPipeline(bool header, bool distributed, ASTPtr query)
+{
+    auto explain_settings = make_intrusive<ASTSetQuery>();
+    explain_settings->is_standalone = false;
+    explain_settings->changes.emplace_back("header", int(header));
+    explain_settings->changes.emplace_back("distributed", int(distributed));
+
+    auto explain_query = make_intrusive<ASTExplainQuery>(ASTExplainQuery::ExplainKind::QueryPipeline);
     explain_query->setExplainedQuery(query);
     explain_query->setSettings(explain_settings);
 
@@ -897,6 +912,27 @@ void ReadFromRemote::describeDistributedPlan(FormatSettings & settings, const Ex
             shard_copy.header = header;
             shard_copy.query = makeExplain(options, shard.query);
         }
+    }
+
+    formatExplain(settings, addPipes(used_shards, header));
+}
+
+void ReadFromRemote::describeDistributedPipeline(FormatSettings & settings, bool distributed)
+{
+    auto header = std::make_shared<const Block>(
+        Block{ColumnWithTypeAndName{ColumnString::create(), std::make_shared<DataTypeString>(), "explain"}});
+    ClusterProxy::SelectStreamFactory::Shards used_shards;
+
+    for (const auto & shard : shards)
+    {
+        if (shard.query_plan)
+            /// A serialized query plan is not suitable for building a pipeline locally
+            /// (e.g. ReadFromTableFunctionStep does not implement initializePipeline).
+            throw Exception(ErrorCodes::NOT_IMPLEMENTED, "EXPLAIN PIPELINE distributed=1 is not supported with serialize_query_plan=1");
+
+        auto & shard_copy = used_shards.emplace_back(shard);
+        shard_copy.header = header;
+        shard_copy.query = makeExplainPipeline(settings.write_header, distributed, shard.query);
     }
 
     formatExplain(settings, addPipes(used_shards, header));
@@ -1112,4 +1148,17 @@ void ReadFromParallelRemoteReplicasStep::describeDistributedPlan(FormatSettings 
     }
 }
 
+void ReadFromParallelRemoteReplicasStep::describeDistributedPipeline(FormatSettings & settings, bool distributed)
+{
+    if (query_plan)
+        /// A serialized query plan is not suitable for building a pipeline locally
+        /// (e.g. ReadFromTableFunctionStep does not implement initializePipeline).
+        throw Exception(ErrorCodes::NOT_IMPLEMENTED, "EXPLAIN PIPELINE distributed=1 is not supported with serialize_query_plan=1");
+
+    auto header = std::make_shared<const Block>(
+        Block{ColumnWithTypeAndName{ColumnString::create(), std::make_shared<DataTypeString>(), "explain"}});
+
+    auto explain_query = makeExplainPipeline(settings.write_header, distributed, query_ast);
+    formatExplain(settings, addPipes(explain_query, header));
+}
 }

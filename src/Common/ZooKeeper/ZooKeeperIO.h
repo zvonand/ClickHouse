@@ -1,6 +1,5 @@
 #pragma once
 
-#include <IO/WriteHelpers.h>
 #include <IO/ReadHelpers.h>
 #include <IO/Operators.h>
 #include <Common/ZooKeeper/KeeperException.h>

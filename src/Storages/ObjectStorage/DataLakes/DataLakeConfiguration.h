@@ -4,7 +4,6 @@
 
 #include <IO/ReadHelpers.h>
 #include <IO/WriteBuffer.h>
-#include <IO/WriteHelpers.h>
 #include <IO/VarInt.h>
 #include <Storages/ObjectStorage/DataLakes/DeltaLakeMetadataDeltaKernel.h>
 

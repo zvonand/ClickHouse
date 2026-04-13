@@ -11,7 +11,6 @@
 #include <IO/ReadBuffer.h>
 #include <IO/ReadHelpers.h>
 #include <IO/WriteBuffer.h>
-#include <IO/WriteHelpers.h>
 #include <Common/Exception.h>
 
 namespace DB

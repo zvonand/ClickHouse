@@ -6,7 +6,6 @@
 #include <base/sort.h>
 #include <IO/ReadBuffer.h>
 #include <IO/ReadHelpers.h>
-#include <IO/WriteHelpers.h>
 #include <IO/ReadBufferFromString.h>
 #include <IO/WriteBufferFromString.h>
 #include <IO/Operators_pcg_random.h>

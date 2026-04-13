@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <cstring>
 
-#include <IO/WriteHelpers.h>
 #include <IO/ReadHelpers.h>
 
 #include <Columns/ColumnArray.h>

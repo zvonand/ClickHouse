@@ -4,7 +4,6 @@
 
 #include <Common/filesystemHelpers.h>
 #include <IO/WriteBufferFromFile.h>
-#include <IO/WriteHelpers.h>
 #include <Common/Config/ConfigProcessor.h>
 #include <Poco/AutoPtr.h>
 #include <Poco/DOM/Document.h>

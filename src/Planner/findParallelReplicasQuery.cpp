@@ -40,6 +40,23 @@ namespace ErrorCodes
     extern const int UNSUPPORTED_METHOD;
 }
 
+bool isTableNodeEligibleForParallelReplicas(const TableNode & table_node, const StoragePtr & storage, const ContextPtr & context)
+{
+    const auto & settings = context->getSettingsRef();
+
+    if (!storage->isMergeTree() && !typeid_cast<const StorageDummy *>(storage.get()))
+        return false;
+
+    if (!storage->supportsReplication() && !settings[Setting::parallel_replicas_for_non_replicated_merge_tree])
+        return false;
+
+    /// Parallel replicas not supported with FINAL.
+    if (table_node.hasTableExpressionModifiers() && table_node.getTableExpressionModifiers()->hasFinal())
+        return false;
+
+    return true;
+}
+
 static bool canUseTableForParallelReplicas(const TableNode & table_node, const ContextPtr & context)
 {
     const auto & settings = context->getSettingsRef();
@@ -64,24 +81,14 @@ static bool canUseTableForParallelReplicas(const TableNode & table_node, const C
         if (!settings[Setting::parallel_replicas_allow_materialized_views])
             return false;
 
-        // address refreshable MVs separately, currently leads to logical error
+        /// Address refreshable MVs separately, currently leads to logical error.
         if (mv->isRefreshable())
             return false;
 
         storage = mv->getTargetTable();
     }
 
-    if (!storage->isMergeTree() && !typeid_cast<const StorageDummy *>(storage.get()))
-        return false;
-
-    if (!storage->supportsReplication() && !settings[Setting::parallel_replicas_for_non_replicated_merge_tree])
-        return false;
-
-    /// Parallel replicas not supported with FINAL.
-    if (table_node.hasTableExpressionModifiers() && table_node.getTableExpressionModifiers()->hasFinal())
-        return false;
-
-    return true;
+    return isTableNodeEligibleForParallelReplicas(table_node, storage, context);
 }
 
 /// Returns a list of (sub)queries (candidates) which may support parallel replicas.

@@ -41,6 +41,7 @@
 #include <Analyzer/TableNode.h>
 #include <Analyzer/UnionNode.h>
 #include <Analyzer/WindowFunctionsUtils.h>
+#include <Planner/findQueryForParallelReplicas.h>
 
 namespace DB
 {
@@ -50,7 +51,6 @@ namespace Setting
     extern const SettingsBool extremes;
     extern const SettingsUInt64 max_result_rows;
     extern const SettingsUInt64 max_result_bytes;
-    extern const SettingsBool parallel_replicas_for_non_replicated_merge_tree;
     extern const SettingsUInt64 allow_experimental_parallel_reading_from_replicas;
     extern const SettingsBool parallel_replicas_allow_view_over_mergetree;
 }
@@ -219,8 +219,6 @@ StoragePtr StorageView::getUnderlyingMergeTreeStorageForParallelReplicas(const C
         return nullptr;
     }
 
-    const auto & settings = context->getSettingsRef();
-
     /// Recursively walk the resolved query tree to find the underlying MergeTree storage.
     /// For UNION nodes, all branches must be eligible.
     /// Returns nullptr if the view is not suitable for parallel replicas.
@@ -291,14 +289,7 @@ StoragePtr StorageView::getUnderlyingMergeTreeStorageForParallelReplicas(const C
                     if (nested_view)
                         return nested_view->getUnderlyingMergeTreeStorageForParallelReplicas(context);
 
-                    if (!storage->isMergeTree())
-                        return nullptr;
-
-                    if (!storage->supportsReplication() && !settings[Setting::parallel_replicas_for_non_replicated_merge_tree])
-                        return nullptr;
-
-                    /// Parallel replicas not supported with FINAL.
-                    if (table_node.hasTableExpressionModifiers() && table_node.getTableExpressionModifiers()->hasFinal())
+                    if (!isTableNodeEligibleForParallelReplicas(table_node, storage, context))
                         return nullptr;
 
                     return table_node.getStorage();

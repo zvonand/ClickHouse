@@ -2347,7 +2347,7 @@ void StorageMergeTree::dropPart(const String & part_name, bool detach, ContextPt
         if (txn)
         {
             if (auto part = outdatePart(txn.get(), part_name, /*force=*/ true))
-                dropPartsImpl({part}, detach);
+                dropPartsImpl({part}, detach, query_context);
         }
         else
         {
@@ -2422,7 +2422,7 @@ void StorageMergeTree::dropPartition(const ASTPtr & partition, bool detach, Cont
                 }
                 removePartsFromWorkingSet(txn.get(), parts_to_remove, true, data_parts_lock);
             }
-            dropPartsImpl(std::move(parts_to_remove), detach);
+            dropPartsImpl(std::move(parts_to_remove), detach, query_context);
         }
         else
         {
@@ -2478,9 +2478,9 @@ void StorageMergeTree::dropPartition(const ASTPtr & partition, bool detach, Cont
     clearEmptyParts();
 }
 
-void StorageMergeTree::dropPartsImpl(DataPartsVector && parts_to_remove, bool detach)
+void StorageMergeTree::dropPartsImpl(DataPartsVector && parts_to_remove, bool detach, ContextPtr context)
 {
-    auto metadata_snapshot = getInMemoryMetadataPtr(getContext(), false);
+    auto metadata_snapshot = getInMemoryMetadataPtr(context, false);
 
     if (detach)
     {

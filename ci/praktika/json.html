@@ -2178,6 +2178,16 @@
                                 clearPage();
                                 renderResults(PR, sha, nameParams);
                             }
+                        } else if (result.data && result.data.length === 0) {
+                            // Empty results — clear any stale cached downstream rows
+                            const hadDownstream = runtimeCache.downstreamResults !== null;
+                            runtimeCache.downstreamResults = null;
+                            runtimeCache.downstreamSha = null;
+                            runtimeCache.downstreamError = null;
+                            if (hadDownstream) {
+                                clearPage();
+                                renderResults(PR, sha, nameParams);
+                            }
                         }
                     });
                 }

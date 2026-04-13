@@ -42,13 +42,13 @@ function read_worker()
     done
 }
 
-TIMEOUT=20
+TIMEOUT=60
 
-for i in {1..10}; do
+for i in {1..20}; do
     alter_worker "$i" &
 done
 
-for _ in {1..10}; do
+for _ in {1..20}; do
     read_worker &
 done
 

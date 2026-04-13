@@ -1,6 +1,10 @@
 """
 End-to-end test for the process-group orphan cleanup in tests/clickhouse-test.
 
+Works on both Linux and macOS.  The ``pgrep()`` helper is imported directly
+from ``tests/clickhouse-test`` so it uses ``ps -eo pid,ppid,pgid,command``
+(POSIX) rather than the ``pgrep --pgroup`` system command (Linux-only).
+
 Scenario
 --------
 1. A "parent" process (analogous to clickhouse-test) starts a subprocess
@@ -17,19 +21,24 @@ Scenario
 
 import fcntl
 import os
+import runpy
 import signal
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
 
-import pytest
-
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _SCRIPT = str(_REPO_ROOT / "tests" / "clickhouse-test")
 
 # Must match the path that clickhouse-test itself computes from its own __file__.
 _GROUP_PID_FILE = _REPO_ROOT / "ci" / "tmp" / "clickhouse_test_group_pid"
+
+
+# pgrep() from clickhouse-test uses ``ps -eo pid,ppid,pgid,command`` and
+# works on both Linux and macOS, unlike the ``pgrep --pgroup`` system command.
+# runpy.run_path handles the missing .py extension and the hyphen in the name.
+pgrep = runpy.run_path(_SCRIPT)["pgrep"]
 
 # ---------------------------------------------------------------------------
 # Helper script that plays the role of clickhouse-test's test-runner loop.
@@ -75,10 +84,6 @@ def _is_alive(pid: int) -> bool:
         return False
 
 
-@pytest.mark.skipif(
-    not sys.platform.startswith("linux"),
-    reason="kill_process_group uses `pgrep --pgroup` which is Linux-specific",
-)
 def test_cleanup_kills_orphaned_test_process(tmp_path):
     """
     Verify that ``clickhouse-test --cleanup`` kills a test subprocess that was
@@ -109,6 +114,13 @@ def test_cleanup_kills_orphaned_test_process(tmp_path):
         assert _GROUP_PID_FILE.exists(), "group pid file should exist after test launch"
         assert str(test_pid) in _GROUP_PID_FILE.read_text(), (
             "test subprocess PGID should be recorded in the group pid file"
+        )
+
+        # Verify via pgrep() (imported from clickhouse-test) that the test
+        # subprocess belongs to the expected process group.  With
+        # start_new_session=True the child's PGID equals its PID.
+        assert pgrep(pgid=test_pid), (
+            "pgrep() should find at least one process in the test subprocess's group"
         )
 
         # Kill the parent with SIGKILL — this is the failure mode we are

@@ -66,7 +66,7 @@ struct ZooKeeperOpentelemetrySpans
 
     static void maybeInitialize(
         MaybeSpan & maybe_span,
-        const std::optional<OpenTelemetry::TracingContext> & parent_context,
+        const OpenTelemetry::TracingContext * parent_context,
         UInt64 start_time_us = now());
 
     template <typename MakeAttributes>

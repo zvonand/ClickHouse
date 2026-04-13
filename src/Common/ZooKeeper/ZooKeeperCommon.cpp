@@ -72,7 +72,7 @@ void ZooKeeperRequest::write(WriteBuffer & out, bool use_xid_64, bool supports_t
 
     if (supports_tracing)
     {
-        const uint8_t has_tracing_context = tracing_context.has_value();
+        const uint8_t has_tracing_context = tracing_context != nullptr;
         Coordination::write(has_tracing_context, out);
         if (has_tracing_context)
         {
@@ -1170,6 +1170,7 @@ void ZooKeeperMultiRequest::readImpl(ReadBuffer & in, RequestValidator request_v
         request->readImpl(in);
         if (request_validator)
             request_validator(*request);
+        request->spans.reset();
         requests.push_back(request);
 
         if (in.eof())
@@ -1598,7 +1599,9 @@ ZooKeeperRequestPtr ZooKeeperRequestFactory::get(OpNum op_num) const
     if (it == op_num_to_request.end())
         throw Exception(Error::ZBADARGUMENTS, "Unknown operation type {}", op_num);
 
-    return it->second();
+    auto request = it->second();
+    request->spans = std::make_unique<DB::ZooKeeperOpentelemetrySpans>();
+    return request;
 }
 
 ZooKeeperRequestFactory & ZooKeeperRequestFactory::instance()

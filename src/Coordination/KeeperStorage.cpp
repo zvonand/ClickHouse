@@ -4067,12 +4067,12 @@ KeeperResponsesForSessions KeeperStorage<Container>::processLocalRequests(
                 const auto maybe_log_opentelemetry_span = [&](OpenTelemetry::SpanStatus status, const std::string & error_message)
                 {
                     ZooKeeperOpentelemetrySpans::maybeInitialize(
-                        concrete_zk_request.spans.read_process,
-                        concrete_zk_request.tracing_context,
+                        concrete_zk_request.spans->read_process,
+                        concrete_zk_request.tracing_context.get(),
                         start_time_us);
 
                     ZooKeeperOpentelemetrySpans::maybeFinalize(
-                        concrete_zk_request.spans.read_process,
+                        concrete_zk_request.spans->read_process,
                         [&]
                         {
                             return std::vector<OpenTelemetry::SpanAttribute>{

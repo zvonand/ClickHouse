@@ -828,7 +828,7 @@ void ZooKeeper::sendThread()
                     ///  because they must not be lost (callbacks must be called because the user will wait for them).
 
                     ZooKeeperOpentelemetrySpans::maybeFinalize(
-                        info.request->spans.client_requests_queue,
+                        info.request->spans->client_requests_queue,
                         [&]
                         {
                             return std::vector<OpenTelemetry::SpanAttribute>{
@@ -1504,16 +1504,17 @@ void ZooKeeper::pushRequest(RequestInfo && info)
         }
 
         maybeInjectSendFault();
+        info.request->spans = std::make_unique<DB::ZooKeeperOpentelemetrySpans>();
 
         if (
             const auto & current_trace_context = OpenTelemetry::CurrentContext();
             current_trace_context.isTraceEnabled() && current_trace_context.trace_flags & DB::OpenTelemetry::TRACE_FLAG_KEEPER_SPANS
         )
         {
-            info.request->tracing_context = current_trace_context;
+            info.request->tracing_context = std::make_unique<OpenTelemetry::TracingContext>(current_trace_context);
         }
 
-        ZooKeeperOpentelemetrySpans::maybeInitialize(info.request->spans.client_requests_queue, info.request->tracing_context);
+        ZooKeeperOpentelemetrySpans::maybeInitialize(info.request->spans->client_requests_queue, info.request->tracing_context.get());
 
         if (!requests_queue.tryPush(std::move(info), args.operation_timeout_ms))
         {
@@ -1950,8 +1951,9 @@ void ZooKeeper::close()
 
     RequestInfo request_info;
     request_info.request = std::make_shared<ZooKeeperCloseRequest>(std::move(request));
+    request_info.request->spans = std::make_unique<DB::ZooKeeperOpentelemetrySpans>();
 
-    ZooKeeperOpentelemetrySpans::maybeInitialize(request_info.request->spans.client_requests_queue, request_info.request->tracing_context);
+    ZooKeeperOpentelemetrySpans::maybeInitialize(request_info.request->spans->client_requests_queue, request_info.request->tracing_context.get());
 
     if (!requests_queue.tryPush(std::move(request_info), args.operation_timeout_ms))
         throw Exception(Error::ZOPERATIONTIMEOUT, "Cannot push close request to queue within operation timeout of {} ms", args.operation_timeout_ms);

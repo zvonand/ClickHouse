@@ -63,11 +63,11 @@ struct ZooKeeperRequest : virtual Request
 
     std::chrono::steady_clock::time_point create_ts = {};
 
-    std::optional<OpenTelemetry::TracingContext> tracing_context;
-    DB::ZooKeeperOpentelemetrySpans spans;
+    std::unique_ptr<OpenTelemetry::TracingContext> tracing_context;
+    std::unique_ptr<DB::ZooKeeperOpentelemetrySpans> spans;
 
     ZooKeeperRequest() = default;
-    ZooKeeperRequest(const ZooKeeperRequest &) = default;
+    ZooKeeperRequest(const ZooKeeperRequest &) = delete;
 
     virtual OpNum getOpNum() const = 0;
     virtual int32_t tryGetOpNum() const { return static_cast<int32_t>(getOpNum()); }

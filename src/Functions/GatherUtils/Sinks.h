@@ -7,7 +7,6 @@
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnFixedString.h>
-#include <Columns/ColumnConst.h>
 #include <Columns/ColumnNullable.h>
 
 #include <Common/assert_cast.h>

@@ -40,7 +40,6 @@ PLAIN_FUNCTIONAL_TEST_JOB = [
     j for j in JobConfigs.functional_tests_jobs if "amd_debug, parallel" in j.name
 ][0]
 
-from dataclasses import replace #REMOVEME
 workflow = Workflow.Config(
     name="PR",
     event=Workflow.Event.PULL_REQUEST,
@@ -50,7 +49,7 @@ workflow = Workflow.Config(
         JobConfigs.code_review,
         JobConfigs.docs_job,
         JobConfigs.fast_test,
-        *[replace(JobConfigs.darwin_fast_test_jobs[0], name=f"ft{i}") for i in range(50)],
+        *JobConfigs.darwin_fast_test_jobs,
         *JobConfigs.tidy_build_arm_jobs,
         *[job.set_dependency(STYLE_AND_FAST_TESTS) for job in JobConfigs.build_jobs],
         *[

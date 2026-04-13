@@ -5,6 +5,7 @@
 #include <Common/logger_useful.h>
 #include <Common/FailPoint.h>
 
+#include <Columns/IColumn.h>
 #include <Common/assert_cast.h>
 #include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypeString.h>

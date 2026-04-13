@@ -6,7 +6,6 @@
 #include <optional>
 
 #include <Columns/ColumnDecimal.h>
-#include <Columns/ColumnString.h>
 #include <Core/Block_fwd.h>
 #include <Core/callOnTypeIndex.h>
 #include <Common/ArenaUtils.h>

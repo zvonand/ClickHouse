@@ -5,7 +5,6 @@
 #include <Common/SymbolIndex.h>
 #include <Common/HashTable/HashMap.h>
 #include <Common/Arena.h>
-#include <Columns/ColumnString.h>
 #include <Columns/ColumnsNumber.h>
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypeArray.h>

@@ -4,7 +4,6 @@
 #include <memory>
 #include <variant>
 #include <Columns/ColumnDecimal.h>
-#include <Columns/ColumnString.h>
 #include <Columns/ColumnFixedString.h>
 #include <Columns/ColumnVector.h>
 #include <Dictionaries/DictionaryHelpers.h>

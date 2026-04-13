@@ -2,7 +2,6 @@
 
 #include <Functions/IFunction.h>
 #include <Functions/FunctionHelpers.h>
-#include <Columns/ColumnString.h>
 #include <Columns/ColumnNullable.h>
 #include <Core/Types.h>
 #include <Core/ValuesWithType.h>

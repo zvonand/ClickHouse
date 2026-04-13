@@ -51,7 +51,6 @@
 
 #include <Common/CurrentThread.h>
 #include <Common/escapeForFileName.h>
-#include <Common/tests/gtest_global_context.h>
 #include <Common/typeid_cast.h>
 #include <Common/parseGlobs.h>
 #include <Common/filesystemHelpers.h>

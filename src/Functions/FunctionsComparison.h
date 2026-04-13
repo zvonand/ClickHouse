@@ -13,8 +13,6 @@
 #include <Core/AccurateComparison.h>
 #include <Core/DecimalComparison.h>
 #include <Core/callOnTypeIndex.h>
-#include <DataTypes/DataTypeDate.h>
-#include <DataTypes/DataTypeDateTime.h>
 #include <DataTypes/DataTypeDateTime64.h>
 #include <DataTypes/DataTypeEnum.h>
 #include <DataTypes/DataTypeFixedString.h>

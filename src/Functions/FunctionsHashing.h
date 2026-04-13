@@ -26,7 +26,6 @@
 #include <bit>
 #include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypesDecimal.h>
-#include <DataTypes/DataTypeDate.h>
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypeFixedString.h>
 #include <DataTypes/DataTypeTuple.h>

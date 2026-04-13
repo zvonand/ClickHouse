@@ -23,7 +23,6 @@
 #include <DataTypes/DataTypeEnum.h>
 #include <DataTypes/DataTypeDate.h>
 #include <DataTypes/DataTypeDate32.h>
-#include <DataTypes/DataTypeDateTime.h>
 #include <DataTypes/DataTypeTime.h>
 #include <DataTypes/DataTypeDateTime64.h>
 #include <DataTypes/DataTypeTime64.h>

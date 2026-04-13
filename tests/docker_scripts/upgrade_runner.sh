@@ -319,8 +319,12 @@ cp /var/log/clickhouse-server/clickhouse-server.upgrade.log /test_output/clickho
 #       the wrapping `MergeTreeBackgroundExecutor` line also needs to be excluded.
 # `NO_SUCH_INTERSERVER_IO_ENDPOINT` is expected during upgrades because replicated tables try to fetch parts
 # from replicas that are being restarted and whose interserver endpoints are temporarily unavailable.
-# `Unknown tokenizer` can appear when a tokenizer is renamed between versions (e.g. unicode_word -> unicodeWord).
-# `DNS_ERROR` is a transient infrastructure issue (Azure/S3 DNS resolution failure).
+# `Unknown tokenizer: 'unicode_word'` appears because the `unicode_word` tokenizer was renamed to `asciiCJK`
+#       (with `unicodeWord` as a transitional alias). Tables from old versions using `unicode_word` trigger this
+#       on attach. Narrowed to the exact legacy name so genuinely unsupported tokenizer names are not masked.
+# `Azure::Storage::StorageException.*Not found address of host` is a transient Azure blob DNS resolution failure
+#       for `openbucketforpublicci.blob.core.windows.net`. Filtered via regex in the secondary pipe below to match
+#       both the Azure SDK exception type AND the DNS error together, so non-Azure DNS errors are not masked.
 # `SystemLogQueue` overflow happens under heavy stress test load and is not a compatibility bug.
 # `TraceCollector` bad file descriptor errors are transient and unrelated to upgrade compatibility.
 # `This engine is deprecated and is not supported in transactions` appears for Ordinary engine tables from old versions.
@@ -389,8 +393,7 @@ rg -Fav -e "Code: 236. DB::Exception: Cancelled merging parts" \
            -e "Cannot parse projection test_projection" \
            -e "Key expressions cannot contain subqueries" \
            -e "Expression must be deterministic but it contains non-deterministic part" \
-           -e "Unknown tokenizer" \
-           -e "DNS_ERROR" \
+           -e "Unknown tokenizer: 'unicode_word'" \
            -e "SystemLogQueue" \
            -e "TraceCollector" \
            -e "This engine is deprecated and is not supported in transactions" \
@@ -400,6 +403,7 @@ rg -Fav -e "Code: 236. DB::Exception: Cancelled merging parts" \
            -e "rdk:FAIL" \
     /test_output/clickhouse-server.upgrade.log \
     | grep -av -e "_repl_01111_.*Mapping for table with UUID" \
+    | grep -av -e "Azure::Storage::StorageException.*Not found address of host" \
     | grep -Fa "<Error>" > /test_output/upgrade_error_messages.txt || true
 
 if [ -s /test_output/upgrade_error_messages.txt ]; then

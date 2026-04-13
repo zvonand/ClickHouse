@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Columns/ColumnsNumber.h>
 #include <Functions/array/FunctionArrayMapped.h>
 
 

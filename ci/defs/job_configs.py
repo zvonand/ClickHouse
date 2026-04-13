@@ -187,6 +187,9 @@ class JobConfigs:
         runs_on=RunnerLabels.STYLE_CHECK_ARM,
         command="python3 ./ci/jobs/ci_tests_job.py",
         timeout=1200,
+        digest_config=Job.CacheDigestConfig(
+            include_paths=["./ci/"],
+        ),
     )
     fast_test = Job.Config(
         name=JobNames.FAST_TEST,

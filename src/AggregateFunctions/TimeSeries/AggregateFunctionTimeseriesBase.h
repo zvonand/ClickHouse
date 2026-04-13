@@ -5,7 +5,6 @@
 #include <memory>
 #include <type_traits>
 
-#include <IO/ReadHelpers.h>
 
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnNullable.h>

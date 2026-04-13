@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <cstring>
 
-#include <IO/ReadHelpers.h>
 
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnNullable.h>

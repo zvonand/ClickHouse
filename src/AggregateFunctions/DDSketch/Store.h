@@ -7,7 +7,6 @@
 
 #include <AggregateFunctions/DDSketch/DDSketchEncoding.h>
 #include <IO/ReadBuffer.h>
-#include <IO/ReadHelpers.h>
 #include <IO/WriteBuffer.h>
 #include <Common/VectorWithMemoryTracking.h>
 

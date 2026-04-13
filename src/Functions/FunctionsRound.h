@@ -3,7 +3,6 @@
 #include <Functions/FunctionHelpers.h>
 #include <DataTypes/getLeastSupertype.h>
 #include <DataTypes/DataTypeArray.h>
-#include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypesDecimal.h>
 #include <Core/callOnTypeIndex.h>
 #include <Columns/ColumnVector.h>

@@ -1,4 +1,5 @@
 #include <Interpreters/Context.h>
+#include <DataTypes/DataTypesNumber.h>
 #include <Storages/MergeTree/MergeList.h>
 #include <Storages/System/StorageSystemMerges.h>
 #include <Access/ContextAccess.h>

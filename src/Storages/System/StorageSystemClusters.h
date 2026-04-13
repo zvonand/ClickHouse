@@ -2,7 +2,6 @@
 
 #include <Databases/DatabaseReplicated.h>
 #include <DataTypes/DataTypeString.h>
-#include <DataTypes/DataTypesNumber.h>
 #include <Storages/System/IStorageSystemOneBlock.h>
 
 namespace DB

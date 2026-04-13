@@ -1,7 +1,6 @@
 #pragma once
 
 #include <DataTypes/DataTypeEnum.h>
-#include <DataTypes/DataTypesNumber.h>
 #include <Interpreters/InstrumentationManager.h>
 #include <Interpreters/SystemLog.h>
 #include <Common/setThreadName.h>

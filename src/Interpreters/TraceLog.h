@@ -7,7 +7,6 @@
 #include <Common/QueryProfiler.h>
 #include <Common/ProfileEvents.h>
 #include <Common/TraceSender.h>
-#include <Core/NamesAndTypes.h>
 #include <Core/NamesAndAliases.h>
 #include <Storages/ColumnsDescription.h>
 

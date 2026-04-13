@@ -1,4 +1,7 @@
 #include <Interpreters/Context.h>
+#include <Core/ColumnsWithTypeAndName.h>
+#include <DataTypes/DataTypeString.h>
+#include <Core/NamesAndTypes.h>
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <Storages/MergeTree/MergeList.h>

@@ -1,4 +1,7 @@
 #include <AggregateFunctions/IAggregateFunction.h>
+#include <Core/ColumnsWithTypeAndName.h>
+#include <DataTypes/DataTypeString.h>
+#include <Core/NamesAndTypes.h>
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <Interpreters/Context.h>

@@ -5,7 +5,6 @@
 #include <cstddef>
 
 
-#include <Core/NamesAndTypes.h>
 #include <Databases/DataLake/Common.h>
 #include <Databases/DataLake/ICatalog.h>
 #include <Disks/DiskObjectStorage/ObjectStorages/StoredObject.h>

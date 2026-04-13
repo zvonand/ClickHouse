@@ -9,7 +9,6 @@
 #include <Columns/ColumnConst.h>
 #include <Columns/ColumnVector.h>
 #include <DataTypes/DataTypeAggregateFunction.h>
-#include <DataTypes/DataTypeString.h>
 #include <Functions/FunctionHelpers.h>
 #include <Functions/IFunction.h>
 #include <Interpreters/castColumn.h>

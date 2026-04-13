@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Core/ColumnsWithTypeAndName.h>
 #include <Common/WKB.h>
 
 #include <Poco/Dynamic/Var.h>

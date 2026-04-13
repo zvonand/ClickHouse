@@ -231,8 +231,11 @@ target_include_directories(llvm-min-tblgen PRIVATE
 
 target_compile_definitions(llvm-min-tblgen PRIVATE ${LLVM_COMPILE_DEFINITIONS})
 
-if (UNIX)
+# On Apple, libdl does not exist as a separate library
+if (UNIX AND NOT APPLE)
     target_link_libraries(llvm-min-tblgen PRIVATE pthread dl)
+elseif (UNIX)
+    target_link_libraries(llvm-min-tblgen PRIVATE pthread)
 endif()
 
 #
@@ -362,8 +365,11 @@ target_compile_definitions(llvm-tblgen PRIVATE ${LLVM_COMPILE_DEFINITIONS})
 
 add_dependencies(llvm-tblgen native_gen_vt)
 
-if (UNIX)
+# On Apple, libdl does not exist as a separate library
+if (UNIX AND NOT APPLE)
     target_link_libraries(llvm-tblgen PRIVATE pthread dl)
+elseif (UNIX)
+    target_link_libraries(llvm-tblgen PRIVATE pthread)
 endif()
 
 # Install the executables to the output directory

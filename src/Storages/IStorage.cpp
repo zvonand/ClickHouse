@@ -1,6 +1,7 @@
 #include <Storages/IStorage.h>
 
 #include <Disks/IStoragePolicy.h>
+#include <Common/CurrentThread.h>
 #include <Common/StringUtils.h>
 #include <Core/Settings.h>
 #include <IO/Operators.h>
@@ -233,7 +234,7 @@ Pipe IStorage::alterPartition(
 void IStorage::alter(const AlterCommands & params, ContextPtr context, AlterLockHolder &)
 {
     auto table_id = getStorageID();
-    StorageInMemoryMetadata new_metadata = getInMemoryMetadata();
+    StorageInMemoryMetadata new_metadata = *getInMemoryMetadataPtr(context, false);
     params.apply(new_metadata, context);
     DatabaseCatalog::instance().getDatabase(table_id.database_name)->alterTable(context, table_id, new_metadata, /*validate_new_create_query=*/true);
     setInMemoryMetadata(new_metadata);
@@ -322,6 +323,11 @@ StorageID IStorage::getStorageID() const
     return storage_id;
 }
 
+bool IStorage::supportsSampling() const
+{
+    return getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->hasSamplingKey();
+}
+
 ConditionSelectivityEstimatorPtr IStorage::getConditionSelectivityEstimator(const RangesInDataParts &, const Names &, ContextPtr) const
 {
     return nullptr;
@@ -337,7 +343,7 @@ Names IStorage::getAllRegisteredNames() const
 {
     Names result;
     auto getter = [](const auto & column) { return column.name; };
-    const NamesAndTypesList & available_columns = getInMemoryMetadata().getColumns().getAllPhysical();
+    const NamesAndTypesList & available_columns = getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->getColumns().getAllPhysical();
     std::transform(available_columns.begin(), available_columns.end(), std::back_inserter(result), getter);
     return result;
 }
@@ -350,9 +356,9 @@ NameDependencies IStorage::getDependentViewsByColumn(ContextPtr context) const
     for (const auto & view_id : view_ids)
     {
         auto view = DatabaseCatalog::instance().getTable(view_id, context);
-        if (view->getInMemoryMetadataPtr()->select.inner_query)
+        if (view->getInMemoryMetadataPtr(context, false)->select.inner_query)
         {
-            const auto & select_query = view->getInMemoryMetadataPtr()->select.inner_query;
+            const auto & select_query = view->getInMemoryMetadataPtr(context, false)->select.inner_query;
             Names required_columns;
             if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
             {

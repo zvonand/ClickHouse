@@ -439,10 +439,11 @@ JoinResultPtr GraceHashJoin::joinBlock(Block block)
 {
     /// Check if hash join post build optimizations could be performed.
     if (hash_join && getNumBuckets() <= 1)
-    {
-        std::lock_guard lock(hash_join_mutex);
-        hash_join->runPostBuildPhase();
-    }
+        std::call_once(hash_join_post_build_flag, [this]()
+        {
+            std::lock_guard lock(hash_join_mutex);
+            hash_join->runPostBuildPhase();
+        });
 
     if (block.rows() == 0)
         return hash_join->joinBlock(block);

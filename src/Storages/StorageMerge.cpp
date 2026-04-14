@@ -420,28 +420,33 @@ StorageMetadataPtr StorageMerge::getInMemoryMetadataPtr(ContextPtr query_context
     if (!query_context)
         return base_metadata;
 
-    static const auto common_virtuals = createVirtuals();
-    const auto & access = query_context->getAccess();
-
-    auto virtuals = common_virtuals;
-    if (auto first_table = traverseTablesUntil([access](auto && table)
+    auto virtuals = createVirtuals();
+    try
     {
-        if (!table)
-            return false;
-
-        auto id = table->getStorageID();
-        return access->isGranted(AccessType::SHOW_TABLES, id.database_name, id.table_name);
-    }))
-    {
-        const auto source_table_snapshot = first_table->getInMemoryMetadataPtr(query_context, bypass_metadata_cache);
-        const auto & table_virtuals = source_table_snapshot->virtuals;
-        for (const auto & column : table_virtuals)
+        const auto & access = query_context->getAccess();
+        if (auto first_table = traverseTablesUntil([access](auto && table)
         {
-            if (virtuals.has(column.name))
-                continue;
+            if (!table)
+                return false;
 
-            virtuals.add(column);
+            auto id = table->getStorageID();
+            return access->isGranted(AccessType::SHOW_TABLES, id.database_name, id.table_name);
+        }))
+        {
+            const auto source_table_metadata = first_table->getInMemoryMetadataPtr(query_context, bypass_metadata_cache);
+            for (const auto & column : source_table_metadata->virtuals)
+            {
+                if (virtuals.has(column.name))
+                    continue;
+
+                virtuals.add(column);
+            }
         }
+    }
+    catch (const Exception & e)
+    {
+        if (e.code() != ErrorCodes::UNKNOWN_DATABASE)
+            throw;
     }
 
     return std::make_shared<StorageInMemoryMetadata>(base_metadata->withVirtuals(std::move(virtuals)));

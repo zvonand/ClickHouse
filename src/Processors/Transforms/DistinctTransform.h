@@ -22,15 +22,20 @@ namespace DB
 /// rows reference a dictionary index that was not seen in earlier rows.
 /// If nearly all rows do, the bitmap is not filtering anything useful
 /// and we disable the optimization.
-struct LCOptimizationController
+class LCOptimizationController
 {
+public:
+    bool isEnabled() const { return state != State::Disabled; }
+
+    void update(size_t num_rows, size_t new_indices_in_chunk);
+
+private:
     enum class State : uint8_t
     {
         Observing,
         Enabled,
         Disabled
     };
-    State state = State::Observing;
 
     /// Number of chunks to observe before deciding.
     static constexpr size_t OBSERVATION_CHUNK_COUNT = 3;
@@ -41,13 +46,10 @@ struct LCOptimizationController
     /// is not justified.
     static constexpr double NEW_INDEX_RATE_THRESHOLD = 0.98;
 
+    State state = State::Observing;
     size_t chunks_observed = 0;
     size_t rows_observed = 0;
     size_t new_indices_observed = 0;
-
-    bool isEnabled() const { return state != State::Disabled; }
-
-    void update(size_t num_rows, size_t new_indices_in_chunk);
 };
 
 class DistinctTransform : public ISimpleTransform

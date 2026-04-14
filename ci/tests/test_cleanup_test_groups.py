@@ -53,15 +53,14 @@ def test_cleanup_kills_orphaned_test_process():
     orphaned when its parent (clickhouse-test) was terminated with SIGKILL.
     """
     _GROUP_PID_PATH.mkdir(parents=True, exist_ok=True)
-    for f in _GROUP_PID_PATH.glob(f"{_GROUP_PID_NAME}.*"):
-        f.unlink(missing_ok=True)
+    for _f in _GROUP_PID_PATH.glob(f"{_GROUP_PID_NAME}.*"):
+        _f.unlink(missing_ok=True)
 
     # Remove any leftover stdout files from a previous (possibly interrupted) run
     # so we get a clean signal when waiting for the file to appear below.
     for _f in _SUITE_TMP.glob(f"{_TEST}*.stdout"):
         _f.unlink(missing_ok=True)
 
-    pgid = None
     _ch_proc = subprocess.Popen(
         [sys.executable, _CLICKHOUSE_TEST, _TEST],
         stdout=subprocess.DEVNULL,
@@ -75,9 +74,16 @@ def test_cleanup_kills_orphaned_test_process():
         # rather than, e.g., still parsing options or connecting to the server.
         deadline_stdout = time.monotonic() + 5
         while time.monotonic() < deadline_stdout:
-            if list(_SUITE_TMP.glob(f"{_TEST}*.stdout")):
+            p = list(_SUITE_TMP.glob(f"{_TEST}*.stdout"))
+            if not p: continue
+            if p[0].stat().st_size:
                 break
             time.sleep(0.1)
+        else:
+            assert False, f"{_SUITE_TMP} has no stdout"
+
+
+        # FIXME: read group pid from pid files, check processes with this group pid, assert number of processes is equal to 2
 
         # Wait until clickhouse-test has launched the test subprocess and
         # written its PGID to the group pid file.

@@ -2172,6 +2172,7 @@ hasAll
 hasAllTokens
 hasAny
 hasAnyTokens
+hasPhrase
 hasColumnInTable
 hasSubsequence
 hasSubsequenceCaseInsensitive

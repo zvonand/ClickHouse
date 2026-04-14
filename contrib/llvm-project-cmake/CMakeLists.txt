@@ -83,7 +83,7 @@ if (ARCH_AMD64)
         ${LLVM_SOURCE_DIR}/lib/Support/BLAKE3/blake3_avx512_x86-64_unix.S
     )
     set_source_files_properties(${LLVM_SOURCE_DIR}/lib/Support/BLAKE3/blake3_avx512_x86-64_unix.S
-        PROPERTIES COMPILE_OPTIONS "-mavx512vl")
+        PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx512vl")
 else()
     set(LLVM_BLAKE3_ASM_SOURCES "")
     add_compile_definitions(BLAKE3_NO_AVX512 BLAKE3_NO_AVX2 BLAKE3_NO_SSE41 BLAKE3_NO_SSE2)

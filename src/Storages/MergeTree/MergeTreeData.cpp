@@ -654,7 +654,7 @@ PatchParts MergeTreeData::MutationsSnapshotBase::getPatchesForPart(const DataPar
 
 MergeTreeData::MergeTreeData(
     const StorageID & table_id_,
-    const StorageInMemoryMetadata & metadata_,
+    StorageInMemoryMetadata metadata_,
     ContextMutablePtr context_,
     const String & date_column_name,
     const MergingParams & merging_params_,
@@ -678,6 +678,7 @@ MergeTreeData::MergeTreeData(
     , background_operations_assignee(*this, table_id_, BackgroundJobsAssignee::Type::DataProcessing, getContext())
     , background_moves_assignee(*this, table_id_, BackgroundJobsAssignee::Type::Moving, getContext())
 {
+    metadata_.setVirtuals(createVirtuals(metadata_.hasPartitionKey() ? &metadata_.partition_key : nullptr));
     context_->getGlobalContext()->initializeBackgroundExecutorsIfNeeded();
 
     const auto settings = getSettings();
@@ -1005,6 +1006,15 @@ void MergeTreeData::checkProperties(
         }
     }
 
+    {
+        const auto new_virtuals_sample_block = new_metadata.virtuals.getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::All);
+        const auto old_virtuals_sample_block = old_metadata.virtuals.getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::All);
+        if (!blocksHaveEqualStructure(new_virtuals_sample_block, old_virtuals_sample_block))
+            throw Exception(ErrorCodes::LOGICAL_ERROR,
+                "Virtual columns were lost during alter. New: {}, Old: {}",
+                new_virtuals_sample_block.dumpStructure(), old_virtuals_sample_block.dumpStructure());
+    }
+
     if (!new_metadata.secondary_indices.empty())
     {
         std::unordered_set<String> indices_names;
@@ -1191,9 +1201,7 @@ void MergeTreeData::setProperties(
         allow_nullable_key,
         local_context);
 
-    auto metadata_with_virtuals = new_metadata;
-    metadata_with_virtuals.setVirtuals(createVirtuals(new_metadata.hasPartitionKey() ? &new_metadata.partition_key : nullptr));
-    setInMemoryMetadata(metadata_with_virtuals);
+    setInMemoryMetadata(new_metadata);
 
     std::lock_guard lock(patch_parts_metadata_mutex);
     patch_parts_metadata_cache.clear();

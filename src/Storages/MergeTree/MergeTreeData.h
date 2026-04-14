@@ -486,7 +486,7 @@ public:
     /// require_part_metadata - should checksums.txt and columns.txt exist in the part directory.
     /// attach - whether the existing table is attached or the new table is created.
     MergeTreeData(const StorageID & table_id_,
-                  const StorageInMemoryMetadata & metadata_,
+                  StorageInMemoryMetadata metadata_,
                   ContextMutablePtr context_,
                   const String & date_column_name,
                   const MergingParams & merging_params_,

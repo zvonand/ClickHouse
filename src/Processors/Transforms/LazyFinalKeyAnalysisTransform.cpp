@@ -59,7 +59,7 @@ IProcessor::Status LazyFinalKeyAnalysisTransform::prepare()
     }
 
     if (!output.canPush())
-        return Status::NeedData;
+        return Status::PortFull;
 
     if (input.isFinished())
     {

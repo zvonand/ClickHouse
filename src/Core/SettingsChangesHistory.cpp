@@ -67,7 +67,6 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"enable_join_transitive_predicates", false, false, "New setting to infer transitive equi-join predicates for join order optimization."},
             {"enable_join_fixed_hash_table_conversion", false, true, "New setting to enable converting the hash table to a flat array for joins when the key is a single integer with a small value range."},
             {"allow_experimental_ai_functions", false, false, "New setting"},
-            {"default_ai_provider", "", "", "New setting"},
             {"ai_request_timeout_sec", 60, 60, "New setting"},
             {"ai_max_retries", 3, 3, "New setting"},
             {"ai_retry_initial_delay_ms", 1000, 1000, "New setting"},

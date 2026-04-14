@@ -750,7 +750,7 @@ MergeTreeData::MergeTreeData(
     };
 }
 
-VirtualColumnsDescription MergeTreeData::createVirtuals(const StorageInMemoryMetadata & metadata)
+VirtualColumnsDescription MergeTreeData::createVirtuals(const KeyDescription * partition_key)
 {
     VirtualColumnsDescription desc;
 
@@ -768,9 +768,9 @@ VirtualColumnsDescription MergeTreeData::createVirtuals(const StorageInMemoryMet
     desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Reader);
     desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Reader);
 
-    if (metadata.hasPartitionKey())
+    if (partition_key && partition_key->sample_block.columns() > 0)
     {
-        auto partition_types = metadata.partition_key.sample_block.getDataTypes();
+        auto partition_types = partition_key->sample_block.getDataTypes();
         desc.addEphemeral("_partition_value", std::make_shared<DataTypeTuple>(std::move(partition_types)), "Value (a tuple) of a PARTITION BY expression", VirtualsMaterializationPlace::Reader);
     }
 
@@ -1190,7 +1190,7 @@ void MergeTreeData::setProperties(
 
     {
         auto mutable_metadata = new_metadata;
-        mutable_metadata.setVirtuals(createVirtuals(new_metadata));
+        mutable_metadata.setVirtuals(createVirtuals(new_metadata.hasPartitionKey() ? &new_metadata.partition_key : nullptr));
         setInMemoryMetadata(mutable_metadata);
     }
 

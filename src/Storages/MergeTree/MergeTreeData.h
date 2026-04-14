@@ -1372,7 +1372,7 @@ public:
 
     bool initializeDiskOnConfigChange(const std::set<String> & /*new_added_disks*/) override;
 
-    static VirtualColumnsDescription createVirtuals(const StorageInMemoryMetadata & metadata);
+    static VirtualColumnsDescription createVirtuals(const KeyDescription * partition_key);
 
     /// Load/unload primary keys of all data parts
     void loadPrimaryKeys() const;

@@ -20,7 +20,7 @@ StorageFromMergeTreeProjection::StorageFromMergeTreeProjection(
 {
     {
         auto mutable_metadata = *projection->metadata;
-        mutable_metadata.setVirtuals(MergeTreeData::createVirtuals(*parent_metadata));
+        mutable_metadata.setVirtuals(MergeTreeData::createVirtuals(parent_metadata->hasPartitionKey() ? &parent_metadata->partition_key : nullptr));
         setInMemoryMetadata(mutable_metadata);
     }
 }

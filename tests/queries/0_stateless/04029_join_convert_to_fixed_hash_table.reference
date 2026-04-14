@@ -11,6 +11,14 @@
 0	l0	r0
 2	l2	r2
 4	l4	r4
+-- ALL INNER Int32 - AUTO JOIN
+0	l0	r0
+2	l2	r2
+4	l4	r4
+-- ALL INNER Int32 - GRACE HASH JOIN
+0	l0	r0
+2	l2	r2
+4	l4	r4
 -- ALL INNER Int64
 0	l0	r0
 2	l2	r2

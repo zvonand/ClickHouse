@@ -60,6 +60,12 @@ SELECT '-- ALL INNER Int32';
 SELECT t_left.id, val, rval FROM t_left ALL INNER JOIN t_right_i32 ON t_left.id = t_right_i32.id ORDER BY t_left.id;
 SELECT t_left.id, val, rval FROM t_left ALL INNER JOIN t_right_i32 ON t_left.id = t_right_i32.id ORDER BY t_left.id SETTINGS enable_join_fixed_hash_table_conversion = 0;
 
+SELECT '-- ALL INNER Int32 - AUTO JOIN';
+SELECT t_left.id, val, rval FROM t_left ALL INNER JOIN t_right_i32 ON t_left.id = t_right_i32.id ORDER BY t_left.id SETTINGS join_algorithm = 'auto';
+
+SELECT '-- ALL INNER Int32 - GRACE HASH JOIN';
+SELECT t_left.id, val, rval FROM t_left ALL INNER JOIN t_right_i32 ON t_left.id = t_right_i32.id ORDER BY t_left.id SETTINGS join_algorithm = 'grace_hash';
+
 SELECT '-- ALL INNER Int64';
 SELECT t_left.id, val, rval FROM t_left ALL INNER JOIN t_right_i64 ON t_left.id = t_right_i64.id ORDER BY t_left.id;
 SELECT t_left.id, val, rval FROM t_left ALL INNER JOIN t_right_i64 ON t_left.id = t_right_i64.id ORDER BY t_left.id SETTINGS enable_join_fixed_hash_table_conversion = 0;

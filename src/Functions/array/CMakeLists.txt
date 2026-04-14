@@ -24,6 +24,14 @@ endif()
 # TUs where libcxx hardening needs to be disabled are specified here.
 set_source_files_properties(array.cpp PROPERTIES COMPILE_FLAGS "-U_LIBCPP_HARDENING_MODE -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_NONE")
 
+# On x86-64-v3 the SLP vectorizer widens the accumulator loop in arrayNorm to
+# 256-bit YMM, which is slower for LinfNorm with BFloat16/Float32 and causes
+# register spills for sum-based norms.  Compile this file at v2 level to keep
+# the 128-bit codegen that matches master's performance.
+if (ARCH_AMD64 AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3)
+    set_source_files_properties(arrayNorm.cpp PROPERTIES COMPILE_FLAGS "-march=x86-64-v2 -mssse3 -msse4.1 -msse4.2 -mpclmul -mpopcnt")
+endif()
+
 if (OMIT_HEAVY_DEBUG_SYMBOLS)
     target_compile_options(clickhouse_functions_array PRIVATE "-g1")
 endif()

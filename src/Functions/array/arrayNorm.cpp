@@ -248,39 +248,14 @@ private:
         size_t row = 0;
         for (auto off : offsets)
         {
-            /// On x86-64-v3 (AVX2), sum-based norms (L1, L2, Lp) benefit from
-            /// limiting to 2 accumulators: with 4, the compiler widens SLP
-            /// to 256-bit AVX2, causing register spills.  LinfNorm (fmax/fabs)
-            /// vectorizes cleanly with no register-pressure issues, so it
-            /// keeps 4 accumulators.  On other architectures (ARM, compat
-            /// x86), 4 accumulators are fine for all kernels.
-#if defined(__AVX2__)
-            static constexpr bool is_linf = std::is_same_v<Kernel, LinfNorm>;
-            static constexpr size_t VEC_SIZE = is_linf ? 4 : 2;
-#else
+            /// Process chunks in vectorized manner
             static constexpr size_t VEC_SIZE = 4;
-#endif
             ResultType results[VEC_SIZE] = {0};
-
-#if defined(__AVX2__)
-            if constexpr (is_linf)
-            {
-                for (; prev + VEC_SIZE < off; prev += VEC_SIZE)
-                    for (size_t s = 0; s < VEC_SIZE; ++s)
-                        results[s] = Kernel::template accumulate<ResultType>(results[s], static_cast<ResultType>(data[prev + s]), kernel_params);
-            }
-            else
-            {
-#pragma clang loop vectorize(disable) unroll(disable) interleave(disable)
-                for (; prev + VEC_SIZE < off; prev += VEC_SIZE)
-                    for (size_t s = 0; s < VEC_SIZE; ++s)
-                        results[s] = Kernel::template accumulate<ResultType>(results[s], static_cast<ResultType>(data[prev + s]), kernel_params);
-            }
-#else
             for (; prev + VEC_SIZE < off; prev += VEC_SIZE)
+            {
                 for (size_t s = 0; s < VEC_SIZE; ++s)
                     results[s] = Kernel::template accumulate<ResultType>(results[s], static_cast<ResultType>(data[prev + s]), kernel_params);
-#endif
+            }
 
             ResultType result = 0;
             for (const auto & other_state : results)
@@ -288,8 +263,9 @@ private:
 
             /// Process the tail
             for (; prev < off; ++prev)
+            {
                 result = Kernel::template accumulate<ResultType>(result, static_cast<ResultType>(data[prev]), kernel_params);
-
+            }
             result_data[row] = Kernel::finalize(result, kernel_params);
             row++;
         }

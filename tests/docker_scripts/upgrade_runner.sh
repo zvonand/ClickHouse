@@ -325,13 +325,22 @@ cp /var/log/clickhouse-server/clickhouse-server.upgrade.log /test_output/clickho
 # `Azure::Storage::StorageException.*Not found address of host` is a transient Azure blob DNS resolution failure
 #       for `openbucketforpublicci.blob.core.windows.net`. Filtered via regex in the secondary pipe below to match
 #       both the Azure SDK exception type AND the DNS error together, so non-Azure DNS errors are not masked.
-# `SystemLogQueue` overflow happens under heavy stress test load and is not a compatibility bug.
-# `TraceCollector` bad file descriptor errors are transient and unrelated to upgrade compatibility.
+# `SystemLogQueue` + `Queue had been full` overflow happens under heavy stress test load and is not a
+#       compatibility bug. Filtered via regex in the secondary pipe below to require both the component name
+#       AND the specific overflow phrase together (the log format is `SystemLogQueue (system.<table>): Queue
+#       had been full ...`), so other SystemLogQueue errors are not masked.
+# `TraceCollector` + `CANNOT_READ_FROM_FILE_DESCRIPTOR` is a transient pipe close error during server shutdown,
+#       unrelated to upgrade compatibility. Filtered via regex in the secondary pipe below to require both
+#       the component name AND the specific error code together, so non-pipe TraceCollector errors are not masked.
 # `This engine is deprecated and is not supported in transactions` appears for Ordinary engine tables from old versions.
 # `Prevent converting Nullable type to non-Nullable type inside mutation` is from stricter validation in new versions
 #       applied to old mutations that were created before the validation existed.
-# `failed to parse response body` is a transient blob storage (Azure/S3) error.
-# `stale file format version` appears when statistics file format changes between versions.
+# `e.what() = failed to parse response body` is a transient Azure blob storage batch-parsing error from
+#       `Azure::Storage::Blobs`. Narrowed with the `e.what() = ` prefix to only match caught C++ exceptions of this
+#       type (stable ClickHouse exception formatting), so arbitrary log lines containing the phrase are not masked.
+# `while loading statistics` + `ILLEGAL_STATISTICS` appears when the statistics file format version changes between
+#       releases. The new binary cannot deserialize old statistics files and throws ILLEGAL_STATISTICS (Code: 708).
+#       Filtered via regex in the secondary pipe below to require both the loading context AND the error code together.
 # `rdk:FAIL` is librdkafka connection errors when Kafka broker is unavailable during upgrade.
 echo "Check for Error messages in server log:"
 rg -Fav -e "Code: 236. DB::Exception: Cancelled merging parts" \
@@ -394,16 +403,16 @@ rg -Fav -e "Code: 236. DB::Exception: Cancelled merging parts" \
            -e "Key expressions cannot contain subqueries" \
            -e "Expression must be deterministic but it contains non-deterministic part" \
            -e "Unknown tokenizer: 'unicode_word'" \
-           -e "SystemLogQueue" \
-           -e "TraceCollector" \
            -e "This engine is deprecated and is not supported in transactions" \
            -e "Prevent converting Nullable type to non-Nullable type inside mutation" \
-           -e "failed to parse response body" \
-           -e "stale file format version" \
+           -e "e.what() = failed to parse response body" \
            -e "rdk:FAIL" \
     /test_output/clickhouse-server.upgrade.log \
     | grep -av -e "_repl_01111_.*Mapping for table with UUID" \
     | grep -av -e "Azure::Storage::StorageException.*Not found address of host" \
+    | grep -av -e "SystemLogQueue.*Queue had been full" \
+    | grep -av -e "TraceCollector.*CANNOT_READ_FROM_FILE_DESCRIPTOR" \
+    | grep -av -e "while loading statistics.*ILLEGAL_STATISTICS" \
     | grep -Fa "<Error>" > /test_output/upgrade_error_messages.txt || true
 
 if [ -s /test_output/upgrade_error_messages.txt ]; then

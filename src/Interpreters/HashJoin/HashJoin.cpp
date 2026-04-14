@@ -1963,26 +1963,19 @@ void HashJoin::tryRerangeRightTableDataImpl(Map & map [[maybe_unused]])
     }
 }
 
+/// We should not rerange the right table on such conditions:
+/// 1. The right table is already reranged by key, or it is empty.
+/// 2. The join clauses size is greater than 1, for example:
+///    `...join on a.key1=b.key1 or a.key2=b.key2`.
+///    We cannot rerange the right table on different sets of keys.
+/// 3. The number of right table rows exceeds the threshold, which may
+///    results in a significant cost for reranging and performance degradation.
+/// 4. The keys of the right table are very sparse, which may result in
+///    insignificant performance improvement after reranging by key.
 bool HashJoin::rightTableCanBeReranged() const
 {
-    return table_join->allowJoinSorting()
-            && !table_join->getMixedJoinExpression()
-            && isInnerOrLeft(kind)
-            && strictness == JoinStrictness::All;
-}
-
-bool HashJoin::isRightTableDataSuitableForRerange() const
-{
-    /// We should not rerange the right table on such conditions:
-    /// 1. The right table is already reranged by key, or it is empty.
-    /// 2. The join clauses size is greater than 1, for example:
-    ///    `...join on a.key1=b.key1 or a.key2=b.key2`.
-    ///    We cannot rerange the right table on different sets of keys.
-    /// 3. The number of right table rows exceeds the threshold, which may
-    ///    results in a significant cost for reranging and performance degradation.
-    /// 4. The keys of the right table are very sparse, which may result in
-    ///    insignificant performance improvement after reranging by key.
-    return data && !data->sorted && !data->columns.empty() && data->maps.size() == 1
+    return table_join->allowJoinSorting() && !table_join->getMixedJoinExpression() && isInnerOrLeft(kind)
+        && strictness == JoinStrictness::All && data && !data->sorted && !data->columns.empty() && data->maps.size() == 1
         && data->rows_to_join <= table_join->sortRightMaximumTableRows()
         && data->avgPerKeyRows() >= table_join->sortRightMinimumPerkeyRows();
 }
@@ -1997,7 +1990,7 @@ size_t HashJoin::getAndSetRightTableKeys() const
 
 void HashJoin::tryRerangeRightTableData()
 {
-    if (!rightTableCanBeReranged() || !isRightTableDataSuitableForRerange())
+    if (!rightTableCanBeReranged())
         return;
 
     if (data->keys_to_join == 0)
@@ -2018,12 +2011,6 @@ void HashJoin::tryRerangeRightTableData()
         [&](auto kind_, auto strictness_, auto & map_) { tryRerangeRightTableDataImpl<kind_, decltype(map_), strictness_>(map_); });
     chassert(result);
     data->sorted = true;
-}
-
-bool HashJoin::canConvertToFixedHashMap() const
-{
-    return data && table_join->enableJoinFixedHashTableConversion() && (data->type == Type::key32 || data->type == Type::key64)
-        && data->maps.size() == 1 && strictness != JoinStrictness::Asof;
 }
 
 template <bool is_signed, typename Key, typename MapsTemplate>
@@ -2150,8 +2137,17 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
         LOG_DEBUG(log, "{}Converted join hash map to fixed hash map (range: {}, keys: {})", instance_log_id, range, key_count);
 }
 
+bool HashJoin::canConvertToFixedHashMap() const
+{
+    return data && table_join->enableJoinFixedHashTableConversion() && (data->type == Type::key32 || data->type == Type::key64)
+        && data->maps.size() == 1 && strictness != JoinStrictness::Asof;
+}
+
 void HashJoin::tryConvertToFixedHashMap()
 {
+    if (!canConvertToFixedHashMap())
+        return;
+
     std::visit(
         [&](auto & map)
         {
@@ -2206,20 +2202,17 @@ void HashJoin::onBuildPhaseFinish()
     }
     updateNonJoinedRowsStatus();
 
-    /// Initialize flags to trigger join post processing step when necessary.
-    if (rightTableCanBeReranged() && isRightTableDataSuitableForRerange())
-        can_rerange_right_table = true;
-    if (canConvertToFixedHashMap())
-        can_convert_to_fixed_hash_map = true;
-
     LOG_TRACE(log, "{}Join data is built, {} and {} rows in hash table", instance_log_id, ReadableSize(getTotalByteCount()), getTotalRowCount());
+}
+
+bool HashJoin::hasPostBuildPhase() const
+{
+    return rightTableCanBeReranged() || canConvertToFixedHashMap();
 }
 
 void HashJoin::runPostBuildPhase()
 {
-    if (can_rerange_right_table)
-        tryRerangeRightTableData();
-    if (can_convert_to_fixed_hash_map)
-        tryConvertToFixedHashMap();
+    tryRerangeRightTableData();
+    tryConvertToFixedHashMap();
 }
 }

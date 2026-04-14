@@ -187,7 +187,7 @@ public:
 
     void onBuildPhaseFinish() override;
 
-    bool hasPostBuildPhase() const override { return can_rerange_right_table || can_convert_to_fixed_hash_map; }
+    bool hasPostBuildPhase() const override;
     void runPostBuildPhase() override;
 
     /// Number of keys in all built JOIN maps.
@@ -488,8 +488,6 @@ public:
     void materializeColumnsFromLeftBlock(Block & block) const;
     Block materializeColumnsFromRightBlock(Block block) const;
 
-    bool rightTableCanBeReranged() const override;
-    void tryRerangeRightTableData() override;
     size_t getAndSetRightTableKeys() const;
 
     bool hasNonJoinedRows();
@@ -569,9 +567,6 @@ private:
     bool shrink_blocks = false;
     Int64 memory_usage_before_adding_blocks = 0;
 
-    bool can_rerange_right_table = false;
-    bool can_convert_to_fixed_hash_map = false;
-
     /// Identifier to distinguish different HashJoin instances in logs
     /// Several instances can be created, for example, in GraceHashJoin to handle different buckets
     String instance_log_id;
@@ -598,9 +593,8 @@ private:
     void validateAdditionalFilterExpression(std::shared_ptr<ExpressionActions> additional_filter_expression);
     bool needUsedFlagsForPerRightTableRow(std::shared_ptr<TableJoin> table_join_) const;
 
-    /// Check if right table data accumulated during build meets the conditions to be reranged for faster lookup.
-    /// for faster lookup, in contrast to `rightTableCanBeReranged` which only checks data independent requirements.
-    bool isRightTableDataSuitableForRerange() const;
+    bool rightTableCanBeReranged() const;
+    void tryRerangeRightTableData();
 
     template <JoinKind KIND, typename Map, JoinStrictness STRICTNESS>
     void tryRerangeRightTableDataImpl(Map & map);

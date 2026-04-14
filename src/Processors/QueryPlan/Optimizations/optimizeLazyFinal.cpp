@@ -286,6 +286,13 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
     if (!filter_step && !reading_step->getPrewhereInfo() && !reading_step->getRowLevelFilter())
         return;
 
+    const auto & metadata_snapshot = reading_step->getStorageMetadata();
+    const auto & primary_key = metadata_snapshot->getPrimaryKey();
+
+    /// Skip if primary key is empty (ORDER BY tuple()) — no PK columns to build a set from.
+    if (primary_key.column_names.empty())
+        return;
+
     /// Run early index analysis so the analyzed (PK-filtered) parts can be used
     /// both for the non-intersecting split and for the set/true-branch plans.
     /// The WHERE filter was already pushed by optimizePrimaryKeyConditionAndLimit,
@@ -304,8 +311,6 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
     if (split_result.fully_replaced)
         return;
 
-    const auto & metadata_snapshot = reading_step->getStorageMetadata();
-    const auto & primary_key = metadata_snapshot->getPrimaryKey();
     const auto & context = reading_step->getContext();
     const auto & storage_snapshot = reading_step->getStorageSnapshot();
     auto mutations_snapshot = reading_step->getMutationsSnapshot();

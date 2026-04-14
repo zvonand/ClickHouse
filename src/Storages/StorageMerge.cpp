@@ -433,7 +433,8 @@ StorageMetadataPtr StorageMerge::getInMemoryMetadataPtr(ContextPtr query_context
         return access->isGranted(AccessType::SHOW_TABLES, id.database_name, id.table_name);
     }))
     {
-        const auto & table_virtuals = first_table->getInMemoryMetadataPtr(query_context, false)->virtuals;
+        const auto source_table_snapshot = first_table->getInMemoryMetadataPtr(query_context, false);
+        const auto & table_virtuals = source_table_snapshot->virtuals;
         for (const auto & column : table_virtuals)
         {
             if (virtuals.has(column.name))

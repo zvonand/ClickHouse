@@ -204,7 +204,7 @@ Block InterpreterInsertQuery::getSampleBlock(
         if (auto * window_view = dynamic_cast<StorageWindowView *>(table.get()))
             return window_view->getInputHeader();
         if (no_destination)
-            return metadata_snapshot->getSampleBlockWithVirtuals();
+            return metadata_snapshot->getSampleBlockWithVirtuals(VirtualsKind::All, VirtualsMaterializationPlace::All);
         return metadata_snapshot->getSampleBlockNonMaterialized();
     }
 

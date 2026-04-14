@@ -163,9 +163,9 @@ void InterpreterDescribeQuery::fillColumnsFromTableFunction(const ASTTableExpres
     if (settings[Setting::describe_include_virtual_columns])
     {
         auto table = table_function_ptr->execute(table_expression.table_function, getContext(), table_function_ptr->getName());
-        auto metadata_snapshot = table->getInMemoryMetadataPtr(current_context, false);
         if (table)
         {
+            const auto metadata_snapshot = table->getInMemoryMetadataPtr(current_context, false);
             const auto & virtuals = metadata_snapshot->virtuals;
             for (const auto & column : virtuals)
                 if (!column_descriptions.has(column.name))

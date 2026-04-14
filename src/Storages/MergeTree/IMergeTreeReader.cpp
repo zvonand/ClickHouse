@@ -95,7 +95,7 @@ void IMergeTreeReader::fillVirtualColumns(Columns & columns, size_t rows) const
         throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Filling of virtual columns is supported only for LoadedMergeTreeDataPartInfoForReader");
 
     const auto & data_part = loaded_part_info->getDataPart();
-    const auto & storage_columns = storage_snapshot->metadata->getColumns();
+    const auto & storage_columns = storage_snapshot->metadata->columns;
     const auto & virtual_columns = storage_snapshot->metadata->virtuals;
 
     auto it = getColumns().begin();

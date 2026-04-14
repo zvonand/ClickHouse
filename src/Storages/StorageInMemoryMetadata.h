@@ -217,7 +217,7 @@ struct StorageInMemoryMetadata
     Block getSampleBlockNonMaterialized() const;
 
     /// Block with ordinary + materialized + virtuals.
-    Block getSampleBlockWithVirtuals(VirtualsKind kind = VirtualsKind::All, VirtualsMaterializationPlace place = VirtualsMaterializationPlace::All) const;
+    Block getSampleBlockWithVirtuals(VirtualsKind kind, VirtualsMaterializationPlace place) const;
 
     /// Returns whether the column is virtual and not shadowed by a real column.
     bool isVirtualColumn(const String & column_name) const;

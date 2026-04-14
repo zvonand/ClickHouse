@@ -1,5 +1,6 @@
 #include <Disks/DiskType.h>
 #include <Common/CurrentThread.h>
+#include <Storages/ColumnsDescription.h>
 #include <Storages/PartitionCommands.h>
 #include <Storages/MergeTree/MergeTreeData.h>
 
@@ -16,11 +17,13 @@
 #include <Common/CurrentMetrics.h>
 #include <Common/Increment.h>
 #include <Common/ProfileEventsScope.h>
+#include <Common/StackTrace.h>
 #include <Common/Stopwatch.h>
 #include <Common/StringUtils.h>
 #include <Common/ThreadFuzzer.h>
 #include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Common/escapeForFileName.h>
+#include <Common/logger_useful.h>
 #include <Common/noexcept_scope.h>
 #include <Common/quoteString.h>
 #include <Common/typeid_cast.h>
@@ -1188,11 +1191,9 @@ void MergeTreeData::setProperties(
         allow_nullable_key,
         local_context);
 
-    {
-        auto mutable_metadata = new_metadata;
-        mutable_metadata.setVirtuals(createVirtuals(new_metadata.hasPartitionKey() ? &new_metadata.partition_key : nullptr));
-        setInMemoryMetadata(mutable_metadata);
-    }
+    auto metadata_with_virtuals = new_metadata;
+    metadata_with_virtuals.setVirtuals(createVirtuals(new_metadata.hasPartitionKey() ? &new_metadata.partition_key : nullptr));
+    setInMemoryMetadata(metadata_with_virtuals);
 
     std::lock_guard lock(patch_parts_metadata_mutex);
     patch_parts_metadata_cache.clear();

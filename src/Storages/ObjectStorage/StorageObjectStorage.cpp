@@ -397,6 +397,12 @@ void StorageObjectStorage::updateExternalDynamicMetadataIfExists(ContextPtr quer
             new_metadata = *metadata_snapshot;
     }
 
+    new_metadata.setVirtuals(VirtualColumnUtils::getVirtualsForFileLikeStorage(
+        new_metadata.columns,
+        query_context,
+        format_settings,
+        configuration->partition_strategy_type));
+
     setInMemoryMetadata(new_metadata);
 }
 

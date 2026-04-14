@@ -25,7 +25,6 @@ import os
 import os.path
 import platform
 import random
-import fcntl
 import re
 import shutil
 import signal
@@ -56,9 +55,10 @@ except ImportError:
     termcolor = None
 
 
-# Path to the file used by `--cleanup` to locate the test process group.
-# Written by clickhouse-test after it creates its process group, so the
-# CI hook can invoke `clickhouse-test --cleanup` even if the parent was
+# Base path for per-process PGID files used by `--cleanup` to locate orphaned
+# test process groups.  Each worker process writes its own file named
+# ``_GROUP_PID_FILE.<pid>`` so no cross-process locking is needed.
+# The CI hook can invoke `clickhouse-test --cleanup` even if the parent was
 # killed with SIGKILL before its cleanup code ran.
 # `__file__` is `{repo}/tests/clickhouse-test`, so this resolves to
 # `{repo}/ci/tmp/clickhouse_test_group_pid`.
@@ -2710,7 +2710,7 @@ class TestCase:
                         os.getpgid(proc.pid), self.fatal_sanitizer_prefix
                     )
                 kill_output = f.getvalue()
-            _untrack_pgid(proc.pid)  # proc.pid == PGID (start_new_session=True)
+            (_GROUP_PID_FILE.parent / f"{_GROUP_PID_FILE.name}.{os.getpid()}").unlink(missing_ok=True)
 
         description = ""
 
@@ -3129,7 +3129,13 @@ class TestCase:
 
         # pylint:disable-next=consider-using-with; TODO: fix
         proc = Popen(command, shell=True, executable=BASH, env=tests_env, start_new_session=True, preexec_fn=preexec_fn)
-        _track_pgid(proc.pid)  # proc.pid == PGID after start_new_session=True
+        # proc.pid == PGID after start_new_session=True; write it atomically so
+        # `clickhouse-test --cleanup` can find it even if we are killed with SIGKILL.
+        _pgid_file = _GROUP_PID_FILE.parent / f"{_GROUP_PID_FILE.name}.{os.getpid()}"
+        _pgid_file.parent.mkdir(parents=True, exist_ok=True)
+        _pgid_tmp = _pgid_file.with_name(_pgid_file.name + ".tmp")
+        _pgid_tmp.write_text(f"{proc.pid}\n")
+        os.replace(_pgid_tmp, _pgid_file)
 
         try:
             proc.wait(args.timeout)
@@ -5906,68 +5912,35 @@ def parse_args():
     return parser.parse_args()
 
 
-def _track_pgid(pgid):
-    """Record a test process group PID in `_GROUP_PID_FILE` for orphan cleanup.
-
-    Called immediately after `Popen` so the PID survives even if this process
-    is killed with SIGKILL before `_untrack_pgid` runs.
-    """
-    try:
-        _GROUP_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(_GROUP_PID_FILE, "a") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            f.write(f"{pgid}\n")
-    except Exception as e:
-        print(f"Warning: could not track pgid {pgid}: {e}", file=sys.stderr)
-
-
-def _untrack_pgid(pgid):
-    """Remove a test process group PID from `_GROUP_PID_FILE` once the test exits."""
-    try:
-        if not _GROUP_PID_FILE.exists():
-            return
-        with open(_GROUP_PID_FILE, "r+") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            lines = f.readlines()
-            f.seek(0)
-            f.truncate()
-            for line in lines:
-                if line.strip() != str(pgid):
-                    f.write(line)
-    except FileNotFoundError:
-        pass
-    except Exception as e:
-        print(f"Warning: could not untrack pgid {pgid}: {e}", file=sys.stderr)
-
 
 def cleanup_test_groups():
-    """Kill all process groups recorded in `_GROUP_PID_FILE`.
+    """Kill all process groups recorded in per-worker PGID files.
 
-    Each `.sh` test subprocess is launched with `start_new_session=True` (so
-    its PGID equals its PID).  `_track_pgid` appends the PGID on launch and
-    `_untrack_pgid` removes it when the test exits normally.  If `clickhouse-test`
-    is killed with SIGKILL before `_untrack_pgid` runs, the file retains the
-    PGIDs of still-running (or re-parented) test processes.  The PGID is stored
-    in the kernel process descriptor and is never reset on re-parenting, so
-    `kill_process_group` reaches orphaned processes without session traversal.
+    Each worker process writes ``_GROUP_PID_FILE.<pid>`` on test launch and
+    deletes it on normal exit.  If a worker is killed with SIGKILL the file
+    survives, so `clickhouse-test --cleanup` can find and kill the orphaned
+    process group.  The PGID is stored in the kernel process descriptor and is
+    never reset on re-parenting, so `kill_process_group` reaches orphaned
+    processes without session traversal.
 
-    Note: `pgrep` and `kill_process_group` use `ps -eo pid,ppid,pgid,command` (POSIX,
-    works on both Linux and macOS) — no system `pgrep` binary is invoked.
-    `kill_process_group` already handles missing groups via the `ESRCH` catch, so the
-    loop below is not aborted by a stale PGID.
+    Note: `pgrep` and `kill_process_group` use `ps -eo pid,ppid,pgid,command`
+    (POSIX, works on both Linux and macOS) — no system `pgrep` binary is
+    invoked.  `kill_process_group` already handles missing groups via the
+    `ESRCH` catch, so the loop below is not aborted by a stale PGID.
     """
-    if not _GROUP_PID_FILE.exists():
-        print(f"No group pid file at {_GROUP_PID_FILE}, nothing to clean up.")
+    pgid_files = [
+        p for p in _GROUP_PID_FILE.parent.glob(f"{_GROUP_PID_FILE.name}.*")
+        if not p.name.endswith(".tmp")
+    ]
+    if not pgid_files:
+        print(f"No group pid files in {_GROUP_PID_FILE.parent}, nothing to clean up.")
         return
-    try:
-        pgids = [
-            int(line.strip())
-            for line in _GROUP_PID_FILE.read_text().splitlines()
-            if line.strip()
-        ]
-    except Exception as e:
-        print(f"Warning: could not read group pid file: {e}", file=sys.stderr)
-        return
+    pgids = []
+    for f in pgid_files:
+        try:
+            pgids += [int(line.strip()) for line in f.read_text().splitlines() if line.strip()]
+        except Exception as e:
+            print(f"Warning: could not read {f}: {e}", file=sys.stderr)
     for pgid in pgids:
         # Guard against PGID reuse: only kill groups that still contain at least
         # one process whose command looks like a clickhouse-test child.  A
@@ -5986,7 +5959,8 @@ def cleanup_test_groups():
             )
             continue
         kill_process_group(pgid, None)
-    _GROUP_PID_FILE.unlink(missing_ok=True)
+    for f in pgid_files:
+        f.unlink(missing_ok=True)
 
 
 class Terminated(KeyboardInterrupt):

@@ -48,7 +48,8 @@ def test_cleanup_kills_orphaned_test_process():
     orphaned when its parent (clickhouse-test) was terminated with SIGKILL.
     """
     _GROUP_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _GROUP_PID_FILE.unlink(missing_ok=True)
+    for f in _GROUP_PID_FILE.parent.glob(f"{_GROUP_PID_FILE.name}.*"):
+        f.unlink(missing_ok=True)
 
     _ch_proc = subprocess.Popen(
         [sys.executable, _CLICKHOUSE_TEST, _TEST],
@@ -62,11 +63,17 @@ def test_cleanup_kills_orphaned_test_process():
         # written its PGID to the group pid file.
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
-            if _GROUP_PID_FILE.exists():
-                lines = [l for l in _GROUP_PID_FILE.read_text().splitlines() if l.strip()]
+            pgid_files = [
+                p for p in _GROUP_PID_FILE.parent.glob(f"{_GROUP_PID_FILE.name}.*")
+                if not p.name.endswith(".tmp")
+            ]
+            for pf in pgid_files:
+                lines = [l for l in pf.read_text().splitlines() if l.strip()]
                 if lines:
                     pgid = int(lines[0])
                     break
+            if pgid is not None:
+                break
             time.sleep(0.1)
         assert pgid is not None, "group pid file was not populated in time"
 
@@ -111,14 +118,19 @@ def test_cleanup_kills_orphaned_test_process():
             "all test processes should be dead after clickhouse-test --cleanup"
         )
 
-        # The pid file must have been removed by --cleanup.
-        assert not _GROUP_PID_FILE.exists(), (
-            "group pid file should be deleted by clickhouse-test --cleanup"
+        # All per-worker pid files must have been removed by --cleanup.
+        remaining = [
+            p for p in _GROUP_PID_FILE.parent.glob(f"{_GROUP_PID_FILE.name}.*")
+            if not p.name.endswith(".tmp")
+        ]
+        assert not remaining, (
+            "group pid files should be deleted by clickhouse-test --cleanup"
         )
 
     finally:
         # Best-effort cleanup so stray processes are never left behind.
-        _GROUP_PID_FILE.unlink(missing_ok=True)
+        for f in _GROUP_PID_FILE.parent.glob(f"{_GROUP_PID_FILE.name}.*"):
+            f.unlink(missing_ok=True)
         if pgid is not None:
             try:
                 os.killpg(pgid, signal.SIGKILL)

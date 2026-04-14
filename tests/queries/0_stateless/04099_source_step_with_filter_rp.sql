@@ -1,3 +1,9 @@
+-- NOT_FOUND_COLUMN_IN_BLOCK when querying a view over a table with a row policy
+-- where the view does not select the row policy column and optimize_move_to_prewhere is enabled
+--
+-- The bug was in SourceStepWithFilter::updatePrewhereInfo which re-applied
+-- row_level_filter on the already-transformed output_header instead of rebuilding it
+
 DROP TABLE IF EXISTS t_rp;
 DROP TABLE IF EXISTS ref_rp;
 DROP VIEW IF EXISTS v_rp;

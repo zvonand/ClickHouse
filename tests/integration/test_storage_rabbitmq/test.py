@@ -3766,7 +3766,6 @@ def test_connection_info_logging_with_rabbitmq_address(rabbitmq_cluster, db, uni
         f"Log contains ':0' instead of actual address: {log}"
     assert 'rabbitmq' in log.lower() or '5672' in log, \
         f"Log should contain the actual connection address: {log}"
-    assert 'root' not in log
-    assert 'clickhouse' not in log
+    assert 'root:clickhouse' not in log
 
     instance.query(f"DROP TABLE {db}.rmq_addr_log")

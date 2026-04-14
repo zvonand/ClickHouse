@@ -45,8 +45,15 @@ class CacheRunnerHooks:
                     elif req_name in job_digest_map:
                         digests_combined_list.append(job_digest_map[req_name])
             digests_combined_list.append(job_digest_map[job.name])
-            final_digest = "-".join(digests_combined_list)
-            workflow_config.digest_jobs[job.name] = final_digest
+            # Deduplicate tokens to shrink the key when multiple deps
+            # share the same file digest (e.g. amd/arm release builds)
+            seen = set()
+            unique_tokens = []
+            for token in "-".join(digests_combined_list).split("-"):
+                if token not in seen:
+                    seen.add(token)
+                    unique_tokens.append(token)
+            workflow_config.digest_jobs[job.name] = "-".join(unique_tokens)
 
         assert (
             workflow_config.digest_jobs

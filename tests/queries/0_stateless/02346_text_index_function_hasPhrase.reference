@@ -41,6 +41,15 @@
 [1]
 [2]
 [2,3]
+-- asciiCJK tokenizer
+[1,4]
+[1]
+[2]
+[3]
+[]
+[]
+[]
+[]
 Text index analysis
 Text index should choose none for non-existent phrase
 Description: text GRANULARITY 100000000
@@ -83,3 +92,16 @@ Text index should choose 50% of granules
 Description: text GRANULARITY 100000000
 Parts: 1/1
 Granules: 512/1024
+NOT hasPhrase - Text index analysis
+NOT hasPhrase should choose all parts and granules
+Description: text GRANULARITY 100000000
+Parts: 4/4
+Granules: 4096/4096
+NOT hasPhrase should choose all parts even for phrases with no matching tokens
+Description: text GRANULARITY 100000000
+Parts: 4/4
+Granules: 4096/4096
+AND NOT hasPhrase should reduce to parts containing the positive phrase
+Description: text GRANULARITY 100000000
+Parts: 1/4
+Granules: 1024/4096

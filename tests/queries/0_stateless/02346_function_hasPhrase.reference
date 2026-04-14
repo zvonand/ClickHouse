@@ -86,3 +86,25 @@ ngrams tokenizer
 matchPhrase alias
 1
 1
+asciiCJK tokenizer
+1
+1
+0
+1
+1
+0
+1
+4
+1
+2
+3
+NOT hasPhrase
+0
+1
+1
+0
+1
+2
+1
+2
+3

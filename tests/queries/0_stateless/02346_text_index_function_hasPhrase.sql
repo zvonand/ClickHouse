@@ -133,6 +133,37 @@ SELECT groupArray(id) FROM tab WHERE hasPhrase(text, 'quick fox');
 
 DROP TABLE tab;
 
+SELECT '-- asciiCJK tokenizer';
+
+CREATE TABLE tab
+(
+    id UInt32,
+    message String,
+    INDEX idx(`message`) TYPE text(tokenizer = asciiCJK),
+)
+ENGINE = MergeTree
+ORDER BY (id);
+
+INSERT INTO tab VALUES
+    (1, 'hello错误502需要处理kitty'),
+    (2, 'taichi张三丰in the house'),
+    (3, 'hello world'),
+    (4, '错误502需要');
+
+-- consecutive tokens
+SELECT groupArray(id) FROM tab WHERE hasPhrase(message, '错误502', 'asciiCJK');
+SELECT groupArray(id) FROM tab WHERE hasPhrase(message, '需要处理', 'asciiCJK');
+SELECT groupArray(id) FROM tab WHERE hasPhrase(message, '三丰in', 'asciiCJK');
+SELECT groupArray(id) FROM tab WHERE hasPhrase(message, 'hello world', 'asciiCJK');
+-- wrong order
+SELECT groupArray(id) FROM tab WHERE hasPhrase(message, '502错误', 'asciiCJK');
+SELECT groupArray(id) FROM tab WHERE hasPhrase(message, 'in三', 'asciiCJK');
+-- not consecutive
+SELECT groupArray(id) FROM tab WHERE hasPhrase(message, '错处', 'asciiCJK');
+SELECT groupArray(id) FROM tab WHERE hasPhrase(message, '张in', 'asciiCJK');
+
+DROP TABLE tab;
+
 SELECT 'Text index analysis';
 
 DROP TABLE IF EXISTS tab;
@@ -255,6 +286,50 @@ SELECT trimLeft(explain) AS explain FROM (
     EXPLAIN indexes=1
     SELECT count() FROM tab
     WHERE hasPhrase(message, 'Hello ClickHouse') OR hasPhrase(message, 'Hallo ClickHouse')
+)
+WHERE explain LIKE '%Description:%' OR explain LIKE '%Parts:%' OR explain LIKE '%Granules:%'
+LIMIT 2, 3;
+
+DROP TABLE tab;
+
+SELECT 'NOT hasPhrase - Text index analysis';
+
+DROP TABLE IF EXISTS tab;
+CREATE TABLE tab
+(
+    id UInt32,
+    message String,
+    INDEX idx(`message`) TYPE text(tokenizer = splitByNonAlpha)
+)
+ENGINE = MergeTree
+ORDER BY (id)
+SETTINGS index_granularity = 1;
+
+INSERT INTO tab SELECT number, 'Hello, ClickHouse' FROM numbers(1024);
+INSERT INTO tab SELECT number, 'Hello, World' FROM numbers(1024);
+INSERT INTO tab SELECT number, 'Hallo, ClickHouse' FROM numbers(1024);
+INSERT INTO tab SELECT number, 'ClickHouse is fast, really fast!' FROM numbers(1024);
+
+SELECT 'NOT hasPhrase should choose all parts and granules';
+SELECT trimLeft(explain) AS explain FROM (
+    EXPLAIN indexes=1
+    SELECT count() FROM tab WHERE NOT hasPhrase(message, 'Hello World')
+)
+WHERE explain LIKE '%Description:%' OR explain LIKE '%Parts:%' OR explain LIKE '%Granules:%'
+LIMIT 2, 3;
+
+SELECT 'NOT hasPhrase should choose all parts even for phrases with no matching tokens';
+SELECT trimLeft(explain) AS explain FROM (
+    EXPLAIN indexes=1
+    SELECT count() FROM tab WHERE NOT hasPhrase(message, 'Click House')
+)
+WHERE explain LIKE '%Description:%' OR explain LIKE '%Parts:%' OR explain LIKE '%Granules:%'
+LIMIT 2, 3;
+
+SELECT 'AND NOT hasPhrase should reduce to parts containing the positive phrase';
+SELECT trimLeft(explain) AS explain FROM (
+    EXPLAIN indexes=1
+    SELECT count() FROM tab WHERE hasPhrase(message, 'Hello World') AND NOT hasPhrase(message, 'Hallo ClickHouse')
 )
 WHERE explain LIKE '%Description:%' OR explain LIKE '%Parts:%' OR explain LIKE '%Granules:%'
 LIMIT 2, 3;

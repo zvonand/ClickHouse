@@ -5,6 +5,7 @@ from ci.defs.defs import (
     DOCKERS,
     SECRETS,
     ArtifactConfigs,
+    ArtifactNames,
     JobNames,
 )
 from ci.defs.job_configs import JobConfigs
@@ -48,6 +49,7 @@ workflow = Workflow.Config(
         JobConfigs.code_review,
         JobConfigs.docs_job,
         JobConfigs.fast_test,
+        *JobConfigs.darwin_fast_test_jobs,
         *JobConfigs.tidy_build_arm_jobs,
         *[job.set_dependency(STYLE_AND_FAST_TESTS) for job in JobConfigs.build_jobs],
         *[
@@ -87,6 +89,7 @@ workflow = Workflow.Config(
             for job in JobConfigs.functional_tests_jobs_azure
         ],
         *JobConfigs.functional_test_llvm_coverage_jobs,
+        *JobConfigs.functional_test_excluded_from_llvm_job,
         *[
             job.set_dependency(FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES)
             for job in JobConfigs.integration_test_jobs_required[:]
@@ -96,6 +99,7 @@ workflow = Workflow.Config(
             for job in JobConfigs.integration_test_jobs_non_required
         ],
         *JobConfigs.integration_test_llvm_coverage_jobs,
+        *JobConfigs.integration_test_excluded_from_llvm_job,
         *JobConfigs.unittest_jobs,
         *JobConfigs.unittest_llvm_coverage_job,
         JobConfigs.docker_server.set_dependency(
@@ -136,6 +140,11 @@ workflow = Workflow.Config(
         JobConfigs.sqllogic_test_master_job.set_dependency(
             FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES
         ),
+        # Keeper stress (PR): 3 no-fault scenarios (prod-mix, read-multi, write-multi),
+        # default backend only, 15 min each. Runs when src/Coordination or stress test files change.
+        JobConfigs.keeper_stress_job
+            .set_name("Keeper Stress Tests (PR)")
+            .set_timeout(3 * 3600),
         *JobConfigs.toolchain_build_jobs,
         # TODO: uncomment when praktika supports depends-on-all-jobs;
         # currently set_dependency requires an explicit list, but CI Results Review

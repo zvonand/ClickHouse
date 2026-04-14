@@ -608,6 +608,8 @@ private:
     template <bool is_signed, typename Key, typename MapsTemplate>
     void tryConvertToFixedHashMapImpl(MapsTemplate & maps);
 
+    void reinitUsedFlags();
+
     void doDebugAsserts() const;
 };
 }

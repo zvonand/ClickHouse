@@ -2143,12 +2143,34 @@ bool HashJoin::canConvertToFixedHashMap() const
         && (data->type == Type::key32 || data->type == Type::key64) && data->maps.size() == 1 && strictness != JoinStrictness::Asof;
 }
 
+void HashJoin::reinitUsedFlags()
+{
+    if (needUsedFlagsForPerRightTableRow(table_join))
+        return;
+
+    const bool prefer_use_maps_all = preferUseMapsAll();
+    for (auto & map : data->maps)
+    {
+        joinDispatch(
+            kind,
+            strictness,
+            map,
+            prefer_use_maps_all,
+            [this](auto kind_, auto strictness_, auto & map_)
+            {
+                used_flags->reinit<kind_, strictness_, std::is_same_v<std::decay_t<decltype(map_)>, MapsAll>>(
+                    map_.getBufferSizeInCells(data->type) + 1);
+            });
+    }
+}
+
 void HashJoin::tryConvertToFixedHashMap()
 {
     if (!canConvertToFixedHashMap())
         return;
 
     conversion_to_fixed_hash_map_attempted = true;
+    const Type old_type = data->type;
     std::visit(
         [&](auto & map)
         {
@@ -2173,27 +2195,14 @@ void HashJoin::tryConvertToFixedHashMap()
             }
         },
         data->maps.front());
+
+    if (data->type != old_type)
+        reinitUsedFlags();
 }
 
 void HashJoin::onBuildPhaseFinish()
 {
-    if (!needUsedFlagsForPerRightTableRow(table_join))
-    {
-        const bool prefer_use_maps_all = preferUseMapsAll();
-        for (auto & map : data->maps)
-        {
-            joinDispatch(
-                kind,
-                strictness,
-                map,
-                prefer_use_maps_all,
-                [this](auto kind_, auto strictness_, auto & map_)
-                {
-                    used_flags->reinit<kind_, strictness_, std::is_same_v<std::decay_t<decltype(map_)>, MapsAll>>(
-                        map_.getBufferSizeInCells(data->type) + 1);
-                });
-        }
-    }
+    reinitUsedFlags();
 
     if (all_values_unique && strictness == JoinStrictness::All && isInnerOrLeft(kind) && data->maps.size() == 1)
     {

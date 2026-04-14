@@ -42,7 +42,7 @@ void RabbitMQHandler::startLoop()
 
     while (loop_state.load() == Loop::RUN)
     {
-        if (!uv_run(loop, UV_RUN_ONCE))
+        if (!uv_run(loop, UV_RUN_NOWAIT))
             std::this_thread::yield();
     }
 

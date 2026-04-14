@@ -81,8 +81,8 @@ CREATE TABLE table
                                 -- Mandatory parameters:
                                 tokenizer = splitByNonAlpha
                                             | splitByString[(S)]
-                                            | ngrams[(N)]
                                             | asciiCJK
+                                            | ngrams[(N)]
                                             | sparseGrams[(min_length[, max_length[, min_cutoff_length]])]
                                             | array
                                 -- Optional parameters:
@@ -480,6 +480,23 @@ SELECT count() FROM table WHERE hasAnyTokens(comment, ['clickhouse', 'olap']);
 SELECT count() FROM table WHERE hasAllTokens(comment, ['clickhouse', 'olap']);
 ```
 
+#### `hasPhrase` {#functions-example-hasphrase}
+
+Function [hasPhrase](/sql-reference/functions/string-search-functions.md/#hasPhrase) matches against a phrase: all tokens must appear consecutively and in the same order as in the search string.
+
+Unlike `hasAllTokens`, which only requires all tokens to be present somewhere, `hasPhrase` requires them to appear as a consecutive sequence.
+The search phrase is tokenized using the same tokenizer configured for the index column.
+
+Example:
+
+```sql
+-- Matches: 'clickhouse' and 'olap' must appear consecutively in that order
+SELECT count() FROM table WHERE hasPhrase(comment, 'clickhouse olap');
+
+-- Does NOT match a row containing 'olap clickhouse' (wrong order)
+-- Does NOT match a row containing 'clickhouse fast olap' (non-consecutive)
+```
+
 #### `has` {#functions-example-has}
 
 Array function [has](/sql-reference/functions/array-functions#has) matches against a single token in the array of strings.
@@ -846,6 +863,49 @@ SELECT * FROM events WHERE has(data.tags::Array(String), 'bug')
 ```sql
 SELECT * FROM events WHERE data.level IN ('error', 'critical');
 ```
+
+### Phrase search {#text-index-phrase-search}
+
+Text index supports phrase search via the `hasPhrase` function.
+All tokens in the phrase must appear consecutively and in the same order in the document.
+
+The text index accelerates phrase search by intersecting the posting lists for all tokens in the phrase to identify candidate granules.
+Within those granules, ClickHouse then verifies exact token adjacency.
+No special index type is needed — phrase search works with any existing text index.
+
+The phrase string is tokenized using the index's defined tokenizer.
+Tokenizer separator characters in the phrase are ignored: `hasPhrase(text, 'quick+brown')` is equivalent to `hasPhrase(text, 'quick brown')` for the `splitByNonAlpha` tokenizer.
+
+#### Example {#text-index-phrase-search-example}
+
+```sql
+CREATE TABLE tab (
+    id UInt32,
+    text String,
+    INDEX idx(text) TYPE text(tokenizer = splitByNonAlpha))
+ENGINE = MergeTree
+ORDER BY id;
+
+INSERT INTO tab VALUES
+    (1, 'quick brown fox'),
+    (2, 'brown quick fox'),
+    (3, 'quick fox');
+```
+
+```sql
+SELECT id, text FROM tab WHERE hasPhrase(text, 'quick brown');
+```
+
+Result:
+
+```result
+   ┌─id─┬─text────────────┐
+1. │  1 │ quick brown fox │
+   └────┴─────────────────┘
+```
+
+Row 2 (`'brown quick fox'`) does not match because the tokens are in the wrong order.
+Row 3 (`'quick fox'`) does not match because it does not contain the token `'brown'`.
 
 ## Performance Tuning {#performance-tuning}
 

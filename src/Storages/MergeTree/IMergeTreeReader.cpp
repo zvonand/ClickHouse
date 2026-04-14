@@ -91,7 +91,8 @@ const ValueSizeMap & IMergeTreeReader::getAvgValueSizeHints() const
 
 bool IMergeTreeReader::isColumnDroppedByPendingMutation(size_t pos) const
 {
-    return alter_conversions && alter_conversions->isColumnDropped(columns_to_read[pos].getNameInStorage());
+    bool share_nested = (*storage_settings)[MergeTreeSetting::share_nested_offsets];
+    return alter_conversions && alter_conversions->isColumnDropped(columns_to_read[pos].getNameInStorage(), share_nested);
 }
 
 void IMergeTreeReader::fillVirtualColumns(Columns & columns, size_t rows) const

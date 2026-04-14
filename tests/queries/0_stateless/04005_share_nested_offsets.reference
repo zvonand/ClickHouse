@@ -60,7 +60,9 @@ Hello
 --- merge engine ---
 1	[1,2,3]	['x','y']
 2	[10,20]	[]
---- alter add independent ---
+--- alter add/drop independent ---
 1		[10,20]
 2	hello	[30]
+1	[10,20]
+2	[30]
 --- done ---

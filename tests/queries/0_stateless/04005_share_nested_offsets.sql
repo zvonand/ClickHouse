@@ -383,12 +383,13 @@ DROP TABLE child1;
 DROP TABLE child2;
 
 -- =============================================================================
--- 14. ALTER ADD COLUMN with scalar + dotted-name coexistence
+-- 14. ALTER ADD/DROP COLUMN with scalar + dotted-name coexistence
 --     When share_nested_offsets=false, n and n.a are independent columns.
---     ADD COLUMN n should not be rejected when only n.a exists.
+--     ADD COLUMN n should not be rejected when only n.a exists,
+--     and DROP COLUMN n should not drop n.a.
 -- =============================================================================
 
-SELECT '--- alter add independent ---';
+SELECT '--- alter add/drop independent ---';
 
 DROP TABLE IF EXISTS t_alter_ind;
 CREATE TABLE t_alter_ind (id UInt64, `n.a` Array(UInt32))
@@ -399,6 +400,11 @@ INSERT INTO t_alter_ind VALUES (1, [10, 20]);
 ALTER TABLE t_alter_ind ADD COLUMN n String;
 INSERT INTO t_alter_ind VALUES (2, [30], 'hello');
 SELECT id, n, `n.a` FROM t_alter_ind ORDER BY id;
+
+SET mutations_sync = 1;
+ALTER TABLE t_alter_ind DROP COLUMN n;
+SET mutations_sync = 0;
+SELECT id, `n.a` FROM t_alter_ind ORDER BY id;
 
 DROP TABLE t_alter_ind;
 

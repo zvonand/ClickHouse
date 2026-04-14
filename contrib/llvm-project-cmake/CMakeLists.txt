@@ -106,9 +106,14 @@ include(${LLVM_CMAKE_DIR}/sources/LLVMRemarks.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMDebugInfoCodeView.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMDebugInfoDWARF.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMObject.cmake)
+include(${LLVM_CMAKE_DIR}/sources/LLVMTextAPI.cmake)
+include(${LLVM_CMAKE_DIR}/sources/LLVMObjectYAML.cmake)
+include(${LLVM_CMAKE_DIR}/sources/LLVMAsmParser.cmake)
+include(${LLVM_CMAKE_DIR}/sources/LLVMIRReader.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMProfileData.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMAnalysis.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMTransformUtils.cmake)
+include(${LLVM_CMAKE_DIR}/sources/LLVMLinker.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMTarget.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMScalarOpts.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMInstCombine.cmake)
@@ -126,9 +131,11 @@ include(${LLVM_CMAKE_DIR}/sources/LLVMObjCARCOpts.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMIRPrinter.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMCFGuard.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMFrontendOpenMP.cmake)
+include(${LLVM_CMAKE_DIR}/sources/LLVMFrontendAtomic.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMFrontendOffloading.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMFrontendHLSL.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMCoroutines.cmake)
+include(${LLVM_CMAKE_DIR}/sources/LLVMHipStdPar.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMSandboxIR.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMPasses.cmake)
 include(${LLVM_CMAKE_DIR}/sources/LLVMExecutionEngine.cmake)
@@ -800,6 +807,7 @@ if (ARCH_PPC64LE)
     tablegen_generate(PPC "${PPC_TD}" "-gen-register-bank" "lib/Target/PowerPC/PPCGenRegisterBank.inc")
     tablegen_generate(PPC "${PPC_TD}" "-gen-global-isel" "lib/Target/PowerPC/PPCGenGlobalISel.inc")
     tablegen_generate(PPC "${PPC_TD}" "-gen-exegesis" "lib/Target/PowerPC/PPCGenExegesis.inc")
+    tablegen_generate(PPC "${PPC_TD}" "-gen-sd-node-info" "lib/Target/PowerPC/PPCGenSDNodeInfo.inc")
 endif()
 
 #
@@ -817,6 +825,7 @@ if (ARCH_S390X)
     tablegen_generate(SYSTEMZ "${SYSTEMZ_TD}" "-gen-asm-writer;-asmwriternum=1" "lib/Target/SystemZ/SystemZGenHLASMAsmWriter.inc")
     tablegen_generate(SYSTEMZ "${SYSTEMZ_TD}" "-gen-asm-matcher" "lib/Target/SystemZ/SystemZGenAsmMatcher.inc")
     tablegen_generate(SYSTEMZ "${SYSTEMZ_TD}" "-gen-emitter" "lib/Target/SystemZ/SystemZGenMCCodeEmitter.inc")
+    tablegen_generate(SYSTEMZ "${SYSTEMZ_TD}" "-gen-sd-node-info" "lib/Target/SystemZ/SystemZGenSDNodeInfo.inc")
 endif()
 
 #
@@ -863,6 +872,7 @@ if (ARCH_LOONGARCH64)
     tablegen_generate(LOONGARCH "${LOONGARCH_TD}" "-gen-pseudo-lowering" "lib/Target/LoongArch/LoongArchGenMCPseudoLowering.inc")
     tablegen_generate(LOONGARCH "${LOONGARCH_TD}" "-gen-emitter" "lib/Target/LoongArch/LoongArchGenMCCodeEmitter.inc")
     tablegen_generate(LOONGARCH "${LOONGARCH_TD}" "-gen-disassembler" "lib/Target/LoongArch/LoongArchGenDisassemblerTables.inc")
+    tablegen_generate(LOONGARCH "${LOONGARCH_TD}" "-gen-sd-node-info" "lib/Target/LoongArch/LoongArchGenSDNodeInfo.inc")
 endif()
 
 # Combine all tablegen outputs
@@ -925,10 +935,15 @@ add_llvm_library(LLVMBitWriter SOURCES ${LLVMBITWRITER_SOURCES} DEPENDS LLVMCore
 add_llvm_library(LLVMRemarks SOURCES ${LLVMREMARKS_SOURCES} DEPENDS LLVMSupport LLVMBitstreamReader)
 add_llvm_library(LLVMDebugInfoCodeView SOURCES ${LLVMDEBUGINFOCODEVI_SOURCES} DEPENDS LLVMSupport)
 add_llvm_library(LLVMObject SOURCES ${LLVMOBJECT_SOURCES} DEPENDS LLVMCore LLVMMC LLVMBinaryFormat LLVMSupport LLVMTargetParser)
+add_llvm_library(LLVMTextAPI SOURCES ${LLVMTEXTAPI_SOURCES} DEPENDS LLVMSupport LLVMBinaryFormat LLVMTargetParser)
+add_llvm_library(LLVMObjectYAML SOURCES ${LLVMOBJECTYAML_SOURCES} DEPENDS LLVMBinaryFormat LLVMObject LLVMSupport LLVMTargetParser LLVMDebugInfoCodeView LLVMMC)
+add_llvm_library(LLVMAsmParser SOURCES ${LLVMASMPARSER_SOURCES} DEPENDS LLVMBinaryFormat LLVMCore LLVMSupport LLVMTargetParser)
+add_llvm_library(LLVMIRReader SOURCES ${LLVMIRREADER_SOURCES} DEPENDS LLVMAsmParser LLVMBitReader LLVMCore LLVMSupport)
 add_llvm_library(LLVMDebugInfoDWARF SOURCES ${LLVMDEBUGINFODWARF_SOURCES} DEPENDS LLVMSupport LLVMObject LLVMBinaryFormat)
 add_llvm_library(LLVMProfileData SOURCES ${LLVMPROFILEDATA_SOURCES} DEPENDS LLVMSupport LLVMCore)
 add_llvm_library(LLVMAnalysis SOURCES ${LLVMANALYSIS_SOURCES} DEPENDS LLVMCore LLVMObject LLVMProfileData LLVMSupport)
 add_llvm_library(LLVMTransformUtils SOURCES ${LLVMTRANSFORMUTILS_SOURCES} DEPENDS LLVMCore LLVMAnalysis LLVMSupport)
+add_llvm_library(LLVMLinker SOURCES ${LLVMLINKER_SOURCES} DEPENDS LLVMCore LLVMObject LLVMSupport LLVMTransformUtils LLVMTargetParser)
 add_llvm_library(LLVMTarget SOURCES ${LLVMTARGET_SOURCES} DEPENDS LLVMCore LLVMAnalysis LLVMSupport)
 add_llvm_library(LLVMScalarOpts SOURCES ${LLVMSCALAROPTS_SOURCES} DEPENDS LLVMCore LLVMAnalysis LLVMTransformUtils LLVMSupport)
 add_llvm_library(LLVMInstCombine SOURCES ${LLVMINSTCOMBINE_SOURCES} DEPENDS LLVMCore LLVMAnalysis LLVMTransformUtils LLVMSupport)
@@ -949,9 +964,11 @@ add_llvm_library(LLVMObjCARCOpts SOURCES ${LLVMOBJCARCOPTS_SOURCES} DEPENDS LLVM
 add_llvm_library(LLVMIRPrinter SOURCES ${LLVMIRPRINTER_SOURCES} DEPENDS LLVMCore LLVMAnalysis LLVMSupport)
 add_llvm_library(LLVMCFGuard SOURCES ${LLVMCFGUARD_SOURCES} DEPENDS LLVMCore LLVMSupport)
 add_llvm_library(LLVMFrontendOpenMP SOURCES ${LLVMFRONTENDOPENMP_SOURCES} DEPENDS LLVMCore LLVMTransformUtils LLVMSupport)
+add_llvm_library(LLVMFrontendAtomic SOURCES ${LLVMFRONTENDATOMIC_SOURCES} DEPENDS LLVMCore LLVMSupport LLVMAnalysis)
 add_llvm_library(LLVMFrontendOffloading SOURCES ${LLVMFRONTENDOFFLOADING_SOURCES} DEPENDS LLVMCore LLVMSupport)
 add_llvm_library(LLVMFrontendHLSL SOURCES ${LLVMFRONTENDHLSL_SOURCES} DEPENDS LLVMBinaryFormat LLVMCore LLVMSupport)
 add_llvm_library(LLVMCoroutines SOURCES ${LLVMCOROUTINES_SOURCES} DEPENDS LLVMCore LLVMAnalysis LLVMTransformUtils LLVMipo LLVMSupport)
+add_llvm_library(LLVMHipStdPar SOURCES ${LLVMHIPSTDPAR_SOURCES} DEPENDS LLVMAnalysis LLVMCore LLVMSupport LLVMTransformUtils)
 add_llvm_library(LLVMSandboxIR SOURCES ${LLVMSANDBOXIR_SOURCES} DEPENDS LLVMCore LLVMSupport)
 
 # Architecture-specific libraries
@@ -1028,10 +1045,17 @@ else()
         LLVMIRPrinter
         LLVMCFGuard
         LLVMFrontendOpenMP
+        LLVMFrontendAtomic
         LLVMFrontendOffloading
         LLVMFrontendHLSL
         LLVMCoroutines
+        LLVMHipStdPar
         LLVMSandboxIR
+        LLVMTextAPI
+        LLVMObjectYAML
+        LLVMAsmParser
+        LLVMIRReader
+        LLVMLinker
         LLVMTargetParser
         LLVMSupport
         LLVMDemangle

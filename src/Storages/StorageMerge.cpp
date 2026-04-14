@@ -1633,7 +1633,7 @@ void ReadFromMerge::convertAndFilterSourceStream(
     /// Add missing columns for the resulting Merge table.
     {
         bool inner_share_nested_offsets = true;
-        if (auto * merge_tree = dynamic_cast<const MergeTreeData *>(&snapshot->storage))
+        if (const auto * merge_tree = dynamic_cast<const MergeTreeData *>(&snapshot->storage))
             inner_share_nested_offsets = (*merge_tree->getSettings())[MergeTreeSetting::share_nested_offsets];
 
         auto adding_missing_defaults_dag = addMissingDefaults(

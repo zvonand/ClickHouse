@@ -109,7 +109,7 @@ bool injectRequiredColumnsRecursively(
         auto column_in_part = data_part_info_for_reader.getColumns().tryGetByName(column_name_in_part);
 
         bool share_nested = true;
-        if (auto * merge_tree = dynamic_cast<const MergeTreeData *>(&storage_snapshot->storage))
+        if (const auto * merge_tree = dynamic_cast<const MergeTreeData *>(&storage_snapshot->storage))
             share_nested = (*merge_tree->getSettings())[MergeTreeSetting::share_nested_offsets];
 
         if (column_in_part

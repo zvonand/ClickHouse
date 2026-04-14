@@ -674,8 +674,6 @@ bool KeeperDispatcher::putRequest(const Coordination::ZooKeeperRequestPtr & requ
     if (keeper_context->isShutdownCalled())
         return false;
 
-    if (!request->spans)
-        request->spans = std::make_shared<DB::ZooKeeperOpentelemetrySpans>();
     ZooKeeperOpentelemetrySpans::maybeInitialize(request->spans->dispatcher_requests_queue, request->tracing_context.get());
 
     /// Put close requests without timeouts
@@ -1023,9 +1021,7 @@ void KeeperDispatcher::sessionCleanerTask()
                     auto request = Coordination::ZooKeeperRequestFactory::instance().get(Coordination::OpNum::Close);
                     request->xid = Coordination::CLOSE_XID;
 
-                    if (!request->spans)
-        request->spans = std::make_shared<DB::ZooKeeperOpentelemetrySpans>();
-    ZooKeeperOpentelemetrySpans::maybeInitialize(request->spans->dispatcher_requests_queue, request->tracing_context.get());
+                    ZooKeeperOpentelemetrySpans::maybeInitialize(request->spans->dispatcher_requests_queue, request->tracing_context.get());
 
                     using namespace std::chrono;
                     KeeperRequestForSession request_info

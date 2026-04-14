@@ -41,8 +41,6 @@ public:
 
     String getName() const override { return "FromMergeTreeDataPart"; }
 
-    StorageSnapshotPtr getStorageSnapshot(const StorageMetadataPtr & metadata_snapshot, ContextPtr /*query_context*/) const override;
-
     void read(
         QueryPlan & query_plan,
         const Names & column_names,

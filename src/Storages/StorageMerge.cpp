@@ -414,8 +414,12 @@ VirtualColumnsDescription StorageMerge::createVirtuals()
     return desc;
 }
 
-StorageSnapshotPtr StorageMerge::getStorageSnapshot(const StorageMetadataPtr & metadata_snapshot, ContextPtr query_context) const
+StorageMetadataPtr StorageMerge::getInMemoryMetadataPtr(ContextPtr query_context, bool bypass_metadata_cache) const
 {
+    auto base_metadata = IStorage::getInMemoryMetadataPtr(query_context, bypass_metadata_cache);
+    if (!query_context)
+        return base_metadata;
+
     static const auto common_virtuals = createVirtuals();
     const auto & access = query_context->getAccess();
 
@@ -439,9 +443,7 @@ StorageSnapshotPtr StorageMerge::getStorageSnapshot(const StorageMetadataPtr & m
         }
     }
 
-    auto merged_metadata = std::make_shared<StorageInMemoryMetadata>(*metadata_snapshot);
-    merged_metadata->setVirtuals(std::move(virtuals));
-    return std::make_shared<StorageSnapshot>(*this, std::move(merged_metadata));
+    return std::make_shared<StorageInMemoryMetadata>(base_metadata->withVirtuals(std::move(virtuals)));
 }
 
 void StorageMerge::read(

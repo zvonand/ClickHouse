@@ -334,20 +334,22 @@ QueryProcessingStage::Enum StorageMaterializedView::getQueryProcessingStage(
     return getTargetTable()->getQueryProcessingStage(local_context, to_stage, getTargetTable()->getStorageSnapshot(target_metadata, local_context), query_info);
 }
 
-StorageSnapshotPtr StorageMaterializedView::getStorageSnapshot(const StorageMetadataPtr & metadata_snapshot, ContextPtr query_context) const
+StorageMetadataPtr StorageMaterializedView::getInMemoryMetadataPtr(ContextPtr query_context, bool bypass_metadata_cache) const
 {
+    auto base_metadata = IStorage::getInMemoryMetadataPtr(query_context, bypass_metadata_cache);
+
     /// Override _table and _database to be materialized at the Plan level
     /// by StorageWithCommonVirtualColumns, not by the target storage's reader.
-    auto metadata_with_virtuals = std::make_shared<StorageInMemoryMetadata>(*metadata_snapshot);
+    VirtualColumnsDescription virtuals_desc;
     for (auto desc : getTargetTable()->getInMemoryMetadataPtr(query_context, false)->virtuals)
     {
         if (desc.name == "_table" || desc.name == "_database")
             desc.place = VirtualsMaterializationPlace::Plan;
 
-        metadata_with_virtuals->virtuals.add(std::move(desc));
+        virtuals_desc.add(std::move(desc));
     }
 
-    return IStorage::getStorageSnapshot(std::move(metadata_with_virtuals), {});
+    return std::make_shared<StorageInMemoryMetadata>(base_metadata->withVirtuals(std::move(virtuals_desc)));
 }
 
 void StorageMaterializedView::readImpl(

@@ -33,11 +33,11 @@ public:
 
     ColumnSizeByName getColumnSizes() const override { return getNested()->getColumnSizes(); }
 
-    StorageSnapshotPtr getStorageSnapshot(const StorageMetadataPtr & metadata_snapshot, ContextPtr query_context) const override
+    StorageMetadataPtr getInMemoryMetadataPtr(ContextPtr query_context, bool bypass_metadata_cache) const override
     {
-        auto metadata_snapshot_with_virtuals = std::make_shared<StorageInMemoryMetadata>(*metadata_snapshot);
-        metadata_snapshot_with_virtuals->virtuals = getNested()->getInMemoryMetadataPtr(query_context, false)->virtuals;
-        return std::make_shared<StorageSnapshot>(*this, std::move(metadata_snapshot_with_virtuals));
+        auto base_metadata = IStorage::getInMemoryMetadataPtr(query_context, bypass_metadata_cache);
+        auto nested_virtuals = getNested()->getInMemoryMetadataPtr(query_context, false)->virtuals;
+        return std::make_shared<StorageInMemoryMetadata>(base_metadata->withVirtuals(std::move(nested_virtuals)));
     }
 
     QueryProcessingStage::Enum getQueryProcessingStage(

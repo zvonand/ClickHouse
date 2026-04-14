@@ -1,5 +1,5 @@
 # docker build -t clickhouse/pytest-test .
-FROM ubuntu:22.04
+FROM ubuntu:latest
 
 RUN apt-get update && env DEBIAN_FRONTEND=noninteractive apt-get install --yes \
         git \

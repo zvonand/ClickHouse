@@ -1,4 +1,3 @@
-#include <Core/NamesAndTypes.h>
 #include <Interpreters/TreeRewriter.h>
 #include <Storages/MergeTree/MutateTask.h>
 

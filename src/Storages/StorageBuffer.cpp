@@ -223,7 +223,6 @@ public:
         : ISource(std::make_shared<const Block>(storage_snapshot->getSampleBlockForColumns(column_names_)))
         , buffer(buffer_)
         , storage_id(storage_id_)
-        , virtual_columns(std::make_shared<const VirtualColumnsDescription>(storage_snapshot->metadata->virtuals))
         , metadata_version(storage_snapshot->metadata->metadata_version) {}
 
     String getName() const override { return "Buffer"; }
@@ -261,7 +260,6 @@ protected:
 private:
     StorageBuffer::Buffer & buffer;
     StorageID storage_id;
-    VirtualsDescriptionPtr virtual_columns;
     int32_t metadata_version;
     bool has_been_read = false;
 };

@@ -213,6 +213,13 @@ private:
     const size_t max_block_size;
 };
 
+VirtualColumnsDescription StorageEmbeddedRocksDB::createVirtuals()
+{
+    VirtualColumnsDescription desc;
+    desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
+    desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
+    return desc;
+}
 
 StorageEmbeddedRocksDB::StorageEmbeddedRocksDB(
     const StorageID & table_id_,
@@ -233,14 +240,7 @@ StorageEmbeddedRocksDB::StorageEmbeddedRocksDB(
     , ttl(ttl_)
     , read_only(read_only_)
 {
-    {
-        auto mutable_metadata = metadata_;
-        VirtualColumnsDescription virtuals_desc;
-        virtuals_desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
-        virtuals_desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
-        mutable_metadata.setVirtuals(std::move(virtuals_desc));
-        setInMemoryMetadata(mutable_metadata);
-    }
+    setInMemoryMetadata(metadata_.withVirtuals(createVirtuals()));
     setSettings(std::move(settings_));
 
     if (rocksdb_dir.empty())

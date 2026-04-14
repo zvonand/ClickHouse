@@ -259,6 +259,13 @@ StorageInMemoryMetadata StorageInMemoryMetadata::withMetadataVersion(int32_t met
     return copy;
 }
 
+StorageInMemoryMetadata StorageInMemoryMetadata::withVirtuals(VirtualColumnsDescription virtual_columns_) const
+{
+    StorageInMemoryMetadata copy(*this);
+    copy.setVirtuals(std::move(virtual_columns_));
+    return copy;
+}
+
 const ColumnsDescription & StorageInMemoryMetadata::getColumns() const
 {
     return columns;

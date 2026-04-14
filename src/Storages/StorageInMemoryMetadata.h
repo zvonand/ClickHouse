@@ -132,6 +132,8 @@ struct StorageInMemoryMetadata
     void setMetadataVersion(int32_t metadata_version_);
     /// Get copy of current metadata with metadata_version_
     StorageInMemoryMetadata withMetadataVersion(int32_t metadata_version_) const;
+    /// Get copy of current metadata with virtual columns
+    StorageInMemoryMetadata withVirtuals(VirtualColumnsDescription virtual_columns_) const;
 
     /// Sets SQL security for the storage.
     void setSQLSecurity(const ASTSQLSecurity & sql_security);

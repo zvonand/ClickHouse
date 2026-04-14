@@ -118,7 +118,6 @@ StorageObjectStorageCluster::StorageObjectStorageCluster(
     }
 
     metadata.setConstraints(constraints_);
-
     metadata.setVirtuals(VirtualColumnUtils::getVirtualsForFileLikeStorage(
         metadata.columns,
         context_,
@@ -229,13 +228,11 @@ void StorageObjectStorageCluster::updateExternalDynamicMetadataIfExists(ContextP
             new_metadata = *metadata_snapshot;
     }
 
-    new_metadata.setVirtuals(VirtualColumnUtils::getVirtualsForFileLikeStorage(
+    setInMemoryMetadata(new_metadata.withVirtuals(VirtualColumnUtils::getVirtualsForFileLikeStorage(
         new_metadata.columns,
         query_context,
         /* format_settings */ std::nullopt,
-        configuration->partition_strategy_type));
-
-    setInMemoryMetadata(new_metadata);
+        configuration->partition_strategy_type)));
 }
 
 RemoteQueryExecutor::Extension StorageObjectStorageCluster::getTaskIteratorExtension(

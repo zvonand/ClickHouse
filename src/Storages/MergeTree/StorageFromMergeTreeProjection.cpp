@@ -18,11 +18,7 @@ StorageFromMergeTreeProjection::StorageFromMergeTreeProjection(
     , parent_metadata(std::move(parent_metadata_))
     , projection(projection_)
 {
-    {
-        auto mutable_metadata = *projection->metadata;
-        mutable_metadata.setVirtuals(MergeTreeData::createVirtuals(parent_metadata->hasPartitionKey() ? &parent_metadata->partition_key : nullptr));
-        setInMemoryMetadata(mutable_metadata);
-    }
+    setInMemoryMetadata(*projection->metadata);
 }
 
 void StorageFromMergeTreeProjection::read(

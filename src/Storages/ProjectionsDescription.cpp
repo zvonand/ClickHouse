@@ -131,11 +131,7 @@ public:
     {
         StorageInMemoryMetadata storage_metadata;
         storage_metadata.setColumns(columns_description);
-        VirtualColumnsDescription desc;
-        desc.addEphemeral("_part_offset", std::make_shared<DataTypeUInt64>(), "", VirtualsMaterializationPlace::Reader);
-        desc.addPersistent(BlockNumberColumn::name, BlockNumberColumn::type, BlockNumberColumn::codec, "");
-        desc.addPersistent(BlockOffsetColumn::name, BlockOffsetColumn::type, BlockOffsetColumn::codec, "");
-        storage_metadata.setVirtuals(std::move(desc));
+        storage_metadata.setVirtuals(MergeTreeData::createVirtuals(nullptr));
         setInMemoryMetadata(storage_metadata);
     }
 

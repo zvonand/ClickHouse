@@ -16,8 +16,7 @@ namespace DB
             , inner_storage(std::move(inner_storage_))
             , inner_table_function_ast(std::move(inner_table_function_ast_))
     {
-        StorageInMemoryMetadata storage_metadata = *inner_storage->getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false);
-        setInMemoryMetadata(storage_metadata);
+        setInMemoryMetadata(*inner_storage->getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false));
     }
 
     StorageSnapshotPtr StorageLoop::getStorageSnapshot(const StorageMetadataPtr & metadata_snapshot, ContextPtr context) const

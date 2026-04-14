@@ -63,6 +63,7 @@ except ImportError:
 # `__file__` is `{repo}/tests/clickhouse-test`, so this resolves to
 # `{repo}/ci/tmp/clickhouse_test_group_pid`.
 _GROUP_PID_PATH = Path(__file__).resolve().parent.parent / "ci" / "tmp"
+_GROUP_PID_NAME = "clickhouse_test_group_pid"
 
 
 def write_text_atomic(path: Path, text: str) -> None:
@@ -3136,7 +3137,7 @@ class TestCase:
         proc = Popen(command, shell=True, executable=BASH, env=tests_env, start_new_session=True, preexec_fn=preexec_fn)
         # proc.pid == PGID after start_new_session=True; write it atomically so
         # `clickhouse-test --cleanup` can find it even if we are killed with SIGKILL.
-        _gpid_file = _GROUP_PID_PATH / f"clickhouse-test-gpid.{os.getpid()}"
+        _gpid_file = _GROUP_PID_PATH / f"{_GROUP_PID_NAME}.{os.getpid()}"
         write_text_atomic(_gpid_file, f"{proc.pid}\n")
 
         try:
@@ -5915,55 +5916,20 @@ def parse_args():
     return parser.parse_args()
 
 
-
 def cleanup_test_groups():
     """Kill all process groups recorded in per-worker PGID files.
-
-    Each worker process writes ``_GROUP_PID_FILE.<pid>`` on test launch and
-    deletes it on normal exit.  If a worker is killed with SIGKILL the file
-    survives, so `clickhouse-test --cleanup` can find and kill the orphaned
-    process group.  The PGID is stored in the kernel process descriptor and is
-    never reset on re-parenting, so `kill_process_group` reaches orphaned
-    processes without session traversal.
-
-    Note: `pgrep` and `kill_process_group` use `ps -eo pid,ppid,pgid,command`
-    (POSIX, works on both Linux and macOS) — no system `pgrep` binary is
-    invoked.  `kill_process_group` already handles missing groups via the
-    `ESRCH` catch, so the loop below is not aborted by a stale PGID.
     """
-    pgid_files = [
-        p for p in _GROUP_PID_FILE.parent.glob(f"{_GROUP_PID_FILE.name}.*")
-        if not p.name.endswith(".tmp")
-    ]
-    if not pgid_files:
-        print(f"No group pid files in {_GROUP_PID_FILE.parent}, nothing to clean up.")
-        return
-    pgids = []
-    for f in pgid_files:
+    for _pgid_file in _GROUP_PID_PATH.glob(f"{_GROUP_PID_NAME}.*"):
+        if _pgid_file.name.endswith(".tmp"):
+            continue
         try:
-            pgids += [int(line.strip()) for line in f.read_text().splitlines() if line.strip()]
+            pgid = int(_pgid_file.read_text())
+            kill_process_group(pgid, None)
         except Exception as e:
-            print(f"Warning: could not read {f}: {e}", file=sys.stderr)
-    for pgid in pgids:
-        # Guard against PGID reuse: only kill groups that still contain at least
-        # one process whose command looks like a clickhouse-test child.  A
-        # completely unrelated process group that happens to have reused the same
-        # PGID number will not match and will be skipped.
-        procs = pgrep(pgid=pgid)
-        if not procs:
-            print(f"PGID {pgid} no longer exists, skipping.")
+            print(f"Warning: could not read {_pgid_file}: {e}", file=sys.stderr)
             continue
-        cmds = [p[3] for p in procs]
-        test_keywords = ("clickhouse", "bash", "python", "/bin/sh")
-        if not any(kw in cmd for cmd in cmds for kw in test_keywords):
-            print(
-                f"PGID {pgid}: no test-related processes found ({cmds}), "
-                "skipping to avoid signaling unrelated process group."
-            )
-            continue
-        kill_process_group(pgid, None)
-    for f in pgid_files:
-        f.unlink(missing_ok=True)
+        finally:
+            _pgid_file.unlink(missing_ok=True)
 
 
 class Terminated(KeyboardInterrupt):

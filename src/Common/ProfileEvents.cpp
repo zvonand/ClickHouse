@@ -193,7 +193,7 @@
     M(AzureReadRequestsErrors, "Number of Azure read request errors.", ValueType::Number) \
     M(AzureReadRequestsThrottling, "Number of Azure read requests throttled.", ValueType::Number) \
     M(AzureReadRequestsRedirects, "Number of Azure read request redirects.", ValueType::Number) \
-    M(AzureWriteMicroseconds, "Total time spent waiting for Azure read requests.", ValueType::Microseconds) \
+    M(AzureWriteMicroseconds, "Total time spent waiting for Azure write requests.", ValueType::Microseconds) \
     M(AzureWriteRequestsCount, "Number of Azure write requests.", ValueType::Number) \
     M(AzureWriteRequestsErrors, "Number of Azure write request errors.", ValueType::Number) \
     M(AzureWriteRequestsThrottling, "Number of Azure write requests throttled.", ValueType::Number) \

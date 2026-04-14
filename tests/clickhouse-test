@@ -132,18 +132,22 @@ CGROUP_VERSION = detect_cgroup_version()
 BASH = "/bin/bash"
 
 def shell_get_output(cmd: str) -> str:
-    res = subprocess.run(
-        cmd,
-        shell=True,
-        executable=BASH,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    return res.stdout.strip()
-
+    try:
+        res = subprocess.run(
+            cmd,
+            shell=True,
+            executable=BASH,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=True,
+        )
+        return res.stdout.strip()
+    except Exception as e:
+        print(f"Error running command {cmd!r}: {e}", file=sys.stderr)
+        return ""
 
 class SharedEngineReplacer:
     SPECIALIZED_ENGINES = "Collapsing|VersionedCollapsing|Summing|Replacing|Aggregating|Coalescing"

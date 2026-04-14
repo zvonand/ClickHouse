@@ -39,6 +39,18 @@ public:
     Status prepare() override;
     void work() override;
 
+    /// Build a ReadFromMergeTree step for the lazy FINAL path (without IN-set filter).
+    /// Used by LazyReadReplacingFinalStep for EXPLAIN.
+    static std::unique_ptr<ReadFromMergeTree> buildReadingStep(
+        const StorageMetadataPtr & metadata_snapshot,
+        const MergeTreeData::MutationsSnapshotPtr & mutations_snapshot,
+        const StorageSnapshotPtr & storage_snapshot,
+        const MergeTreeSettingsPtr & data_settings,
+        const MergeTreeData & data,
+        PartitionIdToMaxBlockPtr max_block_numbers_to_read,
+        RangesInDataPartsPtr ranges,
+        ContextPtr query_context);
+
 private:
     FutureSetPtr future_set;
     LazyFinalSharedStatePtr shared_state;

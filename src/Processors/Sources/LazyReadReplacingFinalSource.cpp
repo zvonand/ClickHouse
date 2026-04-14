@@ -106,7 +106,11 @@ static void calculateGlobalOffset(ActionsDAG & dag, ReadFromMergeTree & reading_
         dag.getOutputs().push_back(part_offset_in);
 }
 
-void LazyReadReplacingFinalSource::work()
+QueryPlan LazyReadReplacingFinalSource::buildPlanFromReadingStep(
+    std::unique_ptr<ReadFromMergeTree> reading,
+    const StorageMetadataPtr & metadata_snapshot,
+    const MergeTreeData & data,
+    ContextPtr query_context)
 {
     const auto & settings = query_context->getSettingsRef();
     const auto & sorting_key = metadata_snapshot->getSortingKey();
@@ -115,17 +119,11 @@ void LazyReadReplacingFinalSource::work()
     QueryPlan plan;
 
     {
-        /// Use the pre-built ReadFromMergeTree step from the shared state
-        /// (created by LazyFinalKeyAnalysisTransform with index analysis already applied).
-        auto & reading = shared_state->reading_step;
-        chassert(reading);
-
         ActionsDAG dag = sorting_key.expression->getActionsDAG().clone();
         calculateGlobalOffset(dag, *reading);
 
         plan.addStep(std::move(reading));
-        auto expression = std::make_unique<ExpressionStep>(plan.getCurrentHeader(), std::move(dag));
-        plan.addStep(std::move(expression));
+        plan.addStep(std::make_unique<ExpressionStep>(plan.getCurrentHeader(), std::move(dag)));
     }
 
     /// When there's a version column, compute a tiebreaker for argMax so that
@@ -324,6 +322,16 @@ void LazyReadReplacingFinalSource::work()
                     plan.getCurrentHeader(), std::move(filter_dag), not_node->result_name, /*remove_filter_column=*/true));
         }
     }
+
+    return plan;
+}
+
+void LazyReadReplacingFinalSource::work()
+{
+    auto & reading = shared_state->reading_step;
+    chassert(reading);
+
+    auto plan = buildPlanFromReadingStep(std::move(reading), metadata_snapshot, data, query_context);
 
     auto builder = plan.buildQueryPipeline(QueryPlanOptimizationSettings(query_context), BuildQueryPipelineSettings(query_context));
 

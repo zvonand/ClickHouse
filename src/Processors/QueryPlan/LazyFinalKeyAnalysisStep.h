@@ -32,6 +32,9 @@ public:
     String getName() const override { return "LazyFinalKeyAnalysis"; }
     void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings & settings) override;
 
+    /// Build a ReadFromMergeTree step without the IN-set filter (for EXPLAIN).
+    std::unique_ptr<ReadFromMergeTree> buildReadingStep() const;
+
 private:
     void updateOutputHeader() override {}
 

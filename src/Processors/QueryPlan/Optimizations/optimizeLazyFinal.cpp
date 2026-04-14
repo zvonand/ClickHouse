@@ -461,7 +461,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
 
     /// Builds the ReadFromMergeTree step with IN-set filter, runs index analysis,
     /// checks if enough marks were filtered, and signals.
-    set_plan.addStep(std::make_unique<LazyFinalKeyAnalysisStep>(
+    auto analysis_step = std::make_unique<LazyFinalKeyAnalysisStep>(
         set_plan.getCurrentHeader(),
         future_set,
         shared_state,
@@ -473,7 +473,9 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         max_block_numbers_to_read,
         parts_for_set,
         context,
-        optimization_settings.min_filtered_ratio_for_lazy_final));
+        optimization_settings.min_filtered_ratio_for_lazy_final);
+    auto * analysis_step_ptr = analysis_step.get();
+    set_plan.addStep(std::move(analysis_step));
 
     /// True branch (signal = set OK): LazyReadReplacingFinalSource + JoinLazyColumnsStep.
     QueryPlan true_plan;
@@ -482,7 +484,8 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
             metadata_snapshot,
             data,
             context,
-            shared_state));
+            shared_state,
+            analysis_step_ptr));
 
         auto lazy_materializing_rows = std::make_shared<LazyMaterializingRows>(*parts_for_set);
 

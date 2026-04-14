@@ -33,6 +33,17 @@ Expression ((Project names + Projection))
                       Ranges: 2
             JoinLazyColumnsStep
               LazyReadReplacingFinal
+                Expression
+                  Aggregating
+                    Expression
+                      Expression
+                        ReadFromMergeTree (default.t_lazy_final_combined)
+                        Indexes:
+                          PrimaryKey
+                            Condition: true
+                            Parts: 2/2
+                            Granules: 56/62
+                          Ranges: 2
               LazilyReadFromMergeTree
             ReadFromMergeTree (default.t_lazy_final_combined)
             Indexes:

@@ -96,13 +96,20 @@ IProcessor::Status LazyFinalKeyAnalysisTransform::prepare()
     return Status::NeedData;
 }
 
-void LazyFinalKeyAnalysisTransform::work()
+std::unique_ptr<ReadFromMergeTree> LazyFinalKeyAnalysisTransform::buildReadingStep(
+    const StorageMetadataPtr & metadata_snapshot,
+    const MergeTreeData::MutationsSnapshotPtr & mutations_snapshot,
+    const StorageSnapshotPtr & storage_snapshot,
+    const MergeTreeSettingsPtr & data_settings,
+    const MergeTreeData & data,
+    PartitionIdToMaxBlockPtr max_block_numbers_to_read,
+    RangesInDataPartsPtr ranges,
+    ContextPtr query_context)
 {
     const auto & settings = query_context->getSettingsRef();
     const auto & sorting_key = metadata_snapshot->getSortingKey();
     const auto & merging_params = data.merging_params;
 
-    /// Build the column list for reading (sorting key sources + version + is_deleted).
     Names all_column_names;
     std::unordered_set<std::string_view> columns_to_read;
     for (const auto & column : sorting_key.expression->getRequiredColumnsWithTypes())
@@ -125,7 +132,7 @@ void LazyFinalKeyAnalysisTransform::work()
     query_info.table_expression_modifiers = TableExpressionModifiers(false, {}, {});
 
     auto reading = std::make_unique<ReadFromMergeTree>(
-        ranges,
+        std::move(ranges),
         mutations_snapshot,
         all_column_names,
         data,
@@ -136,11 +143,19 @@ void LazyFinalKeyAnalysisTransform::work()
         settings[Setting::max_block_size],
         settings[Setting::max_threads],
         max_block_numbers_to_read,
-        log,
+        getLogger("LazyFinalKeyAnalysisTransform"),
         nullptr,
         false);
 
     reading->disableQueryConditionCache();
+    return reading;
+}
+
+void LazyFinalKeyAnalysisTransform::work()
+{
+    auto reading = buildReadingStep(
+        metadata_snapshot, mutations_snapshot, storage_snapshot,
+        data_settings, data, max_block_numbers_to_read, ranges, query_context);
 
     /// Count total marks before index analysis.
     size_t total_marks = 0;

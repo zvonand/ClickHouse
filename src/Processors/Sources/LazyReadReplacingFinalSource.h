@@ -9,6 +9,7 @@
 namespace DB
 {
 
+class QueryPlan;
 struct RangesInDataParts;
 
 struct StorageInMemoryMetadata;
@@ -27,6 +28,14 @@ public:
     Status prepare() override;
     void work() override;
     Processors expandPipeline() override;
+
+    /// Build the aggregation plan (sorting key expr + tiebreaker + argMax + rename + is_deleted filter)
+    /// on top of a ReadFromMergeTree step. Used both for execution and EXPLAIN.
+    static QueryPlan buildPlanFromReadingStep(
+        std::unique_ptr<ReadFromMergeTree> reading,
+        const StorageMetadataPtr & metadata_snapshot,
+        const MergeTreeData & data,
+        ContextPtr query_context);
 
 private:
     OutputPort * pipeline_output = nullptr;

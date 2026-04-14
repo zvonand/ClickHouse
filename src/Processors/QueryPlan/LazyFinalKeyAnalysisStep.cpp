@@ -51,4 +51,11 @@ void LazyFinalKeyAnalysisStep::transformPipeline(QueryPipelineBuilder & pipeline
     });
 }
 
+std::unique_ptr<ReadFromMergeTree> LazyFinalKeyAnalysisStep::buildReadingStep() const
+{
+    return LazyFinalKeyAnalysisTransform::buildReadingStep(
+        metadata_snapshot, mutations_snapshot, storage_snapshot,
+        data_settings, data, max_block_numbers_to_read, ranges, query_context);
+}
+
 }

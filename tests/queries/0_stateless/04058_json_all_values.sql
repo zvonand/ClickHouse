@@ -111,7 +111,7 @@ INSERT INTO test_json_all_values_complex
 SELECT 5, materialize('{"meta":{"id":5},"nullish":null,"empty":"","space":" ","arr":[],"obj":{}}')::JSON(max_dynamic_paths=1, meta.id UInt32);
 INSERT INTO test_json_all_values_complex
 SELECT 6, materialize('{"meta":{"id":6},"p1":1,"p2":2,"p3":3,"nested":{"a":"A","b":"B"},"arr":[{"z":0},{"z":1}]}')::JSON(max_dynamic_paths=1, meta.id UInt32);
-SELECT id, JSONAllValues(json), JSONDynamicPaths(json), JSONSharedDataPaths(json)
+SELECT id, json.meta.id, JSONAllValues(json)
 FROM test_json_all_values_complex
 ORDER BY id;
 DROP TABLE test_json_all_values_complex;

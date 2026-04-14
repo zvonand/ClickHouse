@@ -2,6 +2,7 @@
 -- Covers: src/Common/findExtreme.cpp:160-171 (optimized SIMD path for Decimal types via reinterpret_cast)
 -- These types now use the findExtreme* optimized path; no existing test covers -If/-NotNull combinators.
 
+SET session_timezone = 'UTC';
 
 -- Use small block size to exercise the cross-block merge path in SingleValueData
 SET max_threads = 1, max_block_size = 10;

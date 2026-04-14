@@ -55,7 +55,8 @@ def test_no_queries_from_file(started_cluster):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    assert completed_process.returncode != 0
+    # SUPPORT_IS_DISABLED error code is 344, exit code = 344 % 256 = 88
+    assert completed_process.returncode == 88
     assert "SUPPORT_IS_DISABLED" in completed_process.stderr
 
 

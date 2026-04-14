@@ -65,7 +65,7 @@ class ZooKeeperOpentelemetrySpans
 public:
     ZooKeeperOpentelemetrySpans() = default;
     ZooKeeperOpentelemetrySpans(const ZooKeeperOpentelemetrySpans &) : ZooKeeperOpentelemetrySpans() {}
-    ZooKeeperOpentelemetrySpans & operator=(const ZooKeeperOpentelemetrySpans &) { return *this; }
+    ZooKeeperOpentelemetrySpans & operator=(const ZooKeeperOpentelemetrySpans &) { return *this; } // NOLINT(cert-oop54-cpp)
     ZooKeeperOpentelemetrySpans(ZooKeeperOpentelemetrySpans &&) = default;
     ZooKeeperOpentelemetrySpans & operator=(ZooKeeperOpentelemetrySpans &&) = default;
 

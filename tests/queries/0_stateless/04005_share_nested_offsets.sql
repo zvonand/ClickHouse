@@ -355,4 +355,31 @@ SELECT `n.a` FROM t_scalar_dotted_multi ORDER BY `n.a`;
 SELECT `n.b` FROM t_scalar_dotted_multi ORDER BY `n.b`;
 DROP TABLE t_scalar_dotted_multi;
 
+-- =============================================================================
+-- 13. Merge engine: missing sibling columns should be empty, not replicated
+-- =============================================================================
+
+SELECT '--- merge engine ---';
+
+DROP TABLE IF EXISTS child1;
+DROP TABLE IF EXISTS child2;
+DROP TABLE IF EXISTS t_merge;
+
+CREATE TABLE child1 (id UInt64, `n.a` Array(UInt32), `n.b` Array(String))
+    ENGINE = MergeTree ORDER BY id SETTINGS share_nested_offsets = false;
+CREATE TABLE child2 (id UInt64, `n.a` Array(UInt32))
+    ENGINE = MergeTree ORDER BY id SETTINGS share_nested_offsets = false;
+
+INSERT INTO child1 VALUES (1, [1,2,3], ['x','y']);
+INSERT INTO child2 VALUES (2, [10,20]);
+
+CREATE TABLE t_merge (id UInt64, `n.a` Array(UInt32), `n.b` Array(String))
+    ENGINE = Merge(currentDatabase(), '^child');
+
+SELECT id, n.a, n.b FROM t_merge ORDER BY id;
+
+DROP TABLE t_merge;
+DROP TABLE child1;
+DROP TABLE child2;
+
 SELECT '--- done ---';

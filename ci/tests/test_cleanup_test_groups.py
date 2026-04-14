@@ -42,6 +42,10 @@ pgrep = _ct["pgrep"]
 _GROUP_PID_PATH = _ct["_GROUP_PID_PATH"]
 _GROUP_PID_NAME = _ct["_GROUP_PID_NAME"]
 
+# clickhouse-test defaults args.tmp to args.queries when running from the repo,
+# so per-test stdout files end up under tests/queries/0_stateless/.
+_SUITE_TMP = _REPO_ROOT / "tests" / "queries" / "0_stateless"
+
 
 def test_cleanup_kills_orphaned_test_process():
     """
@@ -52,14 +56,29 @@ def test_cleanup_kills_orphaned_test_process():
     for f in _GROUP_PID_PATH.glob(f"{_GROUP_PID_NAME}.*"):
         f.unlink(missing_ok=True)
 
+    # Remove any leftover stdout files from a previous (possibly interrupted) run
+    # so we get a clean signal when waiting for the file to appear below.
+    for _f in _SUITE_TMP.glob(f"{_TEST}*.stdout"):
+        _f.unlink(missing_ok=True)
+
+    pgid = None
     _ch_proc = subprocess.Popen(
         [sys.executable, _CLICKHOUSE_TEST, _TEST],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
 
-    pgid = None
     try:
+        # Wait for clickhouse-test to open the stdout file for the test, which
+        # happens just before the test subprocess is launched.  This gives us
+        # an early confirmation that the harness is actually running the test
+        # rather than, e.g., still parsing options or connecting to the server.
+        deadline_stdout = time.monotonic() + 15
+        while time.monotonic() < deadline_stdout:
+            if list(_SUITE_TMP.glob(f"{_TEST}*.stdout")):
+                break
+            time.sleep(0.1)
+
         # Wait until clickhouse-test has launched the test subprocess and
         # written its PGID to the group pid file.
         deadline = time.monotonic() + 15

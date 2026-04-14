@@ -22,63 +22,76 @@ across test runs.
 
 ---
 
-## Solution: PGID tracking via a group pid file
+## Solution: PGID tracking via per-worker group pid files
 
 The kernel stores the PGID directly in the process descriptor.  It is **never
 reset** when a process is re-parented.  Therefore `kill_process_group(pgid)`
 reaches an orphan as long as we know its PGID — no parent-chain walk needed.
 
-### Group pid file
+### Group pid files
 
-`_GROUP_PID_FILE` = `{repo}/ci/tmp/clickhouse_test_group_pid`
+```
+_GROUP_PID_PATH = {repo}/ci/tmp/
+_GROUP_PID_NAME = "clickhouse_test_group_pid"
+```
 
-One PGID per line.  Written and read with `fcntl.LOCK_EX` so parallel test
-workers do not corrupt each other's entries.
+Each worker process (`os.getpid()`) writes its own file:
+
+```
+{repo}/ci/tmp/clickhouse_test_group_pid.<worker_pid>
+```
+
+One PGID per file.  Because every worker owns a separate file no cross-process
+locking is needed.  Files are written atomically via `write_text_atomic`
+(write to a `.tmp` sibling, then `rename`), so `--cleanup` never sees a
+partial write.
 
 ### Per-test bookkeeping
 
 ```python
 proc = Popen(command, shell=True, start_new_session=True, preexec_fn=cgroup_fn)
-_track_pgid(proc.pid)   # proc.pid == PGID after start_new_session=True
+# proc.pid == PGID after start_new_session=True
+_gpid_file = _GROUP_PID_PATH / f"{_GROUP_PID_NAME}.{os.getpid()}"
+write_text_atomic(_gpid_file, f"{proc.pid}\n")
+
+try:
+    proc.wait(args.timeout)
+finally:
+    if cgroup_name:
+        cleanup_cgroup(cgroup_name)
+    _gpid_file.unlink(missing_ok=True)
 ```
 
-```python
-# in process_result_impl, after the test exits or is killed:
-_untrack_pgid(proc.pid)
-```
-
-On a clean run every started test calls `_untrack_pgid`, so the file is empty
-(or absent) when `clickhouse-test` exits.  If `clickhouse-test` is SIGKILL'd,
-the file retains the PGIDs of tests that were still running at that moment.
+On a clean run every started test deletes its file in the `finally` block, so
+no files remain when `clickhouse-test` exits.  If `clickhouse-test` is
+SIGKILL'd, the file for the currently-running test is left behind with its
+PGID.
 
 ### `--cleanup` mode
 
-```python
+```
 clickhouse-test --cleanup
 ```
 
-Calls `cleanup_test_groups()`, which reads the group pid file and calls the
-existing `kill_process_group(pgid, None)` on each entry, then removes the file.
+Calls `cleanup_test_groups()`, which globs `{_GROUP_PID_PATH}/{_GROUP_PID_NAME}.*`
+(skipping `.tmp` files), reads each file, calls `kill_process_group(pgid, None)`
+on the recorded PGID, and removes the file.
 
 ### `clickhouse-test` startup
 
 ```python
-# before (original)
-os.setpgid(0, 0)   # new process group, same session — isolates from terminal signals
-
-# temporary intermediate version (no longer used)
-os.setsid()        # new session — was needed only for session-based orphan tracking
-
-# current
+# Move to a new process group so terminal signals don't reach our caller.
+# If the caller already used start_new_session=True we are already a process
+# group leader and setpgid would raise PermissionError — that is fine.
 if os.getpid() != os.getpgid(0):
-    os.setpgid(0, 0)   # same as original; setsid is not needed with PGID tracking
+    os.setpgid(0, 0)
 ```
 
 ### Caller cleanup (`run_test` in `clickhouse_proc.py`)
 
 ```python
 # in finally block after process.wait():
-subprocess.run(["clickhouse-test", "--cleanup"], check=False)
+subprocess.run([sys.executable, str(_clickhouse_test), "--cleanup"], check=False)
 ```
 
 ### Pre-hook and post-hook guard
@@ -106,7 +119,8 @@ The hook contains no kill logic of its own — it just calls
 | Layer | Trigger | Mechanism |
 |---|---|---|
 | `cleanup_child_processes` | SIGTERM/SIGINT/SIGHUP to `clickhouse-test` | `killpg` on each direct child's PGID |
-| `run_test()` `finally` | Any exit of `clickhouse-test` (incl. SIGKILL) | `clickhouse-test --cleanup` → `kill_process_group` per PGID in file |
+| test `finally` block | Any exit of the per-test code path (incl. SIGKILL to the worker) | `_gpid_file.unlink` — removes the per-worker file |
+| `run_test()` `finally` | Any exit of `clickhouse-test` (incl. SIGKILL) | `clickhouse-test --cleanup` → `kill_process_group` per PGID file |
 | Pre-hook | Job start (cleans up previous run's orphans) | same — `clickhouse-test --cleanup` |
 | Post-hook | Any exit of `fast_test.py` (incl. SIGKILL) | same — `clickhouse-test --cleanup` |
 

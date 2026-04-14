@@ -1188,8 +1188,11 @@ void MergeTreeData::setProperties(
         allow_nullable_key,
         local_context);
 
-    setInMemoryMetadata(new_metadata);
-    setVirtuals(createVirtuals(new_metadata));
+    {
+        auto mutable_metadata = new_metadata;
+        mutable_metadata.setVirtuals(createVirtuals(new_metadata));
+        setInMemoryMetadata(mutable_metadata);
+    }
 
     std::lock_guard lock(patch_parts_metadata_mutex);
     patch_parts_metadata_cache.clear();
@@ -1626,12 +1629,12 @@ Block MergeTreeData::getHeaderWithVirtualsForFilter(const StorageMetadataPtr & m
 {
     const auto columns = metadata->getColumns().getAllPhysical();
     Block header;
-    auto virtuals_desc = getVirtualsPtr();
+    const auto & virtuals_desc = metadata->virtuals;
     for (const auto & name : virtuals_useful_for_filter)
     {
         if (columns.contains(name))
             continue;
-        if (auto column = virtuals_desc->tryGet(name, VirtualsKind::All, VirtualsMaterializationPlace::Reader))
+        if (auto column = virtuals_desc.tryGet(name, VirtualsKind::All, VirtualsMaterializationPlace::Reader))
             header.insert({column->type->createColumn(), column->type, name});
     }
 

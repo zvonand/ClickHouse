@@ -368,9 +368,9 @@ StorageKeeperMap::StorageKeeperMap(
 
     verifyTableId(table_id);
 
-    setInMemoryMetadata(metadata);
-
-    setVirtuals(createVirtuals());
+    auto metadata_copy = metadata;
+    metadata_copy.setVirtuals(createVirtuals());
+    setInMemoryMetadata(metadata_copy);
 
     WriteBufferFromOwnString out;
     out << "KeeperMap metadata format version: 1\n"

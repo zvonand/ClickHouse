@@ -20,9 +20,11 @@ namespace DB
         setInMemoryMetadata(storage_metadata);
     }
 
-    StorageSnapshotPtr StorageLoop::getStorageSnapshot(const StorageMetadataPtr & metadata_snapshot, ContextPtr) const
+    StorageSnapshotPtr StorageLoop::getStorageSnapshot(const StorageMetadataPtr & metadata_snapshot, ContextPtr context) const
     {
-        return std::make_shared<StorageSnapshot>(*this, metadata_snapshot, inner_storage->getVirtualsPtr());
+        auto metadata_with_virtuals = std::make_shared<StorageInMemoryMetadata>(*metadata_snapshot);
+        metadata_with_virtuals->setVirtuals(inner_storage->getInMemoryMetadataPtr(context, false)->virtuals);
+        return IStorage::getStorageSnapshot(std::move(metadata_with_virtuals), {});
     }
 
     QueryProcessingStage::Enum StorageLoop::getQueryProcessingStage(

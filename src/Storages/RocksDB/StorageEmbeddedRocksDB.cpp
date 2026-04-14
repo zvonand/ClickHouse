@@ -156,7 +156,7 @@ public:
 
     void fillVirtualColumns([[maybe_unused]] Block & block) const
     {
-        auto virtual_columns = storage_snapshot->virtual_columns->getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::Reader);
+        auto virtual_columns = storage_snapshot->metadata->virtuals.getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::Reader);
         if (!virtual_columns.empty())
             throw Exception(ErrorCodes::LOGICAL_ERROR, "Unsupported virtual columns {}", virtual_columns.getNames());
     }
@@ -233,15 +233,15 @@ StorageEmbeddedRocksDB::StorageEmbeddedRocksDB(
     , ttl(ttl_)
     , read_only(read_only_)
 {
-    setInMemoryMetadata(metadata_);
-    setSettings(std::move(settings_));
-
     {
+        auto mutable_metadata = metadata_;
         VirtualColumnsDescription virtuals_desc;
         virtuals_desc.addEphemeral("_table", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
         virtuals_desc.addEphemeral("_database", std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>()), "", VirtualsMaterializationPlace::Plan);
-        setVirtuals(std::move(virtuals_desc));
+        mutable_metadata.setVirtuals(std::move(virtuals_desc));
+        setInMemoryMetadata(mutable_metadata);
     }
+    setSettings(std::move(settings_));
 
     if (rocksdb_dir.empty())
     {
@@ -694,7 +694,7 @@ void StorageEmbeddedRocksDB::readImpl(
     size_t num_streams)
 {
     storage_snapshot->check(column_names);
-    Block sample_block = storage_snapshot->metadata->getSampleBlockWithVirtuals(storage_snapshot->virtual_columns->getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::Reader).getNamesAndTypesList());
+    Block sample_block = storage_snapshot->metadata->getSampleBlockWithVirtuals(VirtualsKind::All, VirtualsMaterializationPlace::Reader);
 
     auto reading = std::make_unique<ReadFromEmbeddedRocksDB>(
         column_names,

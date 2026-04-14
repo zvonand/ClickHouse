@@ -157,12 +157,12 @@ public:
     {
         StorageInMemoryMetadata storage_metadata;
         storage_metadata.setColumns(columns_description);
-        setInMemoryMetadata(storage_metadata);
         VirtualColumnsDescription desc;
         desc.addEphemeral("_part_offset", std::make_shared<DataTypeUInt64>(), "", VirtualsMaterializationPlace::Reader);
         desc.addPersistent(BlockNumberColumn::name, BlockNumberColumn::type, BlockNumberColumn::codec, "");
         desc.addPersistent(BlockOffsetColumn::name, BlockOffsetColumn::type, BlockOffsetColumn::codec, "");
-        setVirtuals(std::move(desc));
+        storage_metadata.setVirtuals(std::move(desc));
+        setInMemoryMetadata(storage_metadata);
     }
 
     std::string getName() const override { return "ProjectionSource"; }

@@ -119,7 +119,7 @@ StorageObjectStorageCluster::StorageObjectStorageCluster(
 
     metadata.setConstraints(constraints_);
 
-    setVirtuals(VirtualColumnUtils::getVirtualsForFileLikeStorage(
+    metadata.setVirtuals(VirtualColumnUtils::getVirtualsForFileLikeStorage(
         metadata.columns,
         context_,
         /* format_settings */std::nullopt,
@@ -248,7 +248,7 @@ RemoteQueryExecutor::Extension StorageObjectStorageCluster::getTaskIteratorExten
         local_context,
         predicate,
         filter,
-        getVirtualsPtr()->getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::Reader).getNamesAndTypesList(),
+        storage_metadata_snapshot->virtuals.getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::Reader).getNamesAndTypesList(),
         hive_partition_columns_to_read_from_file_path,
         nullptr,
         local_context->getFileProgressCallback(),

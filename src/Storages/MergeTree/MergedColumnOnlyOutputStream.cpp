@@ -51,7 +51,7 @@ MergedColumnOnlyOutputStream::MergedColumnOnlyOutputStream(
         columns_list_,
         data_part->getColumnPositions(),
         metadata_snapshot_,
-        data_part->storage.getVirtualsPtr(),
+        std::make_shared<const VirtualColumnsDescription>(metadata_snapshot_->virtuals),
         indices_to_recalc,
         data_part->getMarksFileExtension(),
         default_codec,

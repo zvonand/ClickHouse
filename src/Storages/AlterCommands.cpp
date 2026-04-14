@@ -1404,7 +1404,7 @@ void AlterCommands::apply(StorageInMemoryMetadata & metadata, ContextPtr context
 }
 
 
-void AlterCommands::prepare(const StorageInMemoryMetadata & metadata)
+void AlterCommands::prepare(const StorageInMemoryMetadata & metadata, bool share_nested_offsets)
 {
     auto columns = metadata.columns;
 
@@ -1418,7 +1418,7 @@ void AlterCommands::prepare(const StorageInMemoryMetadata & metadata)
     for (size_t i = 0; i < size(); ++i)
     {
         auto & command = (*this)[i];
-        bool has_column = columns.has(command.column_name) || columns.hasNested(command.column_name);
+        bool has_column = columns.has(command.column_name) || (share_nested_offsets && columns.hasNested(command.column_name));
         if (command.type == AlterCommand::MODIFY_COLUMN)
         {
             if (!has_column && command.if_exists)
@@ -1463,6 +1463,10 @@ void AlterCommands::validate(const StoragePtr & table, ContextPtr context) const
     const auto & metadata = table->getInMemoryMetadata();
     auto virtuals = table->getVirtualsPtr();
 
+    bool share_nested = true;
+    if (auto * merge_tree = dynamic_cast<MergeTreeData *>(table.get()))
+        share_nested = (*merge_tree->getSettings())[MergeTreeSetting::share_nested_offsets];
+
     auto all_columns = metadata.columns;
     /// Default expression for all added/modified columns
     ASTPtr default_expr_list = make_intrusive<ASTExpressionList>();
@@ -1478,7 +1482,7 @@ void AlterCommands::validate(const StoragePtr & table, ContextPtr context) const
         const auto & column_name = command.column_name;
         if (command.type == AlterCommand::ADD_COLUMN)
         {
-            if (all_columns.has(column_name) || all_columns.hasNested(column_name))
+            if (all_columns.has(column_name) || (share_nested && all_columns.hasNested(column_name)))
             {
                 if (!command.if_not_exists)
                     throw Exception(ErrorCodes::DUPLICATE_COLUMN,
@@ -1629,7 +1633,7 @@ void AlterCommands::validate(const StoragePtr & table, ContextPtr context) const
         }
         else if (command.type == AlterCommand::DROP_COLUMN)
         {
-            if (all_columns.has(command.column_name) || all_columns.hasNested(command.column_name))
+            if (all_columns.has(command.column_name) || (share_nested && all_columns.hasNested(command.column_name)))
             {
                 if (!command.clear) /// CLEAR column is Ok even if there are dependencies.
                 {

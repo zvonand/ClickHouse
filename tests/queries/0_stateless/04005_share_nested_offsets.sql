@@ -382,4 +382,24 @@ DROP TABLE t_merge;
 DROP TABLE child1;
 DROP TABLE child2;
 
+-- =============================================================================
+-- 14. ALTER ADD COLUMN with scalar + dotted-name coexistence
+--     When share_nested_offsets=false, n and n.a are independent columns.
+--     ADD COLUMN n should not be rejected when only n.a exists.
+-- =============================================================================
+
+SELECT '--- alter add independent ---';
+
+DROP TABLE IF EXISTS t_alter_ind;
+CREATE TABLE t_alter_ind (id UInt64, `n.a` Array(UInt32))
+    ENGINE = MergeTree ORDER BY id SETTINGS share_nested_offsets = false;
+
+INSERT INTO t_alter_ind VALUES (1, [10, 20]);
+
+ALTER TABLE t_alter_ind ADD COLUMN n String;
+INSERT INTO t_alter_ind VALUES (2, [30], 'hello');
+SELECT id, n, `n.a` FROM t_alter_ind ORDER BY id;
+
+DROP TABLE t_alter_ind;
+
 SELECT '--- done ---';

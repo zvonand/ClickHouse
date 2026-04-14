@@ -4,6 +4,8 @@
 -- The bug was in SourceStepWithFilter::updatePrewhereInfo which re-applied
 -- row_level_filter on the already-transformed output_header instead of rebuilding it
 
+SET enable_analyzer = 1;
+
 DROP TABLE IF EXISTS t_rp;
 DROP TABLE IF EXISTS ref_rp;
 DROP VIEW IF EXISTS v_rp;

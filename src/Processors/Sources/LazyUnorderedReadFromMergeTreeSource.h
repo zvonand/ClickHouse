@@ -43,6 +43,8 @@ private:
     const std::string log_name;
     LazyMaterializingRowsPtr lazy_materializing_rows;
 
+    QueryPlanResourceHolder resources;
+
     Processors buildReaders();
 };
 

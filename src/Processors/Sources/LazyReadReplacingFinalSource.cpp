@@ -334,7 +334,6 @@ void LazyReadReplacingFinalSource::work()
 
     auto builder = plan.buildQueryPipeline(QueryPlanOptimizationSettings(query_context), BuildQueryPipelineSettings(query_context));
 
-    QueryPlanResourceHolder resources;
     auto pipe = QueryPipelineBuilder::getPipe(std::move(*builder), resources);
     pipe.resize(1);
 

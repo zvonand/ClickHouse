@@ -44,6 +44,7 @@ private:
     const ContextPtr query_context;
     LazyFinalSharedStatePtr shared_state;
 
+    QueryPlanResourceHolder resources;
     Processors processors;
 };
 

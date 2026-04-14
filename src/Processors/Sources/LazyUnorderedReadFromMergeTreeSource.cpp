@@ -135,7 +135,6 @@ Processors LazyUnorderedReadFromMergeTreeSource::buildReaders()
     QueryPipelineBuilder pipeline;
     reading->initializePipeline(pipeline, BuildQueryPipelineSettings(context));
 
-    QueryPlanResourceHolder resources;
     auto pipe = QueryPipelineBuilder::getPipe(std::move(pipeline), resources);
 
     return Pipe::detachProcessors(std::move(pipe));

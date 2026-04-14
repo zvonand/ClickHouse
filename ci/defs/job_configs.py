@@ -190,6 +190,7 @@ class JobConfigs:
         digest_config=Job.CacheDigestConfig(
             include_paths=["./ci/"],
         ),
+        run_in_docker="clickhouse/pytest-test",
     )
     fast_test = Job.Config(
         name=JobNames.FAST_TEST,

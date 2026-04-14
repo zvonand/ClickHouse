@@ -161,6 +161,14 @@ if __name__ == "__main__":
 
     is_local_run = Info().is_local_run
 
+    # Generate a fresh GitHub App token to avoid transient 401 errors from
+    # stale credentials (the host-side gh auth may rely on GITHUB_TOKEN env
+    # var that is not forwarded into the Docker container).
+    if not is_local_run:
+        from ci.praktika.gh_auth import GHAuth
+
+        GHAuth.auth_from_settings()
+
     (
         current_commit_sha,
         master_track_commits,

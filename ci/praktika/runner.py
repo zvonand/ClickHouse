@@ -38,8 +38,7 @@ def _GH_Auth():
     from .gh_auth import GHAuth
 
     try:
-        if not Shell.check(f"gh auth status", verbose=True):
-            GHAuth.auth_from_settings()
+        GHAuth.auth_from_settings()
         _GH_authenticated = True
         return True
     except Exception as e:

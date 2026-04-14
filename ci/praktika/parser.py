@@ -191,8 +191,8 @@ class WorkflowConfigParser:
             if job.run_after:
                 for dep_name in job.run_after:
                     assert (
-                        dep_name in self.workflow_yaml_config.artifact_to_config
-                    ), f"run_after dependency [{dep_name}] has no config, job [{job.name}], workflow [{self.workflow_name}]"
+                        dep_name in self.workflow_yaml_config.job_to_config
+                    ), f"run_after dependency [{dep_name}] is not a job name, job [{job.name}], workflow [{self.workflow_name}]"
                     self.workflow_yaml_config.artifact_to_config[
                         dep_name
                     ].required_by.append(job.name)

@@ -3764,7 +3764,7 @@ def test_connection_info_logging_with_rabbitmq_address(rabbitmq_cluster, db, uni
     log = instance.grep_in_log("Trying to restore connection to")
     assert 'Trying to restore connection to :0' not in log, \
         f"Log contains ':0' instead of actual address: {log}"
-    assert 'rabbitmq' in log.lower() or '5672' in log, \
+    assert rabbitmq_cluster.rabbitmq_host + ":" + str(rabbitmq_cluster.rabbitmq_port) in log, \
         f"Log should contain the actual connection address: {log}"
     assert 'root:clickhouse' not in log
 

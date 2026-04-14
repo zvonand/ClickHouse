@@ -3758,7 +3758,7 @@ def test_connection_info_logging_with_rabbitmq_address(rabbitmq_cluster, db, uni
     # Force a disconnect/reconnect by briefly stopping RabbitMQ
     with rabbitmq_cluster.pause_container('rabbitmq1'):
         time.sleep(3)
-    instance.wait_for_log_line("Trying to restore connection to")
+        instance.wait_for_log_line("Trying to restore connection to")
 
     # Check server logs for the reconnection message
     log = instance.grep_in_log("Trying to restore connection to")

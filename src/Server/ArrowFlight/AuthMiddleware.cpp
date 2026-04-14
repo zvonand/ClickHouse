@@ -149,8 +149,9 @@ std::optional<std::pair<std::string, std::string>> AuthMiddlewareFactory::TokenS
     if (it != token_to_credentials.end())
     {
         auto expiration_time = std::chrono::steady_clock::now() + std::chrono::seconds(config.getInt("default_session_timeout", 60));
+        auto new_iter = token_expiration_list.insert({expiration_time, token});
         token_expiration_list.erase(token_expiration_list_index[token]);
-        token_expiration_list_index[token] = token_expiration_list.insert({expiration_time, token});
+        token_expiration_list_index[token] = new_iter;
         return it->second;
     }
     return std::nullopt;

@@ -470,9 +470,20 @@ bool ClusterDiscovery::upsertCluster(ClusterInfo & cluster_info)
 
     if (nodes_info.empty())
     {
-        String name = cluster_info.name;
-        /// cluster_info removed inside removeCluster, can't use reference to name.
-        removeCluster(name);
+        if (cluster_info.zk_root_index != 0)
+        {
+            String name = cluster_info.name;
+            /// cluster_info removed inside removeCluster, can't use reference to name.
+            removeCluster(name);
+        }
+        else
+        {
+            /// Static cluster (defined in config) with no nodes. Don't erase watch callback
+            /// (via removeCluster) - nodes may reappear, and the callback is needed to detect that.
+            /// Just hide the cluster from system.clusters until nodes come back.
+            std::lock_guard lock(mutex);
+            cluster_impls.erase(cluster_info.name);
+        }
         return true;
     }
 

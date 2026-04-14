@@ -55,6 +55,7 @@
 #include <Storages/IStorage.h>
 #include <Storages/StorageJoin.h>
 #include <Common/checkStackSize.h>
+#include <Common/CurrentThread.h>
 #include <Storages/MergeTree/MergeTreeData.h>
 #include <Storages/StorageView.h>
 
@@ -1060,7 +1061,7 @@ void TreeRewriterResult::collectSourceColumns(bool add_special)
         else
             source_columns.insert(source_columns.end(), columns_from_storage.begin(), columns_from_storage.end());
 
-        auto metadata_snapshot = storage->getInMemoryMetadataPtr();
+        auto metadata_snapshot = storage->getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false);
     }
 
     source_columns_set = removeDuplicateColumns(source_columns);

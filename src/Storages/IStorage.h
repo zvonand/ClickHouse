@@ -4,7 +4,6 @@
 #include <Core/QueryProcessingStage.h>
 #include <Databases/IDatabase.h>
 #include <DataTypes/DataTypeLowCardinality.h>
-#include <DataTypes/DataTypeString.h>
 #include <Interpreters/CancellationCode.h>
 #include <Interpreters/Context_fwd.h>
 #include <Interpreters/StorageID.h>
@@ -121,7 +120,7 @@ public:
     virtual bool isDictionary() const { return false; }
 
     /// Returns true if the storage supports queries with the SAMPLE section.
-    virtual bool supportsSampling() const { return getInMemoryMetadataPtr()->hasSamplingKey(); }
+    virtual bool supportsSampling() const;
 
     /// Returns true if the storage supports queries with the FINAL section.
     virtual bool supportsFinal() const { return false; }
@@ -201,21 +200,15 @@ public:
     using IndexSizeByName = std::unordered_map<std::string, IndexSize>;
     virtual IndexSizeByName getSecondaryIndexSizes() const { return {}; }
 
-    /// Get mutable version (snapshot) of storage metadata. Metadata object is
-    /// multiversion, so it can be concurrently changed, but returned copy can be
-    /// used without any locks.
-    virtual StorageInMemoryMetadata getInMemoryMetadata() const { return *metadata.get(); }
-
     /// Get immutable version (snapshot) of storage metadata. Metadata object is
     /// multiversion, so it can be concurrently changed, but returned copy can be
     /// used without any locks.
-    virtual StorageMetadataPtr getInMemoryMetadataPtr(bool /*bypass_metadata_cache*/ = false) const // NOLINT
+    /// Pass query context to enable metadata caching in MergeTree.
+    /// Pass nullptr when no query context is available.
+    virtual StorageMetadataPtr getInMemoryMetadataPtr(ContextPtr /*context*/, bool /*bypass_metadata_cache*/) const
     {
         return metadata.get();
     }
-
-    /// Same as getInMemoryMetadataPtr() but may return nullopt in some specific engines like Alias
-    virtual std::optional<StorageMetadataPtr> tryGetInMemoryMetadataPtr() const { return getInMemoryMetadataPtr(); }
 
     /// Update storage metadata. Used in ALTER or initialization of Storage.
     /// Metadata object is multiversion, so this method can be called without

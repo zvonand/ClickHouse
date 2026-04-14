@@ -3,7 +3,6 @@
 
 #include <Interpreters/ExpressionAnalyzer.h>
 #include <Interpreters/GraceHashJoin.h>
-#include <Interpreters/HashJoin/HashJoin.h>
 #include <Interpreters/JoinUtils.h>
 #include <Processors/Port.h>
 #include <Processors/Merges/Algorithms/MergeTreeReadInfo.h>
@@ -272,6 +271,12 @@ IProcessor::Status FillingRightJoinSideTransform::prepare()
 {
     auto & output = outputs.front();
 
+    if (post_build_phase)
+    {
+        output.finish();
+        return Status::Finished;
+    }
+
     /// Check can output.
     if (output.isFinished())
     {
@@ -327,7 +332,14 @@ IProcessor::Status FillingRightJoinSideTransform::prepare()
     }
 
     if (finish_counter->isLast())
+    {
         join->onBuildPhaseFinish();
+        if (join->hasPostBuildPhase())
+        {
+            post_build_phase = true;
+            return Status::Ready;
+        }
+    }
 
     output.finish();
     return Status::Finished;
@@ -335,6 +347,13 @@ IProcessor::Status FillingRightJoinSideTransform::prepare()
 
 void FillingRightJoinSideTransform::work()
 {
+    if (post_build_phase)
+    {
+        ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::JoinBuildPostProcessingMicroseconds);
+        join->runPostBuildPhase();
+        return;
+    }
+
     auto & input = inputs.front();
     auto num_rows = chunk.getNumRows();
     auto block = input.getHeader().cloneWithColumns(chunk.detachColumns());
@@ -345,15 +364,6 @@ void FillingRightJoinSideTransform::work()
     {
         ProfileEvents::increment(ProfileEvents::JoinBuildTableRowCount, num_rows);
         stop_reading = !join->addBlockToJoin(block, num_rows, true);
-    }
-
-    if (input.isFinished())
-    {
-        ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::JoinBuildPostProcessingMicroseconds);
-        if (!join->supportParallelJoin())
-            join->tryRerangeRightTableData();
-        if (auto * hash_join = typeid_cast<HashJoin *>(join.get()))
-            hash_join->tryConvertToFixedHashMap();
     }
 
     set_totals = for_totals;

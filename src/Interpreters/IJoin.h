@@ -169,6 +169,11 @@ public:
     /// Called by `FillingRightJoinSideTransform` after all data is inserted in join.
     virtual void onBuildPhaseFinish() { }
 
+    /// Called by `FillingRightJoinSideTransform` after `onBuildPhaseFinish` if the join has
+    /// a post build optimization step.
+    virtual bool hasPostBuildPhase() const { return false; }
+    virtual void runPostBuildPhase() { }
+
 private:
     Block totals;
 };

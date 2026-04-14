@@ -73,7 +73,7 @@ def test_cleanup_kills_orphaned_test_process():
         # happens just before the test subprocess is launched.  This gives us
         # an early confirmation that the harness is actually running the test
         # rather than, e.g., still parsing options or connecting to the server.
-        deadline_stdout = time.monotonic() + 15
+        deadline_stdout = time.monotonic() + 5
         while time.monotonic() < deadline_stdout:
             if list(_SUITE_TMP.glob(f"{_TEST}*.stdout")):
                 break

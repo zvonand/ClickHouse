@@ -897,7 +897,6 @@ InterpreterCreateQuery::TableProperties InterpreterCreateQuery::getTableProperti
             std::function<void(const ASTPtr &)> apply_aliases = [&](const ASTPtr & node)
             {
                 /// Must check ASTSelectIntersectExceptQuery before ASTSelectQuery
-                /// because ASTSelectIntersectExceptQuery inherits from ASTSelectQuery.
                 if (const auto * intersect_except = node->as<ASTSelectIntersectExceptQuery>())
                 {
                     for (const auto & child : intersect_except->getListOfSelects())

@@ -40,4 +40,4 @@ def test_skip_alias_columns(start_cluster):
     # build_id is an ALIAS column on trace_log. With skip_alias_columns=true,
     # it should be absent from the table schema.
     error = node.query_and_get_error("SELECT build_id FROM system.trace_log LIMIT 0")
-    assert "Missing columns" in error or "UNKNOWN_IDENTIFIER" in error
+    assert "UNKNOWN_IDENTIFIER" in error

@@ -94,12 +94,6 @@ SECRETS = [
 
 DOCKERS = [
     Docker.Config(
-        name="clickhouse/pytest-test",
-        path="./ci/docker/pytest-test",
-        platforms=Docker.Platforms.arm_amd,
-        depends_on=[],
-    ),
-    Docker.Config(
         name="clickhouse/style-test",
         path="./ci/docker/style-test",
         platforms=Docker.Platforms.arm_amd,

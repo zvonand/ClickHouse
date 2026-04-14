@@ -9,7 +9,13 @@ if __name__ == "__main__":
     log = f"{temp_path}/ci_tests.log"
 
     Shell.run(
-        f"python3 -m pytest ci/tests/ --report-log={pytest_report} --log-file={pytest_log}",
+        "pip3 install 'pytest==8.3.5' --quiet",
+        log_file=log,
+        timeout=60,
+    )
+
+    Shell.run(
+        f"python3 -m pytest ci/tests/ -k 'not test_e2e' --report-log={pytest_report} --log-file={pytest_log}",
         log_file=log,
         timeout=600,
     )

@@ -42,6 +42,7 @@ LazyFinalKeyAnalysisStep::LazyFinalKeyAnalysisStep(
 
 void LazyFinalKeyAnalysisStep::transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &)
 {
+    pipeline.resize(1);
     pipeline.addSimpleTransform([&](const SharedHeader &)
     {
         return std::make_shared<LazyFinalKeyAnalysisTransform>(

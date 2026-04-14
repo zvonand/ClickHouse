@@ -57,7 +57,7 @@ IProcessor::Status LazyReadReplacingFinalSource::prepare()
     }
 
     if (!output.canPush())
-        return Status::NeedData;
+        return Status::PortFull;
 
     if (inputs.empty())
     {
@@ -99,7 +99,6 @@ static void calculateGlobalOffset(ActionsDAG & dag, ReadFromMergeTree & reading_
 
     dag.getOutputs().push_back(global_offset_node);
 
-    /// Remove virtual columns if they were not initially needed.
     if (!added_part_starting_offset)
         dag.getOutputs().push_back(part_starting_offset_in);
     if (!added_part_offset)

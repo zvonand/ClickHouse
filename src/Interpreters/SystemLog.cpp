@@ -560,7 +560,7 @@ SystemLog<LogElement>::SystemLog(
     , log(getLogger("SystemLog (" + settings_.queue_settings.database + "." + settings_.queue_settings.table + ")"))
     , table_id(settings_.queue_settings.database, settings_.queue_settings.table)
     , storage_def(settings_.engine)
-    , flush_policy(std::make_unique<DefaultSystemLogFlushPolicy>())
+    , flush_policy(std::make_unique<DefaultSystemLogFlushPolicy>(context_->getConfigRef()))
 {
     create_query = getCreateTableQuery()->formatWithSecretsOneLine();
     assert(settings_.queue_settings.database == DatabaseCatalog::SYSTEM_DATABASE);

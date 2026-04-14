@@ -193,17 +193,20 @@ class JobConfigs:
         needs_submodules=True,
     )
     darwin_fast_test_jobs = Job.Config(
-        name="Darwin fast test",
+        name="Fast test",
         runs_on=None,  # from parametrize()
         command="python3 ./ci/jobs/fast_test.py --set-status-success",
         digest_config=fast_test_digest_config,
         result_name_for_cidb="Darwin tests",
         allow_merge_on_failure=True,
+        post_hooks=[
+            "sudo rm -rf /Users/ec2-user/actions-runner/_work/ClickHouse/ClickHouse/ci/tmp/run*",
+        ],
     ).parametrize(
         Job.ParamSet(
-            parameter=BuildTypes.AMD_DARWIN,
-            runs_on=RunnerLabels.MACOS_AMD_SMALL,
-            requires=[ArtifactNames.CH_AMD_DARWIN_BIN],
+            parameter=BuildTypes.ARM_DARWIN,
+            runs_on=RunnerLabels.MACOS_ARM_SMALL,
+            requires=[ArtifactNames.CH_ARM_DARWIN_BIN],
         ),
     )
     smoke_tests_macos = Job.Config(
@@ -522,16 +525,11 @@ class JobConfigs:
             runs_on=RunnerLabels.AMD_MEDIUM,
             requires=[ArtifactNames.CH_AMD_DEBUG],
         ),
-        Job.ParamSet(
-            parameter="amd_binary, flaky check",
-            runs_on=RunnerLabels.AMD_MEDIUM,
-            requires=[ArtifactNames.CH_AMD_BINARY],
-        ),
     )
     stateless_tests_targeted_pr_jobs = common_ft_job_config.parametrize(
         Job.ParamSet(
             parameter="arm_asan_ubsan, targeted",
-            runs_on=RunnerLabels.ARM_MEDIUM,
+            runs_on=RunnerLabels.ARM_LARGE,
             requires=[ArtifactNames.CH_ARM_ASAN_UBSAN],
         ),
     )
@@ -866,15 +864,6 @@ class JobConfigs:
         ],
         *[
             Job.ParamSet(
-                parameter=f"amd_binary, {batch}/{total_batches}",
-                runs_on=RunnerLabels.AMD_MEDIUM,
-                requires=[ArtifactNames.CH_AMD_BINARY],
-            )
-            for total_batches in (5,)
-            for batch in range(1, total_batches + 1)
-        ],
-        *[
-            Job.ParamSet(
                 parameter=f"arm_binary, distributed plan, {batch}/{total_batches}",
                 runs_on=RunnerLabels.ARM_MEDIUM,
                 requires=[ArtifactNames.CH_ARM_BINARY],
@@ -963,6 +952,27 @@ class JobConfigs:
                 for total_batches in (LLVM_IT_NUM_BATCHES,)
                 for batch in range(1, total_batches + 1)
             ],
+        )
+    )
+
+    # Jobs that run only the tests normally disabled under LLVM coverage.
+    # They use a regular binary (no coverage instrumentation) since these
+    # tests are too slow or problematic under coverage.
+    functional_test_excluded_from_llvm_job = common_ft_job_config.parametrize(
+        Job.ParamSet(
+            parameter="amd_binary_excluded_from_llvm",
+            runs_on=RunnerLabels.AMD_MEDIUM,
+            requires=[ArtifactNames.CH_AMD_BINARY],
+        ),
+    )
+
+    integration_test_excluded_from_llvm_job = (
+        common_integration_test_job_config.parametrize(
+            Job.ParamSet(
+                parameter="amd_binary_excluded_from_llvm",
+                runs_on=RunnerLabels.AMD_MEDIUM,
+                requires=[ArtifactNames.CH_AMD_BINARY],
+            ),
         )
     )
 

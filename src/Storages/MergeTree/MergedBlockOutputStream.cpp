@@ -75,7 +75,6 @@ MergedBlockOutputStream::MergedBlockOutputStream(
         columns_list,
         data_part->getColumnPositions(),
         metadata_snapshot,
-        std::make_shared<const VirtualColumnsDescription>(metadata_snapshot->virtuals),
         skip_indices,
         data_part->getMarksFileExtension(),
         default_codec,

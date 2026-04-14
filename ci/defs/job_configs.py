@@ -1237,7 +1237,8 @@ class JobConfigs:
             ],
         ),
         run_in_docker="clickhouse/docs-builder",
-        requires=[JobNames.STYLE_CHECK, ArtifactNames.CH_ARM_BINARY],
+        requires=[ArtifactNames.CH_ARM_BINARY],
+        run_after=[JobNames.STYLE_CHECK],
     )
     docs_job_mintlify = Job.Config(
         name=JobNames.DOCS_MINTLIFY,

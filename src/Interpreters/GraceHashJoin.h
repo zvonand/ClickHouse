@@ -151,7 +151,6 @@ private:
     InMemoryJoinPtr hash_join;
     Block hash_join_sample_block;
     mutable std::mutex hash_join_mutex;
-    std::once_flag hash_join_post_build_flag;
     std::atomic<bool> force_spill = false;
 
     mutable std::mutex totals_mutex;

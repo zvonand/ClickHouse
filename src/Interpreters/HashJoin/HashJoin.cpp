@@ -2139,8 +2139,8 @@ void HashJoin::tryConvertToFixedHashMapImpl(MapsTemplate & maps)
 
 bool HashJoin::canConvertToFixedHashMap() const
 {
-    return data && table_join->enableJoinFixedHashTableConversion() && (data->type == Type::key32 || data->type == Type::key64)
-        && data->maps.size() == 1 && strictness != JoinStrictness::Asof;
+    return !conversion_to_fixed_hash_map_attempted && data && data->rows_to_join && table_join->enableJoinFixedHashTableConversion()
+        && (data->type == Type::key32 || data->type == Type::key64) && data->maps.size() == 1 && strictness != JoinStrictness::Asof;
 }
 
 void HashJoin::tryConvertToFixedHashMap()
@@ -2148,6 +2148,7 @@ void HashJoin::tryConvertToFixedHashMap()
     if (!canConvertToFixedHashMap())
         return;
 
+    conversion_to_fixed_hash_map_attempted = true;
     std::visit(
         [&](auto & map)
         {

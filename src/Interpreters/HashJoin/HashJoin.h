@@ -567,6 +567,9 @@ private:
     bool shrink_blocks = false;
     Int64 memory_usage_before_adding_blocks = 0;
 
+    /// Track if conversion to fixed hash map was already attempted to prevent repeated checks.
+    bool conversion_to_fixed_hash_map_attempted = false;
+
     /// Identifier to distinguish different HashJoin instances in logs
     /// Several instances can be created, for example, in GraceHashJoin to handle different buckets
     String instance_log_id;

@@ -808,6 +808,7 @@ void QueryPipelineBuilder::addMaterializingCTETransform(
 )
 {
     checkInitializedAndNotCompleted();
+    dropTotalsAndExtremes();
     resize(1);
 
     auto transform = std::make_shared<MaterializingCTETransform>(

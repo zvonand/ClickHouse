@@ -226,6 +226,24 @@ SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000,
 
 DROP TABLE t_lazy_final_date32;
 
+-- Test with DateTime64 version column (tuple fallback path, includes pre-epoch negative values).
+DROP TABLE IF EXISTS t_lazy_final_dt64;
+CREATE TABLE t_lazy_final_dt64 (key UInt64, version DateTime64(3, 'UTC'), value String)
+ENGINE = ReplacingMergeTree(version) ORDER BY key SETTINGS index_granularity = 256;
+
+SYSTEM STOP MERGES t_lazy_final_dt64;
+INSERT INTO t_lazy_final_dt64 VALUES (1, '1900-01-01 00:00:00.000', 'pre_epoch');
+INSERT INTO t_lazy_final_dt64 VALUES (1, '2024-06-15 12:30:00.500', 'post_epoch');
+INSERT INTO t_lazy_final_dt64 VALUES (1, '2024-06-15 12:30:00.500', 'post_epoch_last');
+
+SELECT '-- DateTime64 version';
+SELECT value FROM t_lazy_final_dt64 FINAL WHERE value != ''
+SETTINGS query_plan_optimize_lazy_final = 0;
+SELECT value FROM t_lazy_final_dt64 FINAL WHERE value != ''
+SETTINGS query_plan_optimize_lazy_final = 1, max_rows_for_lazy_final = 10000000, min_filtered_ratio_for_lazy_final = 0;
+
+DROP TABLE t_lazy_final_dt64;
+
 -- Test with no version column.
 DROP TABLE IF EXISTS t_lazy_final_noversion;
 CREATE TABLE t_lazy_final_noversion (key UInt64, value String)

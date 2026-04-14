@@ -41,6 +41,9 @@ positive_last
 -- Date32 version
 post_epoch_last
 post_epoch_last
+-- DateTime64 version
+post_epoch_last
+post_epoch_last
 -- no version column
 second
 second

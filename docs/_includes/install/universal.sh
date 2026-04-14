@@ -9,10 +9,10 @@ if [ "${OS}" = "Linux" ]
 then
     if [ "${ARCH}" = "x86_64" -o "${ARCH}" = "amd64" ]
     then
-        # Require at least x86-64-v3 (AVX2, introduced ~2013). On older hardware fall back to plain x86-64 (introduced in 1999)
-        # which guarantees at least SSE2. The caveat is that plain x86-64 builds are much less tested than x86-64-v3 builds.
-        HAS_AVX2=$(grep avx2 /proc/cpuinfo)
-        if [ "${HAS_AVX2}" ]
+        # The default build targets x86-64-v3 which requires AVX2, BMI1, BMI2, FMA, etc.
+        # On older hardware, fall back to the compat build (plain x86-64, SSE2 baseline).
+        # Check avx2 as a proxy — every real CPU with AVX2 also has the other v3 features.
+        if grep -q avx2 /proc/cpuinfo
         then
             if ldd --version 2>&1 | grep -q musl
             then

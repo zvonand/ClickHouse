@@ -36,7 +36,7 @@ public:
     StorageMetadataPtr getInMemoryMetadataPtr(ContextPtr query_context, bool bypass_metadata_cache) const override
     {
         auto base_metadata = IStorage::getInMemoryMetadataPtr(query_context, bypass_metadata_cache);
-        auto nested_virtuals = getNested()->getInMemoryMetadataPtr(query_context, false)->virtuals;
+        auto nested_virtuals = getNested()->getInMemoryMetadataPtr(query_context, bypass_metadata_cache)->virtuals;
         return std::make_shared<StorageInMemoryMetadata>(base_metadata->withVirtuals(std::move(nested_virtuals)));
     }
 

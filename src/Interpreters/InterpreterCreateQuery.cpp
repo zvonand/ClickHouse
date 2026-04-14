@@ -63,6 +63,7 @@
 #include <Access/Common/AccessRightsElement.h>
 
 #include <DataTypes/DataTypeFactory.h>
+#include <DataTypes/dataTypeToAST.h>
 #include <DataTypes/NestedUtils.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypeLowCardinality.h>
@@ -112,7 +113,7 @@ namespace Setting
     extern const SettingsBool allow_experimental_codecs;
     extern const SettingsBool allow_experimental_database_materialized_postgresql;
     extern const SettingsBool enable_full_text_index;
-    extern const SettingsBool allow_experimental_statistics;
+    extern const SettingsBool allow_statistics;
     extern const SettingsBool allow_materialized_view_with_bad_select;
     extern const SettingsBool allow_suspicious_codecs;
     extern const SettingsBool compatibility_ignore_collation_in_create_table;
@@ -405,13 +406,10 @@ ASTPtr InterpreterCreateQuery::formatColumns(const NamesAndTypesList & columns)
     for (const auto & column : columns)
     {
         const auto column_declaration = make_intrusive<ASTColumnDeclaration>();
-        column_declaration->name = column.name;
 
-        ParserDataType type_parser;
-        String type_name = column.type->getName();
-        const char * pos = type_name.data();
-        const char * end = pos + type_name.size();
-        column_declaration->setType(parseQuery(type_parser, pos, end, "data type", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS));
+        column_declaration->name = column.name;
+        column_declaration->setType(dataTypeToAST(column.type));
+
         columns_list->children.emplace_back(column_declaration);
     }
 
@@ -425,13 +423,9 @@ ASTPtr InterpreterCreateQuery::formatColumns(const NamesAndTypesList & columns, 
     for (const auto & alias_column : alias_columns)
     {
         const auto column_declaration = make_intrusive<ASTColumnDeclaration>();
-        column_declaration->name = alias_column.name;
 
-        ParserDataType type_parser;
-        String type_name = alias_column.type->getName();
-        const char * type_pos = type_name.data();
-        const char * type_end = type_pos + type_name.size();
-        column_declaration->setType(parseQuery(type_parser, type_pos, type_end, "data type", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS));
+        column_declaration->name = alias_column.name;
+        column_declaration->setType(dataTypeToAST(alias_column.type));
 
         column_declaration->default_specifier = ColumnDefaultSpecifier::Alias;
 
@@ -457,12 +451,7 @@ ASTPtr InterpreterCreateQuery::formatColumns(const ColumnsDescription & columns)
         ASTPtr column_declaration_ptr{column_declaration};
 
         column_declaration->name = column.name;
-
-        ParserDataType type_parser;
-        String type_name = column.type->getName();
-        const char * type_name_pos = type_name.data();
-        const char * type_name_end = type_name_pos + type_name.size();
-        column_declaration->setType(parseQuery(type_parser, type_name_pos, type_name_end, "data type", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS));
+        column_declaration->setType(dataTypeToAST(column.type));
 
         if (column.default_desc.expression)
         {
@@ -688,9 +677,9 @@ ColumnsDescription InterpreterCreateQuery::getColumnsDescription(
 
         if (auto statistics_desc = col_decl.getStatisticsDesc())
         {
-            if (!skip_checks && !context_->getSettingsRef()[Setting::allow_experimental_statistics])
+            if (!skip_checks && !context_->getSettingsRef()[Setting::allow_statistics])
                 throw Exception(
-                    ErrorCodes::INCORRECT_QUERY, "Create table with statistics is now disabled. Turn on allow_experimental_statistics");
+                    ErrorCodes::INCORRECT_QUERY, "Create table with statistics is disabled. Turn on allow_statistics");
 
             column.statistics = ColumnStatisticsDescription::fromStatisticsDescriptionAST(statistics_desc, column.name, column.type);
         }
@@ -788,7 +777,7 @@ InterpreterCreateQuery::TableProperties InterpreterCreateQuery::getTableProperti
         if (create.columns_list->projections)
             for (const auto & projection_ast : create.columns_list->projections->children)
             {
-                auto projection = ProjectionDescription::getProjectionFromAST(projection_ast, properties.columns, getContext());
+                auto projection = ProjectionDescription::getProjectionFromAST(projection_ast, properties.columns, nullptr, getContext());
                 properties.projections.add(std::move(projection));
             }
 
@@ -802,7 +791,7 @@ InterpreterCreateQuery::TableProperties InterpreterCreateQuery::getTableProperti
 
         /// as_storage->getColumns() and setEngine(...) must be called under structure lock of other_table for CREATE ... AS other_table.
         as_storage_lock = as_storage->lockForShare(getContext()->getCurrentQueryId(), getContext()->getSettingsRef()[Setting::lock_acquire_timeout]);
-        auto as_storage_metadata = as_storage->getInMemoryMetadataPtr();
+        auto as_storage_metadata = as_storage->getInMemoryMetadataPtr(getContext(), false);
         properties.columns = as_storage_metadata->getColumns();
 
         if (!create.comment && !as_storage_metadata->comment.empty())
@@ -968,7 +957,7 @@ InterpreterCreateQuery::TableProperties InterpreterCreateQuery::getTableProperti
         /// Table function without columns list.
         auto table_function_ast = create.as_table_function->ptr();
         auto table_function = TableFunctionFactory::instance().get(table_function_ast, getContext());
-        properties.columns = table_function->getActualTableStructure(getContext(), /*is_insert_query*/ true);
+        properties.columns = table_function->getActualTableStructureWithAccess(getContext(), /*is_insert_query*/ true);
     }
     else if (create.is_dictionary)
     {
@@ -1061,7 +1050,7 @@ void InterpreterCreateQuery::validateMaterializedViewColumnsAndEngine(const ASTC
 
         if (to_table)
         {
-            all_output_columns = to_table->getInMemoryMetadataPtr()->getSampleBlockInsertable().getNamesAndTypesList();
+            all_output_columns = to_table->getInMemoryMetadataPtr(getContext(), false)->getSampleBlockInsertable().getNamesAndTypesList();
             check_columns = true;
         }
     }
@@ -1237,12 +1226,12 @@ namespace
         return &engine_def.arguments->children;
     }
 
-    bool hasDynamicSubcolumns(const ColumnsDescription & columns)
+    bool hasColumnsWithDynamicStructure(const ColumnsDescription & columns)
     {
         return std::any_of(columns.begin(), columns.end(),
             [](const auto & column)
             {
-               return column.type->hasDynamicSubcolumns();
+               return column.type->hasDynamicStructure();
             });
     }
 
@@ -1791,23 +1780,23 @@ BlockIO InterpreterCreateQuery::createTable(ASTCreateQuery & create)
 namespace
 {
 
-void checkForUnsupportedColumns(IStorage & storage, LoadingStrictnessLevel mode)
+void checkForUnsupportedColumns(IStorage & storage, LoadingStrictnessLevel mode, ContextPtr context)
 {
-    if (mode <= LoadingStrictnessLevel::CREATE && hasDynamicSubcolumns(storage.getInMemoryMetadataPtr()->getColumns()) && !storage.supportsDynamicSubcolumns())
+    if (mode <= LoadingStrictnessLevel::CREATE && hasColumnsWithDynamicStructure(storage.getInMemoryMetadataPtr(context, false)->getColumns()) && !storage.supportsColumnsWithDynamicStructure())
     {
         throw Exception(ErrorCodes::ILLEGAL_COLUMN,
             "Cannot create table with column of type Dynamic or JSON, "
-            "because storage {} doesn't support dynamic subcolumns",
+            "because storage {} doesn't support columns with dynamic structure",
             storage.getName());
     }
 }
 
-void validateVirtualColumns(IStorage & storage)
+void validateVirtualColumns(IStorage & storage, ContextPtr context)
 {
     auto virtual_columns = storage.getVirtualsPtr();
-    for (const auto & storage_column : storage.getInMemoryMetadataPtr()->getColumns())
+    for (const auto & storage_column : storage.getInMemoryMetadataPtr(context, false)->getColumns())
     {
-        if (virtual_columns->tryGet(storage_column.name, VirtualsKind::Persistent))
+        if (virtual_columns->tryGet(storage_column.name, VirtualsKind::Persistent, VirtualsMaterializationPlace::All))
         {
             throw Exception(ErrorCodes::ILLEGAL_COLUMN,
                 "Cannot create table with column '{}' for {} engines because it is reserved for persistent virtual column",
@@ -1819,7 +1808,7 @@ void validateVirtualColumns(IStorage & storage)
         /// This leads to a type mismatch: the Block header uses the user column's type
         /// while the data comes from the virtual column (which may have a different type).
         if (storage_column.default_desc.kind == ColumnDefaultKind::Ephemeral
-            && virtual_columns->tryGet(storage_column.name, VirtualsKind::Ephemeral))
+            && virtual_columns->tryGet(storage_column.name, VirtualsKind::Ephemeral, VirtualsMaterializationPlace::All))
         {
             throw Exception(ErrorCodes::ILLEGAL_COLUMN,
                 "Cannot create table with ephemeral column '{}' for {} engines "
@@ -1829,11 +1818,11 @@ void validateVirtualColumns(IStorage & storage)
     }
 }
 
-void validateStorage(IStorage & storage, LoadingStrictnessLevel mode)
+void validateStorage(IStorage & storage, LoadingStrictnessLevel mode, ContextPtr context)
 try
 {
-    validateVirtualColumns(storage);
-    checkForUnsupportedColumns(storage, mode);
+    validateVirtualColumns(storage, context);
+    checkForUnsupportedColumns(storage, mode, context);
 }
 catch (...)
 {
@@ -1875,7 +1864,7 @@ bool InterpreterCreateQuery::doCreateTable(ASTCreateQuery & create,
                 properties.constraints,
                 mode,
                 is_restore_from_backup);
-            validateStorage(*res, mode);
+            validateStorage(*res, mode, getContext());
             return res;
         };
         auto temporary_table = TemporaryTableHolder(getContext(), creator, query_ptr);
@@ -2065,7 +2054,7 @@ bool InterpreterCreateQuery::doCreateTable(ASTCreateQuery & create,
             res->addInferredEngineArgsToCreateQuery(*engine_args, getContext());
     }
 
-    validateStorage(*res, mode);
+    validateStorage(*res, mode, getContext());
 
     if (!create.attach && getContext()->getSettingsRef()[Setting::database_replicated_allow_only_replicated_engine])
     {
@@ -2312,7 +2301,7 @@ BlockIO InterpreterCreateQuery::doCreateOrReplaceTemporaryTable(ASTCreateQuery &
             properties.constraints,
             mode,
             is_restore_from_backup);
-        validateStorage(*res, mode);
+        validateStorage(*res, mode, getContext());
         return res;
     };
 
@@ -2560,7 +2549,7 @@ void InterpreterCreateQuery::addColumnsDescriptionToCreateQueryIfNecessary(ASTCr
     auto ast_storage = make_intrusive<ASTStorage>();
     unsigned max_parser_depth_v = static_cast<unsigned>(getContext()->getSettingsRef()[Setting::max_parser_depth]);
     unsigned max_parser_backtracks_v = static_cast<unsigned>(getContext()->getSettingsRef()[Setting::max_parser_backtracks]);
-    auto query_from_storage = DB::getCreateQueryFromStorage(storage, ast_storage, false, max_parser_depth_v, max_parser_backtracks_v, true);
+    auto query_from_storage = DB::getCreateQueryFromStorage(storage, ast_storage, false, max_parser_depth_v, max_parser_backtracks_v, true, getContext());
     auto & create_query_from_storage = query_from_storage->as<ASTCreateQuery &>();
 
     if (!create.columns_list)

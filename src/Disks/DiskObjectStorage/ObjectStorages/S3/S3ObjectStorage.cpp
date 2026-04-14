@@ -1,4 +1,5 @@
 #include <Disks/DiskObjectStorage/ObjectStorages/S3/S3ObjectStorage.h>
+#include <Common/CurrentThread.h>
 #include <Common/setThreadName.h>
 #include <Common/ObjectStorageKey.h>
 
@@ -67,7 +68,6 @@ namespace S3RequestSetting
 
 namespace ErrorCodes
 {
-    extern const int S3_ERROR;
     extern const int BAD_ARGUMENTS;
     extern const int LOGICAL_ERROR;
 }
@@ -173,7 +173,13 @@ private:
             auto objects = outcome.GetResult().GetContents();
             for (const auto & object : objects)
             {
-                ObjectMetadata metadata{static_cast<uint64_t>(object.GetSize()), Poco::Timestamp::fromEpochTime(object.GetLastModified().Seconds()), object.GetETag(), {}, {}};
+                ObjectMetadata metadata{
+                    .size_bytes = static_cast<uint64_t>(object.GetSize()),
+                    .last_modified = Poco::Timestamp::fromEpochTime(object.GetLastModified().Seconds()),
+                    .etag = object.GetETag(),
+                    .tags = {},
+                    .attributes = {},
+                };
                 if (with_tags)
                     metadata.tags = S3::getObjectTags(*client, request->GetBucket(), object.GetKey());
                 batch.emplace_back(std::make_shared<RelativePathWithMetadata>(object.GetKey(), std::move(metadata)));
@@ -256,7 +262,7 @@ std::unique_ptr<WriteBufferFromFileBase> S3ObjectStorage::writeObject( /// NOLIN
     /// NOTE: For background operations settings are not propagated from session or query. They are taken from
     /// default user's .xml config. It's obscure and unclear behavior. For them it's always better
     /// to rely on settings from disk.
-    if (auto query_context = CurrentThread::getQueryContext();
+    if (auto query_context = CurrentThread::tryGetQueryContext();
         query_context && !query_context->isBackgroundContext())
     {
         const auto & settings = query_context->getSettingsRef();
@@ -327,11 +333,12 @@ void S3ObjectStorage::listObjects(const std::string & path, RelativePathsWithMet
             children.emplace_back(std::make_shared<RelativePathWithMetadata>(
                 object.GetKey(),
                 ObjectMetadata{
-                    static_cast<uint64_t>(object.GetSize()),
-                    Poco::Timestamp::fromEpochTime(object.GetLastModified().Seconds()),
-                    object.GetETag(),
-                    {},
-                    {}}));
+                    .size_bytes = static_cast<uint64_t>(object.GetSize()),
+                    .last_modified = Poco::Timestamp::fromEpochTime(object.GetLastModified().Seconds()),
+                    .etag = object.GetETag(),
+                    .tags = {},
+                    .attributes = {},
+                }));
 
         if (max_keys)
         {
@@ -474,6 +481,7 @@ std::optional<ObjectMetadata> S3ObjectStorage::tryGetObjectMetadata(const std::s
 
     ObjectMetadata result;
     result.size_bytes = object_info.size;
+    result.is_size_known = object_info.is_size_known;
     result.last_modified = Poco::Timestamp::fromEpochTime(object_info.last_modification_time);
     result.etag = object_info.etag;
     result.tags = object_info.tags;
@@ -512,6 +520,7 @@ ObjectMetadata S3ObjectStorage::getObjectMetadata(const std::string & path, bool
 
     ObjectMetadata result;
     result.size_bytes = object_info.size;
+    result.is_size_known = object_info.is_size_known;
     result.last_modified = Poco::Timestamp::fromEpochTime(object_info.last_modification_time);
     result.etag = object_info.etag;
     result.tags = std::move(object_info.tags);

@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import time
+import threading
 import traceback
 import uuid
 from collections import defaultdict
@@ -37,6 +38,19 @@ CLICKHOUSE_CI_LOGS_CLUSTER = "system_logs_export"
 CLICKHOUSE_CI_LOGS_USER = "ci"
 
 
+def collect_and_encrypt_cores(directory, key_path: str, aes_key_path: str = None) -> List[str]:
+    if aes_key_path is None:
+        aes_key_path = str(Path(directory) / "aes.key")
+    encrypted = []
+    for core in sorted(Path(directory).glob("core.*"))[:3]:
+        if not core.name.endswith(".zst") and not core.name.endswith(".enc"):
+            zst_path = Utils.compress_zst(core)
+            encrypted.append(Utils.encrypt(str(zst_path), key_path, aes_key_path))
+    if encrypted and Path(f"{aes_key_path}.rsa").exists():
+        encrypted.append(f"{aes_key_path}.rsa")
+    return encrypted
+
+
 class ClickHouseProc:
     MINIO_LOG = f"{temp_dir}/minio.log"
     AZURITE_LOG = f"{temp_dir}/azurite.log"
@@ -54,11 +68,13 @@ class ClickHouseProc:
         self,
         is_db_replicated=False,
         is_shared_catalog=False,
+        is_per_test_coverage=False,
         ch_config_dir="/etc/clickhouse-server",
         ch_var_lib_dir="/var/lib/clickhouse",
     ):
         self.is_db_replicated = is_db_replicated
         self.is_shared_catalog = is_shared_catalog
+        self.is_per_test_coverage = is_per_test_coverage
         self.ch_config_dir = ch_config_dir
         self.ch_var_lib_dir = ch_var_lib_dir
         self.run_path0 = f"{temp_dir}/run_r0"
@@ -97,10 +113,6 @@ class ClickHouseProc:
         self.proc_2 = None
         self.pid = 0
         nproc = int(Utils.cpu_count() / 2)
-        # Fast test runs lightweight SQL tests that are not CPU-bound,
-        # so we can use more parallelism than the default cpu_count/2.
-        nproc_fast = max(1, int(Utils.cpu_count() * 3 / 4))
-        self.fast_test_command = f"cd {temp_dir} && clickhouse-test --hung-check --trace --capture-client-stacktrace --no-random-settings --no-random-merge-tree-settings --no-long --testname --shard --check-zookeeper-session --order random --report-logs-stats --fast-tests-only --no-stateful --jobs {nproc_fast} -- '{{TEST}}'"
         self.minio_proc = None
         self.azurite_proc = None
         self.kafka_proc = None
@@ -118,9 +130,11 @@ class ClickHouseProc:
         Utils.set_env("CLICKHOUSE_USER_FILES", f"{self.user_files_path}")
         Utils.clean_dir(Path(self.log_dir))
 
+    # there should be one install and one start method instead of many for each job
+    # job specifics should be a part of the job
     def install_configs(self):
         Path(f"{self.ch_config_dir}/config.d").mkdir(parents=True, exist_ok=True)
-        with open(f"{self.ch_config_dir}/config.d/backups.xml", "w") as file:
+        with open(f"{self.ch_config_dir}/config.d/storage_conf_backups.xml", "w") as file:
             file.write(f"""
 <clickhouse>
     <storage_configuration>
@@ -205,37 +219,36 @@ class ClickHouseProc:
     @staticmethod
     def enable_thread_fuzzer_config():
         # For flaky check we also enable thread fuzzer
-        os.environ["THREAD_FUZZER_CPU_TIME_PERIOD_US"] = "1000"
-        os.environ["THREAD_FUZZER_SLEEP_PROBABILITY"] = "0.1"
-        os.environ["THREAD_FUZZER_SLEEP_TIME_US_MAX"] = "100000"
+        os.environ["THREAD_FUZZER_CPU_TIME_PERIOD_US"] = "10000"
+        os.environ["THREAD_FUZZER_SLEEP_PROBABILITY"] = "0.05"
+        os.environ["THREAD_FUZZER_SLEEP_TIME_US_MAX"] = "10000"
 
-        os.environ["THREAD_FUZZER_pthread_mutex_lock_BEFORE_MIGRATE_PROBABILITY"] = "1"
-        os.environ["THREAD_FUZZER_pthread_mutex_lock_AFTER_MIGRATE_PROBABILITY"] = "1"
-        os.environ["THREAD_FUZZER_pthread_mutex_unlock_BEFORE_MIGRATE_PROBABILITY"] = (
-            "1"
-        )
-        os.environ["THREAD_FUZZER_pthread_mutex_unlock_AFTER_MIGRATE_PROBABILITY"] = "1"
+        os.environ["THREAD_FUZZER_pthread_mutex_lock_BEFORE_MIGRATE_PROBABILITY"] = "0.5"
+        os.environ["THREAD_FUZZER_pthread_mutex_lock_AFTER_MIGRATE_PROBABILITY"] = "0.5"
+        os.environ["THREAD_FUZZER_pthread_mutex_unlock_BEFORE_MIGRATE_PROBABILITY"] = "0.5"
+        os.environ["THREAD_FUZZER_pthread_mutex_unlock_AFTER_MIGRATE_PROBABILITY"] = "0.5"
 
-        os.environ["THREAD_FUZZER_pthread_mutex_lock_BEFORE_SLEEP_PROBABILITY"] = (
-            "0.001"
-        )
-        os.environ["THREAD_FUZZER_pthread_mutex_lock_AFTER_SLEEP_PROBABILITY"] = "0.001"
+        os.environ["THREAD_FUZZER_pthread_mutex_lock_BEFORE_SLEEP_PROBABILITY"] = "0.0005"
+        os.environ["THREAD_FUZZER_pthread_mutex_lock_AFTER_SLEEP_PROBABILITY"] = "0.0005"
+        os.environ["THREAD_FUZZER_pthread_mutex_unlock_BEFORE_SLEEP_PROBABILITY"] = "0.0005"
+        os.environ["THREAD_FUZZER_pthread_mutex_unlock_AFTER_SLEEP_PROBABILITY"] = "0.0005"
 
-        os.environ["THREAD_FUZZER_pthread_mutex_unlock_BEFORE_SLEEP_PROBABILITY"] = (
-            "0.001"
-        )
-        os.environ["THREAD_FUZZER_pthread_mutex_unlock_AFTER_SLEEP_PROBABILITY"] = (
-            "0.001"
-        )
-        os.environ["THREAD_FUZZER_pthread_mutex_lock_BEFORE_SLEEP_TIME_US_MAX"] = (
-            "10000"
-        )
-        os.environ["THREAD_FUZZER_pthread_mutex_lock_AFTER_SLEEP_TIME_US_MAX"] = "10000"
-        os.environ["THREAD_FUZZER_pthread_mutex_unlock_BEFORE_SLEEP_TIME_US_MAX"] = (
-            "10000"
-        )
-        os.environ["THREAD_FUZZER_pthread_mutex_unlock_AFTER_SLEEP_TIME_US_MAX"] = (
-            "10000"
+        os.environ["THREAD_FUZZER_pthread_mutex_lock_BEFORE_SLEEP_TIME_US_MAX"] = "1000"
+        os.environ["THREAD_FUZZER_pthread_mutex_lock_AFTER_SLEEP_TIME_US_MAX"] = "1000"
+        os.environ["THREAD_FUZZER_pthread_mutex_unlock_BEFORE_SLEEP_TIME_US_MAX"] = "1000"
+        os.environ["THREAD_FUZZER_pthread_mutex_unlock_AFTER_SLEEP_TIME_US_MAX"] = "1000"
+
+    @staticmethod
+    def set_memory_ratio(ratio):
+        config = f"""<clickhouse>
+    <max_server_memory_usage_to_ram_ratio>{ratio}</max_server_memory_usage_to_ram_ratio>
+</clickhouse>
+"""
+        file_path = "/etc/clickhouse-server/config.d/max_server_memory_usage_to_ram_ratio.xml"
+        with open(file_path, "w") as f:
+            f.write(config)
+        print(
+            f"Set max_server_memory_usage_to_ram_ratio to {ratio} in {file_path}"
         )
 
     def _install_light(self):
@@ -454,8 +467,10 @@ profiles:
             Utils.physical_memory() * 65 // 100 // 1024 // 1024 // replicas
         )
 
-        # set profile file for the server
-        os.environ["LLVM_PROFILE_FILE"] = f"ft-server-%m.profraw"
+        # set profile file for the server (not needed for per-test coverage,
+        # which uses system.coverage_log instead of .profraw files)
+        if not self.is_per_test_coverage:
+            os.environ["LLVM_PROFILE_FILE"] = f"ft-server-%m.profraw"
 
         env = os.environ.copy()
         env["TSAN_OPTIONS"] = " ".join(
@@ -696,7 +711,11 @@ MAX_EXECUTION_TIME=1800
 clickhouse-client --query "SHOW DATABASES"
 clickhouse-client --query "CREATE DATABASE datasets"
 clickhouse-client < ./tests/docker_scripts/create.sql
+bash ./tests/docker_scripts/create_tpcds.sh
+bash ./tests/docker_scripts/create_tpch.sh
 clickhouse-client --query "SHOW TABLES FROM datasets"
+clickhouse-client --query "SHOW TABLES FROM tpcds"
+clickhouse-client --query "SHOW TABLES FROM tpch"
 
 clickhouse-client --query "CREATE DATABASE test"
 clickhouse-client --query "SHOW TABLES FROM test"
@@ -712,6 +731,7 @@ if [[ -n "$USE_S3_STORAGE_FOR_MERGE_TREE" ]] && [[ "$USE_S3_STORAGE_FOR_MERGE_TR
     clickhouse-client --max_estimated_execution_time 0 --max_execution_time "$MAX_EXECUTION_TIME" --max_memory_usage 25G --query "INSERT INTO test.visits SELECT * FROM datasets.visits_v1 SETTINGS enable_filesystem_cache_on_write_operations=0, max_insert_threads=16"
     clickhouse-client --query "DROP TABLE datasets.visits_v1 SYNC"
     clickhouse-client --query "DROP TABLE datasets.hits_v1 SYNC"
+    # Note: `tpcds` and `tpch` databases are NOT dropped here as they are used by stateful tests.
 else
     clickhouse-client --query "RENAME TABLE datasets.hits_v1 TO test.hits"
     clickhouse-client --query "RENAME TABLE datasets.visits_v1 TO test.visits"
@@ -742,8 +762,7 @@ clickhouse-client --query "SELECT count() FROM test.visits"
         else:
             return False
 
-    def run_fast_test(self, test=""):
-        cmd = self.fast_test_command.format(TEST=test)
+    def run_test(self, cmd, timeout=7200):
         print(f"Run test: [{cmd}]")
         with open(self.test_output_file, "w") as f:
             process = subprocess.Popen(
@@ -754,13 +773,29 @@ clickhouse-client --query "SELECT count() FROM test.visits"
                 shell=True,
                 text=True,
                 errors="ignore",
+                start_new_session=True,
             )
-            for line in process.stdout:
-                ts_line = f"{datetime.now():%Y-%m-%d %H:%M:%S} {line}"
-                print(ts_line, end="")
-                f.write(ts_line)
 
-            process.wait()
+            def _reader():
+                for line in process.stdout:
+                    # we generally want timestamps for any test, not just a fast test
+                    ts_line = f"{datetime.now():%Y-%m-%d %H:%M:%S} {line}"
+                    print(ts_line, end="")
+                    f.write(ts_line)
+
+            reader_thread = threading.Thread(target=_reader)
+            reader_thread.start()
+
+            try:
+                process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                print(f"ERROR: fast test timed out after {timeout}s, killing process group")
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                process.wait()
+                reader_thread.join()
+                return False
+
+            reader_thread.join()
             return process.returncode == 0
 
     def terminate(self, force=False):
@@ -811,9 +846,13 @@ clickhouse-client --query "SELECT count() FROM test.visits"
                 ):
                     continue
                 print(
-                    f"Failed to stop ClickHouse process {pid} gracefully - send ABRT signal to generate core file"
+                    f"Failed to stop ClickHouse process {pid} gracefully - send TRAP signal to generate core file"
                 )
-                proc.send_signal(signal.SIGABRT)
+                proc.send_signal(signal.SIGTRAP)
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
 
         return self
 
@@ -834,8 +873,6 @@ clickhouse-client --query "SELECT count() FROM test.visits"
                 res += self.debug_artifacts
                 res += self.dump_system_tables()
                 res += self._collect_core_dumps()
-                if Path(f"{self.aes_key}.rsa").exists():
-                    res.append(f"{self.aes_key}.rsa")
                 res += self._get_logs_archive_coordination()
                 if Path(self.MINIO_LOG).exists():
                     res.append(self.MINIO_LOG)
@@ -860,11 +897,14 @@ clickhouse-client --query "SELECT count() FROM test.visits"
         return res
 
     def _collect_core_dumps(self) -> List[str]:
-        cores = list(p_temp_dir.glob("run_r*/core.*"))[:3]
-        return [
-            Utils.encrypt(Utils.compress_zst(f), f"{repo_dir}/ci/defs/public.pem", self.aes_key)
-            for f in cores
-        ]
+        result = []
+        for run_dir in sorted(p_temp_dir.glob("run_r*")):
+            result.extend(
+                collect_and_encrypt_cores(
+                    run_dir, f"{repo_dir}/ci/defs/public.pem", self.aes_key
+                )
+            )
+        return result
 
     @classmethod
     def _get_logs_archive_coordination(cls):
@@ -951,7 +991,7 @@ clickhouse-client --query "SELECT count() FROM test.visits"
         results.append(
             Result.from_commands_run(
                 name="Exception in test runner",
-                command=f"! awk 'found && /^[^[:space:]]/ {{ print; exit }} /^Traceback \\(most recent call last\\):/ {{ found=1 }} found {{ print }}' {temp_dir}/job.log | head -n 100 | tee /dev/stderr | grep -q .",
+                command=rf"! awk 'found && /^[^[:space:]]/ {{ print; exit }} /^Traceback \(most recent call last\):/ {{ found=1 }} found {{ print }}' {temp_dir}/job.log | head -n 100 | tee /dev/stderr | grep -q .",
             )
         )
 
@@ -966,6 +1006,9 @@ clickhouse-client --query "SELECT count() FROM test.visits"
         sanitizer_hits = Shell.get_output(
             f"sed -n '/.*anitizer/,${{p}}' {self.log_dir}/stderr*.log 2>/dev/null | "
             f'grep -a -v "ASan doesn\'t fully support makecontext/swapcontext functions" | '
+            f'grep -a -v "ASan is ignoring requested __asan_handle_no_return" | '
+            f'grep -a -v "False positive error reports may follow" | '
+            f'grep -a -v "For details see https://github.com/google/sanitizers" | '
             "head -n 1 || true"
         )
         fatal_hits = Shell.get_output(

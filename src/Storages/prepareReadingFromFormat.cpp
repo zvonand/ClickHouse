@@ -317,8 +317,9 @@ SerializationInfoByName getSerializationHintsForFileLikeStorage(const StorageMet
     if (!storage_ptr)
         return SerializationInfoByName{{}};
 
+    const auto storage_metadata_snapshot = storage_ptr->getInMemoryMetadataPtr(context, false);
     const auto & our_columns = metadata_snapshot->getColumns();
-    const auto & storage_columns = storage_ptr->getInMemoryMetadataPtr(context, false)->getColumns();
+    const auto & storage_columns = storage_metadata_snapshot->getColumns();
     auto storage_hints = storage_ptr->getSerializationHints();
     SerializationInfoByName res({});
 

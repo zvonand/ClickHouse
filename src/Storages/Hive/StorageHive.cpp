@@ -168,7 +168,7 @@ public:
         /// See issue: https://github.com/ClickHouse/ClickHouse/issues/37671
         if (!generate_chunk_from_metadata && !to_read_block.columns())
         {
-            const auto & metadata = storage.getInMemoryMetadataPtr(getContext(), false);
+            const auto metadata = storage.getInMemoryMetadataPtr(getContext(), false);
             for (const auto & column : metadata->getColumns().getAllPhysical())
             {
                 bool is_partition_column = false;

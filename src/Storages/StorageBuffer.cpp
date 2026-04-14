@@ -273,7 +273,7 @@ QueryProcessingStage::Enum StorageBuffer::getQueryProcessingStage(
 {
     if (auto destination = getDestinationTable())
     {
-        const auto & destination_metadata = destination->getInMemoryMetadataPtr(local_context, false);
+        const auto destination_metadata = destination->getInMemoryMetadataPtr(local_context, false);
         return destination->getQueryProcessingStage(local_context, to_stage, destination->getStorageSnapshot(destination_metadata, local_context), query_info);
     }
 

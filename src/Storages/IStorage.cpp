@@ -336,7 +336,8 @@ Names IStorage::getAllRegisteredNames() const
 {
     Names result;
     auto getter = [](const auto & column) { return column.name; };
-    const NamesAndTypesList & available_columns = getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false)->getColumns().getAllPhysical();
+    const auto metadata_snapshot = getInMemoryMetadataPtr(CurrentThread::tryGetQueryContext(), false);
+    const auto & available_columns = metadata_snapshot->getColumns().getAllPhysical();
     std::transform(available_columns.begin(), available_columns.end(), std::back_inserter(result), getter);
     return result;
 }
@@ -349,9 +350,10 @@ NameDependencies IStorage::getDependentViewsByColumn(ContextPtr context) const
     for (const auto & view_id : view_ids)
     {
         auto view = DatabaseCatalog::instance().getTable(view_id, context);
-        if (view->getInMemoryMetadataPtr(context, false)->select.inner_query)
+        auto view_metadata = view->getInMemoryMetadataPtr(context, false);
+        if (view_metadata->select.inner_query)
         {
-            const auto & select_query = view->getInMemoryMetadataPtr(context, false)->select.inner_query;
+            const auto & select_query = view_metadata->select.inner_query;
             Names required_columns;
             if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
             {

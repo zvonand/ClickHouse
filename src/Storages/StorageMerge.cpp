@@ -316,8 +316,8 @@ std::optional<NameSet> StorageMerge::supportedPrewhereColumns() const
 {
     bool supports_prewhere = true;
 
-    const auto & metadata = *getInMemoryMetadataPtr(getContext(), false);
-    const auto & columns = metadata.getColumns();
+    const auto metadata_snapshot = getInMemoryMetadataPtr(getContext(), false);
+    const auto & columns = metadata_snapshot->getColumns();
 
     NameSet supported_columns;
 
@@ -333,7 +333,7 @@ std::optional<NameSet> StorageMerge::supportedPrewhereColumns() const
 
     forEachTable([&](const StoragePtr & table)
     {
-        const auto & table_metadata_ptr = table->getInMemoryMetadataPtr(getContext(), false);
+        const auto table_metadata_ptr = table->getInMemoryMetadataPtr(getContext(), false);
         if (!table_metadata_ptr)
             supports_prewhere = false;
         if (!supports_prewhere)

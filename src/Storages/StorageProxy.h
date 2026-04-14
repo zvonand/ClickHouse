@@ -46,7 +46,7 @@ public:
         const StorageSnapshotPtr &,
         SelectQueryInfo & info) const override
     {
-        const auto & nested_metadata = getNested()->getInMemoryMetadataPtr(context, false);
+        const auto nested_metadata = getNested()->getInMemoryMetadataPtr(context, false);
         return getNested()->getQueryProcessingStage(context, to_stage, getNested()->getStorageSnapshot(nested_metadata, context), info);
     }
 

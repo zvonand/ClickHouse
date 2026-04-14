@@ -827,8 +827,8 @@ void ZooKeeper::sendThread()
                     /// After we popped element from the queue, we must register callbacks (even in the case when expired == true right now),
                     ///  because they must not be lost (callbacks must be called because the user will wait for them).
 
-                    ZooKeeperOpentelemetrySpans::maybeFinalize(
-                        info.request->spans->client_requests_queue,
+                    info.request->spans.maybeFinalize(
+                        KeeperSpan::ClientRequestsQueue,
                         [&]
                         {
                             return std::vector<OpenTelemetry::SpanAttribute>{
@@ -1504,7 +1504,6 @@ void ZooKeeper::pushRequest(RequestInfo && info)
         }
 
         maybeInjectSendFault();
-        info.request->spans = std::make_shared<DB::ZooKeeperOpentelemetrySpans>();
 
         if (
             const auto & current_trace_context = OpenTelemetry::CurrentContext();
@@ -1514,7 +1513,7 @@ void ZooKeeper::pushRequest(RequestInfo && info)
             info.request->tracing_context = std::make_shared<OpenTelemetry::TracingContext>(current_trace_context);
         }
 
-        ZooKeeperOpentelemetrySpans::maybeInitialize(info.request->spans->client_requests_queue, info.request->tracing_context.get());
+        info.request->spans.maybeInitialize(KeeperSpan::ClientRequestsQueue, info.request->tracing_context.get());
 
         if (!requests_queue.tryPush(std::move(info), args.operation_timeout_ms))
         {
@@ -1951,9 +1950,8 @@ void ZooKeeper::close()
 
     RequestInfo request_info;
     request_info.request = std::make_shared<ZooKeeperCloseRequest>(std::move(request));
-    request_info.request->spans = std::make_shared<DB::ZooKeeperOpentelemetrySpans>();
 
-    ZooKeeperOpentelemetrySpans::maybeInitialize(request_info.request->spans->client_requests_queue, request_info.request->tracing_context.get());
+    request_info.request->spans.maybeInitialize(KeeperSpan::ClientRequestsQueue, request_info.request->tracing_context.get());
 
     if (!requests_queue.tryPush(std::move(request_info), args.operation_timeout_ms))
         throw Exception(Error::ZOPERATIONTIMEOUT, "Cannot push close request to queue within operation timeout of {} ms", args.operation_timeout_ms);

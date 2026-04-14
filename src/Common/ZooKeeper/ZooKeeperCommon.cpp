@@ -1170,7 +1170,6 @@ void ZooKeeperMultiRequest::readImpl(ReadBuffer & in, RequestValidator request_v
         request->readImpl(in);
         if (request_validator)
             request_validator(*request);
-        request->spans.reset();
         requests.push_back(request);
 
         if (in.eof())
@@ -1600,7 +1599,6 @@ ZooKeeperRequestPtr ZooKeeperRequestFactory::get(OpNum op_num) const
         throw Exception(Error::ZBADARGUMENTS, "Unknown operation type {}", op_num);
 
     auto request = it->second();
-    request->spans = std::make_shared<DB::ZooKeeperOpentelemetrySpans>();
     return request;
 }
 

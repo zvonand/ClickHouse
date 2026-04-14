@@ -70,7 +70,6 @@ void KeeperOverDispatcher::finalize(const String & /* reason */)
 void KeeperOverDispatcher::pushRequest(ZooKeeperRequestPtr request, ResponseCallback callback)
 {
     request->xid = next_xid++;
-    request->spans = std::make_shared<DB::ZooKeeperOpentelemetrySpans>();
 
     {
         std::lock_guard lock(callback_state->callbacks_mutex);

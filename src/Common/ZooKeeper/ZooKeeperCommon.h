@@ -64,7 +64,7 @@ struct ZooKeeperRequest : virtual Request
     std::chrono::steady_clock::time_point create_ts = {};
 
     std::shared_ptr<OpenTelemetry::TracingContext> tracing_context;
-    std::shared_ptr<DB::ZooKeeperOpentelemetrySpans> spans;
+    DB::ZooKeeperOpentelemetrySpans spans;
 
     ZooKeeperRequest() = default;
     ZooKeeperRequest(const ZooKeeperRequest &) = default;

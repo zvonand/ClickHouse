@@ -345,7 +345,7 @@ StorageMetadataPtr StorageMaterializedView::getInMemoryMetadataPtr(ContextPtr qu
     /// Override _table and _database to be materialized at the Plan level
     /// by StorageWithCommonVirtualColumns, not by the target storage's reader.
     VirtualColumnsDescription virtuals_desc;
-    for (auto desc : target->getInMemoryMetadataPtr(query_context, false)->virtuals)
+    for (auto desc : target->getInMemoryMetadataPtr(query_context, bypass_metadata_cache)->virtuals)
     {
         if (desc.name == "_table" || desc.name == "_database")
             desc.place = VirtualsMaterializationPlace::Plan;

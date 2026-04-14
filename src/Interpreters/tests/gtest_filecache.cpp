@@ -1,3 +1,4 @@
+#include <Columns/IColumn.h>
 #include <IO/copyData.h>
 #include <Interpreters/FileCache/IFileCachePriority.h>
 #include <gtest/gtest.h>

@@ -42,7 +42,7 @@ class Event:
 
 
 # Maximum number of days to retain non-open PRs in the timeline
-MAX_TIMELINE_DAYS = 120
+MAX_TIMELINE_DAYS = 30
 
 
 def _sanitize_s3_key_name(name: str) -> str:

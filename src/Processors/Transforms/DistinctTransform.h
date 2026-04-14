@@ -38,13 +38,13 @@ private:
     };
 
     /// Number of chunks to observe before deciding.
-    static constexpr size_t OBSERVATION_CHUNK_COUNT = 3;
+    static constexpr size_t OBSERVATION_CHUNK_COUNT = 5;
 
     /// Fraction of rows whose LC dictionary index was seen for the first time.
     /// When this rate is this high, the mask filters almost nothing and its
     /// bookkeeping cost (dictionary hashing, seen-index bitmap, per-row branch)
     /// is not justified.
-    static constexpr double NEW_INDEX_RATE_THRESHOLD = 0.98;
+    static constexpr double NEW_INDEX_RATE_THRESHOLD = 0.95;
 
     State state = State::Observing;
     size_t chunks_observed = 0;

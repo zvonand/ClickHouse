@@ -39,7 +39,8 @@ _TEST = "00058_select_sleep_3"
 # hyphen in the name.
 _ct = runpy.run_path(_CLICKHOUSE_TEST)
 pgrep = _ct["pgrep"]
-_GROUP_PID_FILE = _ct["_GROUP_PID_FILE"]
+_GROUP_PID_PATH = _ct["_GROUP_PID_PATH"]
+_GROUP_PID_NAME = _ct["_GROUP_PID_NAME"]
 
 
 def test_cleanup_kills_orphaned_test_process():
@@ -47,8 +48,8 @@ def test_cleanup_kills_orphaned_test_process():
     Verify that ``clickhouse-test --cleanup`` kills a test subprocess that was
     orphaned when its parent (clickhouse-test) was terminated with SIGKILL.
     """
-    _GROUP_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
-    for f in _GROUP_PID_FILE.parent.glob(f"{_GROUP_PID_FILE.name}.*"):
+    _GROUP_PID_PATH.mkdir(parents=True, exist_ok=True)
+    for f in _GROUP_PID_PATH.glob(f"{_GROUP_PID_NAME}.*"):
         f.unlink(missing_ok=True)
 
     _ch_proc = subprocess.Popen(
@@ -64,7 +65,7 @@ def test_cleanup_kills_orphaned_test_process():
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
             pgid_files = [
-                p for p in _GROUP_PID_FILE.parent.glob(f"{_GROUP_PID_FILE.name}.*")
+                p for p in _GROUP_PID_PATH.glob(f"{_GROUP_PID_NAME}.*")
                 if not p.name.endswith(".tmp")
             ]
             for pf in pgid_files:
@@ -120,7 +121,7 @@ def test_cleanup_kills_orphaned_test_process():
 
         # All per-worker pid files must have been removed by --cleanup.
         remaining = [
-            p for p in _GROUP_PID_FILE.parent.glob(f"{_GROUP_PID_FILE.name}.*")
+            p for p in _GROUP_PID_PATH.glob(f"{_GROUP_PID_NAME}.*")
             if not p.name.endswith(".tmp")
         ]
         assert not remaining, (
@@ -129,7 +130,7 @@ def test_cleanup_kills_orphaned_test_process():
 
     finally:
         # Best-effort cleanup so stray processes are never left behind.
-        for f in _GROUP_PID_FILE.parent.glob(f"{_GROUP_PID_FILE.name}.*"):
+        for f in _GROUP_PID_PATH.glob(f"{_GROUP_PID_NAME}.*"):
             f.unlink(missing_ok=True)
         if pgid is not None:
             try:

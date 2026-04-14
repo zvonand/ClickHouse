@@ -57,7 +57,7 @@ except ImportError:
 
 # Base path for per-process PGID files used by `--cleanup` to locate orphaned
 # test process groups.  Each worker process writes its own file named
-# ``_GROUP_PID_FILE.<pid>`` so no cross-process locking is needed.
+# ``_GROUP_PID_NAME.<pid>`` so no cross-process locking is needed.
 # The CI hook can invoke `clickhouse-test --cleanup` even if the parent was
 # killed with SIGKILL before its cleanup code ran.
 # `__file__` is `{repo}/tests/clickhouse-test`, so this resolves to

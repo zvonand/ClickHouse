@@ -35,6 +35,7 @@ workflow = Workflow.Config(
         ],
         JobConfigs.smoke_tests_macos,
         *JobConfigs.unittest_jobs,
+        *JobConfigs.func_props_fuzzer_jobs,
         *JobConfigs.unittest_llvm_coverage_job,
         JobConfigs.docker_server,
         JobConfigs.docker_keeper,

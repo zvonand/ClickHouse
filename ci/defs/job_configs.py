@@ -109,10 +109,23 @@ common_ft_job_config = Job.Config(
 common_unit_test_job_config = Job.Config(
     name=JobNames.UNITTEST,
     runs_on=[],  # from parametrize()
-    command=f"python3 ./ci/jobs/unit_tests_job.py",
+    command=f"python3 ./ci/jobs/unit_tests_job.py --gtest_filter=-FunctionsStress.*",
     run_in_docker="clickhouse/test-base+--privileged",
     digest_config=Job.CacheDigestConfig(
         include_paths=["./ci/jobs/unit_tests_job.py"],
+    ),
+)
+
+common_func_props_fuzzer_job_config = Job.Config(
+    name=JobNames.FUNC_PROPS_FUZZER,
+    runs_on=[],  # from parametrize()
+    command=f"python3 ./ci/jobs/unit_tests_job.py --gtest_filter=FunctionsStress.*",
+    run_in_docker="clickhouse/test-base+--privileged",
+    digest_config=Job.CacheDigestConfig(
+        include_paths=[
+            "./ci/jobs/unit_tests_job.py",
+            "./src/Functions/tests/gtest_functions_stress.cpp",
+        ],
     ),
 )
 
@@ -732,6 +745,23 @@ class JobConfigs:
         )
     )
     unittest_jobs = common_unit_test_job_config.parametrize(
+        Job.ParamSet(
+            parameter="asan_ubsan",
+            runs_on=RunnerLabels.AMD_LARGE,
+            requires=[ArtifactNames.UNITTEST_AMD_ASAN_UBSAN],
+        ),
+        Job.ParamSet(
+            parameter="tsan",
+            runs_on=RunnerLabels.AMD_LARGE,
+            requires=[ArtifactNames.UNITTEST_AMD_TSAN],
+        ),
+        Job.ParamSet(
+            parameter="msan",
+            runs_on=RunnerLabels.AMD_LARGE,
+            requires=[ArtifactNames.UNITTEST_AMD_MSAN],
+        ),
+    )
+    func_props_fuzzer_jobs = common_func_props_fuzzer_job_config.parametrize(
         Job.ParamSet(
             parameter="asan_ubsan",
             runs_on=RunnerLabels.AMD_LARGE,

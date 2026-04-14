@@ -622,7 +622,12 @@ class Result(MetaClasses.Serializable):
 
     @classmethod
     def from_gtest_run(
-        cls, unit_tests_path, name="", with_log=False, command_launcher=""
+        cls,
+        unit_tests_path,
+        name="",
+        with_log=False,
+        command_launcher="",
+        gtest_filter="",
     ):
         """
         Runs gtest and generates praktika Result from results
@@ -631,10 +636,13 @@ class Result(MetaClasses.Serializable):
         If it's a job itself job.name will be taken as name by default
         :param with_log: whether to log gtest output into separate file
         :param command_prefix: prefix to add to gtest command
+        :param gtest_filter: gtest filter expression (passed as --gtest_filter)
         :return: Result
         """
 
         command = f"{unit_tests_path} --gtest_output='json:{ResultTranslator.GTEST_RESULT_FILE}'"
+        if gtest_filter:
+            command += f" --gtest_filter='{gtest_filter}'"
         if command_launcher:
             command = f"{command_launcher} {command}"
 

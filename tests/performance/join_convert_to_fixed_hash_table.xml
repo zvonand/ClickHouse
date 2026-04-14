@@ -49,11 +49,11 @@
     <query>SELECT p.id5, b.id2 FROM probe p INNER JOIN build_50k b ON p.id5 = b.id2 FORMAT Null SETTINGS join_algorithm = 'hash', enable_join_fixed_hash_table_conversion = 0</query>
     <query>SELECT p.id5, b.id2 FROM probe p INNER JOIN build_50k b ON p.id5 = b.id2 FORMAT Null SETTINGS join_algorithm = 'hash', enable_join_fixed_hash_table_conversion = 1</query>
 
-    <!-- Automatic join alogrithm -->
+    <!-- Automatic join algorithm -->
     <query>SELECT p.id0, b.id0 FROM probe p LEFT JOIN build_5k b ON p.id0 = b.id0 FORMAT Null SETTINGS join_algorithm = 'auto', enable_join_fixed_hash_table_conversion = 0</query>
     <query>SELECT p.id0, b.id0 FROM probe p LEFT JOIN build_5k b ON p.id0 = b.id0 FORMAT Null SETTINGS join_algorithm = 'auto', enable_join_fixed_hash_table_conversion = 1</query>
 
-    <!-- Grace hash join alogrithm -->
+    <!-- Grace hash join algorithm -->
     <query>SELECT p.id0, b.id0 FROM probe p LEFT JOIN build_5k b ON p.id0 = b.id0 FORMAT Null SETTINGS join_algorithm = 'grace_hash', enable_join_fixed_hash_table_conversion = 0</query>
     <query>SELECT p.id0, b.id0 FROM probe p LEFT JOIN build_5k b ON p.id0 = b.id0 FORMAT Null SETTINGS join_algorithm = 'grace_hash', enable_join_fixed_hash_table_conversion = 1</query>
 

@@ -40,7 +40,10 @@ void RabbitMQHandler::startLoop()
     loop_running.store(true);
 
     while (loop_state.load() == Loop::RUN)
-        uv_run(loop, UV_RUN_NOWAIT);
+    {
+        if (!uv_run(loop, UV_RUN_ONCE))
+            break;
+    }
 
     LOG_DEBUG(log, "Background loop ended");
     loop_running.store(false);

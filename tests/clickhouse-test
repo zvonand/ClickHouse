@@ -626,12 +626,11 @@ CAPTURE_CLIENT_STACKTRACE = False
 
 def kill_process_group(pgid, fatal_log):
     try:
-        print(f"Processes left in process group {pgid}:")
-        print(
-            '\n'.join(f"{p[0]} {p[3]}" for p in pgrep(pgid=pgid)),
-        )
-
         if SANITIZED:
+            print(f"Processes left in process group {pgid}:")
+            print(
+                '\n'.join(f"{p[0]} {p[3]}" for p in pgrep(pgid=pgid)),
+            )
             print("Wait 60 seconds to let sanitizers print the report...")
             sleep(60)
 

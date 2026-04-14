@@ -129,3 +129,44 @@ The hook contains no kill logic of its own — it just calls
 If `runner.py` itself is killed before the post-hook executes, nothing cleans
 up.  On a dedicated macOS runner this requires a machine-level failure; a reboot
 clears all processes.  For Linux production CI the Docker boundary already covers this.
+
+---
+
+## Known issues
+
+### Process group not killed on normal test exit
+
+When the bash script exits normally (exit code is set), `kill_process_group` is
+**not** called.  The code path is:
+
+```python
+# run_single_test_command (line ~3136)
+proc = Popen(command, shell=True, start_new_session=True, ...)
+_gpid_file = _GROUP_PID_PATH / f"{_GROUP_PID_NAME}.{os.getpid()}"
+write_text_atomic(_gpid_file, f"{proc.pid}\n")
+try:
+    proc.wait(args.timeout)
+except subprocess.TimeoutExpired:
+    pass
+finally:
+    _gpid_file.unlink(missing_ok=True)   # file removed here on every exit
+return proc, total_time
+
+# process_result_impl (line ~2712)
+if proc.returncode is None:              # only true on TimeoutExpired
+    kill_process_group(os.getpgid(proc.pid), ...)
+```
+
+Consequence: any processes that are still in the process group after bash exits
+(e.g. background jobs the test script started without `wait`) are **not killed**
+and the PGID file is already gone, so `--cleanup` cannot reach them either.
+
+In practice, most shell tests call `wait` at the end, so all background jobs
+finish before bash exits and the group is empty.  A test that does not call
+`wait` (or that spawns detached sub-subprocesses inside the group) leaks those
+processes silently.
+
+The fix would be to call `kill_process_group` on the PGID before deleting the
+file, unconditionally (or at least when `pgrep(pgid=proc.pid)` still shows
+living members).  This is not done today to avoid the overhead on every normally
+passing test.

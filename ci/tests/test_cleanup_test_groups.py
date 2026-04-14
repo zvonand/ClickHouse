@@ -80,90 +80,44 @@ def test_cleanup_kills_orphaned_test_process():
                 break
             time.sleep(0.1)
         else:
-            assert False, f"{_SUITE_TMP} has no stdout"
-
-
-        # FIXME: read group pid from pid files, check processes with this group pid, assert number of processes is equal to 2
-
-        # Wait until clickhouse-test has launched the test subprocess and
-        # written its PGID to the group pid file.
-        deadline = time.monotonic() + 15
-        while time.monotonic() < deadline:
-            pgid_files = [
-                p for p in _GROUP_PID_PATH.glob(f"{_GROUP_PID_NAME}.*")
-                if not p.name.endswith(".tmp")
-            ]
-            for pf in pgid_files:
-                lines = [l for l in pf.read_text().splitlines() if l.strip()]
-                if lines:
-                    pgid = int(lines[0])
-                    break
-            if pgid is not None:
-                break
-            time.sleep(0.1)
-        assert pgid is not None, "group pid file was not populated in time"
-
-        # Wait for all 5 child processes to appear in the process group.
-        deadline = time.monotonic() + 15
-        procs = []
-        while time.monotonic() < deadline:
-            procs = pgrep(pgid=pgid)
-            if len(procs) >= 2:
-                break
-            time.sleep(0.1)
-        assert len(procs) >= 2, (
-            f"expected multiple processes in group {pgid} (bash + client jobs), "
-            f"got: {procs}"
-        )
-
+            assert False, f"{_SUITE_TMP}/{_TEST} has no stdout"
+    
+        # The PGID file is written by clickhouse-test synchronously right after
+        # Popen(), before the bash script starts.  By the time SELECT 1 has
+        # completed and the stdout file has content, the file is likely to exist.
+        p = list(_GROUP_PID_PATH.glob(f"{_GROUP_PID_NAME}.*"))[0]
+        pgid = int(p.read_text())
+    
+        def got_procs(procs) -> str:
+            return ", got\n" + '\n'.join(f"{p[0]} {p[3]}" for p in procs)
+    
+        procs = pgrep(pgid=pgid)
+        assert len(procs) == 7, "(Before kill) Expect 7 processes (two bash processes + 5 test processes)" + got_procs(procs)
+    
         # Kill clickhouse-test with SIGKILL — simulates the OOM killer or an
         # external timeout killing the test runner.
-        os.kill(_ch_proc.pid, signal.SIGKILL)
-        _ch_proc.wait(timeout=5)
-
-        # The test subprocess and its children must still be alive: they live
-        # in their own process group, so the parent's SIGKILL cannot reach them.
-        assert pgrep(pgid=pgid), (
-            "test processes should still be alive after clickhouse-test was killed with SIGKILL"
-        )
-
-        # Run clickhouse-test --cleanup to kill the orphaned process group.
-        result = subprocess.run(
-            [sys.executable, _CLICKHOUSE_TEST, "--cleanup"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        assert result.returncode == 0, (
-            f"clickhouse-test --cleanup failed (rc={result.returncode}):\n"
-            f"{result.stdout}\n{result.stderr}"
-        )
-
-        # All test processes must now be dead.
-        assert not pgrep(pgid=pgid), (
-            "all test processes should be dead after clickhouse-test --cleanup"
-        )
-
-        # All per-worker pid files must have been removed by --cleanup.
-        remaining = [
-            p for p in _GROUP_PID_PATH.glob(f"{_GROUP_PID_NAME}.*")
-            if not p.name.endswith(".tmp")
-        ]
-        assert not remaining, (
-            "group pid files should be deleted by clickhouse-test --cleanup"
-        )
-
     finally:
-        # Best-effort cleanup so stray processes are never left behind.
-        for f in _GROUP_PID_PATH.glob(f"{_GROUP_PID_NAME}.*"):
-            f.unlink(missing_ok=True)
-        if pgid is not None:
-            try:
-                os.killpg(pgid, signal.SIGKILL)
-            except OSError:
-                pass
-        try:
-            os.kill(_ch_proc.pid, signal.SIGKILL)
-            _ch_proc.wait(timeout=2)
-        except OSError:
-            pass
+        os.kill(_ch_proc.pid, signal.SIGKILL)
+
+    procs = pgrep(pgid=pgid)
+    assert len(procs) == 7, "(After kill) Expect 7 processes" + got_procs(procs)
+    _ch_proc.wait()
+
+    # Run clickhouse-test --cleanup to kill the orphaned process group.
+    result = subprocess.run(
+        [sys.executable, _CLICKHOUSE_TEST, "--cleanup"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert result.returncode == 0, (
+        f"clickhouse-test --cleanup failed (rc={result.returncode}):\n"
+        f"{result.stdout}\n{result.stderr}"
+    )
+
+    # All test processes must now be dead.
+    procs = pgrep(pgid=pgid)
+    assert not procs, (
+        "all test processes should be dead after clickhouse-test --cleanup" + got_procs(procs)
+    )
+

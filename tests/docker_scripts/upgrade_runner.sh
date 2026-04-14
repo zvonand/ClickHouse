@@ -341,7 +341,11 @@ cp /var/log/clickhouse-server/clickhouse-server.upgrade.log /test_output/clickho
 # `while loading statistics` + `ILLEGAL_STATISTICS` appears when the statistics file format version changes between
 #       releases. The new binary cannot deserialize old statistics files and throws ILLEGAL_STATISTICS (Code: 708).
 #       Filtered via regex in the secondary pipe below to require both the loading context AND the error code together.
-# `rdk:FAIL` is librdkafka connection errors when Kafka broker is unavailable during upgrade.
+# `rdk:FAIL` + `Connect to` + `Connection refused` is a librdkafka broker connection error when the Kafka
+#       broker is unavailable during upgrade (no broker is running in the upgrade test environment). Filtered
+#       via regex in the secondary pipe below to require the `rdk:FAIL` tag AND the specific connection-refused
+#       message together, so real Kafka regressions (auth, protocol, config) that also emit `rdk:FAIL` are
+#       not masked.
 echo "Check for Error messages in server log:"
 rg -Fav -e "Code: 236. DB::Exception: Cancelled merging parts" \
            -e "Code: 236. DB::Exception: Cancelled mutating parts" \
@@ -406,13 +410,13 @@ rg -Fav -e "Code: 236. DB::Exception: Cancelled merging parts" \
            -e "This engine is deprecated and is not supported in transactions" \
            -e "Prevent converting Nullable type to non-Nullable type inside mutation" \
            -e "e.what() = failed to parse response body" \
-           -e "rdk:FAIL" \
     /test_output/clickhouse-server.upgrade.log \
     | grep -av -e "_repl_01111_.*Mapping for table with UUID" \
     | grep -av -e "Azure::Storage::StorageException.*Not found address of host" \
     | grep -av -e "SystemLogQueue.*Queue had been full" \
     | grep -av -e "TraceCollector.*CANNOT_READ_FROM_FILE_DESCRIPTOR" \
     | grep -av -e "while loading statistics.*ILLEGAL_STATISTICS" \
+    | grep -av -e "rdk:FAIL.*Connect to.*failed: Connection refused" \
     | grep -Fa "<Error>" > /test_output/upgrade_error_messages.txt || true
 
 if [ -s /test_output/upgrade_error_messages.txt ]; then

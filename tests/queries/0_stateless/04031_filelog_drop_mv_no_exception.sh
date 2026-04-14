@@ -48,8 +48,8 @@ for iteration in {1..5}; do
     # Wait until the background thread picks up some data.
     # The destination table may use Azure blob storage when the test runs with
     # --azure-blob-storage, and under ASan the MergeTree part upload can stall
-    # for 30+ seconds, so use a generous timeout (120 × 0.5 s = 60 s).
-    for attempt in {1..120}; do
+    # for 30+ seconds, so use a generous timeout.
+    for attempt in {1..300}; do
         count=$(${CLICKHOUSE_CLIENT} --query "SELECT count() FROM ${CLICKHOUSE_DATABASE}.filelog_dst")
         [[ "${count}" -ge 10 ]] && break
         sleep 0.5

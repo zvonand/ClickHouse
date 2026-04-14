@@ -25,6 +25,7 @@ QueryPipelineBuilderPtr JoinLazyColumnsStep::updatePipeline(QueryPipelineBuilder
         throw Exception(ErrorCodes::LOGICAL_ERROR, "JoinLazyColumnsStep must have two pipelines");
 
     auto transform = std::make_shared<LazyMaterializingTransform>(input_headers.front(), input_headers.back(), lazy_materializing_rows, dataflow_cache_updater);
+    transform->setSkipInversePermutation(skip_inverse_permutation);
     return QueryPipelineBuilder::mergePipelines(std::move(pipelines[0]), std::move(pipelines[1]), transform, &processors);
 }
 

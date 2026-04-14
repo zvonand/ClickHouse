@@ -339,7 +339,7 @@ void LazyMaterializingTransform::prepareLazyChunk()
     IColumn::Permutation inverted_permutation;
 
     size_t rows = permutation.size();
-    bool is_identity_permutation = isIdentityPermutation(permutation, rows);
+    bool is_identity_permutation = skip_inverse_permutation || isIdentityPermutation(permutation, rows);
     bool should_replicate = offsets.size() != rows;
 
     if (!is_identity_permutation)

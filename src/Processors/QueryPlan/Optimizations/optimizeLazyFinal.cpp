@@ -10,6 +10,7 @@
 #include <Processors/QueryPlan/InputSelectorStep.h>
 #include <Processors/QueryPlan/JoinLazyColumnsStep.h>
 #include <Processors/QueryPlan/LazilyReadFromMergeTree.h>
+#include <Processors/QueryPlan/LazilyUnorderedReadFromMergeTree.h>
 #include <Processors/QueryPlan/LazyFinalKeyAnalysisStep.h>
 #include <Processors/QueryPlan/LazyReadReplacingFinalStep.h>
 #include <Processors/QueryPlan/PartsSplitter.h>
@@ -512,13 +513,12 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
         auto lazy_header = std::make_shared<const Block>(
             storage_snapshot->getSampleBlockForColumns(lazy_columns));
 
-        auto lazy_reading = std::make_unique<LazilyReadFromMergeTree>(
+        auto lazy_reading = std::make_unique<LazilyUnorderedReadFromMergeTree>(
             lazy_header,
             reading_step->getMaxBlockSize(),
-            /*min_marks_for_concurrent_read=*/ 0,
-            MergeTreeReaderSettings::createFromContext(context),
             mutations_snapshot,
             storage_snapshot,
+            data,
             context,
             data.getLogName());
         lazy_reading->setLazyMaterializingRows(lazy_materializing_rows);
@@ -528,6 +528,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
 
         auto join_lazy_columns = std::make_unique<JoinLazyColumnsStep>(
             true_plan.getCurrentHeader(), lazy_plan.getCurrentHeader(), lazy_materializing_rows);
+        join_lazy_columns->setSkipInversePermutation(true);
 
         std::vector<QueryPlanPtr> join_plans;
         join_plans.emplace_back(std::make_unique<QueryPlan>(std::move(true_plan)));

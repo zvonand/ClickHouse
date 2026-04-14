@@ -55,10 +55,7 @@ def test_no_queries_from_file(started_cluster):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    # Not sure which exit code should the ssh command have in this case
-    # Ideally it should be non-zero as be same as `ssh -vvv user@host "false"; echo $?` == 1
-    # But for now it is 0.
-    assert completed_process.returncode == 1
+    assert completed_process.returncode != 0
     assert "SUPPORT_IS_DISABLED" in completed_process.stderr
 
 

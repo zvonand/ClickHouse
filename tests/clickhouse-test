@@ -64,6 +64,14 @@ except ImportError:
 # `{repo}/ci/tmp/clickhouse_test_group_pid`.
 _GROUP_PID_FILE = Path(__file__).resolve().parent.parent / "ci" / "tmp" / "clickhouse_test_group_pid"
 
+
+def write_text_atomic(path: Path, text: str) -> None:
+    """Write `text` to `path` atomically via a sibling `.tmp` file and `os.replace`."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
 USE_JINJA = True
 try:
     import jinja2
@@ -3131,11 +3139,10 @@ class TestCase:
         proc = Popen(command, shell=True, executable=BASH, env=tests_env, start_new_session=True, preexec_fn=preexec_fn)
         # proc.pid == PGID after start_new_session=True; write it atomically so
         # `clickhouse-test --cleanup` can find it even if we are killed with SIGKILL.
-        _pgid_file = _GROUP_PID_FILE.parent / f"{_GROUP_PID_FILE.name}.{os.getpid()}"
-        _pgid_file.parent.mkdir(parents=True, exist_ok=True)
-        _pgid_tmp = _pgid_file.with_name(_pgid_file.name + ".tmp")
-        _pgid_tmp.write_text(f"{proc.pid}\n")
-        os.replace(_pgid_tmp, _pgid_file)
+        write_text_atomic(
+            _GROUP_PID_FILE.parent / f"{_GROUP_PID_FILE.name}.{os.getpid()}",
+            f"{proc.pid}\n",
+        )
 
         try:
             proc.wait(args.timeout)

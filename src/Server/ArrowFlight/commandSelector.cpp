@@ -9,6 +9,7 @@
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnTuple.h>
 #include <DataTypes/DataTypeFactory.h>
+#include <DataTypes/DataTypeString.h>
 #include <Processors/Formats/Impl/CHColumnToArrowColumn.h>
 
 #include <boost/algorithm/string/join.hpp>

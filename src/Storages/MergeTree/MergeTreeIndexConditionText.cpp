@@ -758,7 +758,7 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
 
         auto tokens = stringToTokens(value_field);
         out.function = RPNElement::FUNCTION_HAS_ALL_TOKENS;
-        out.text_search_queries.emplace_back(std::make_shared<TextSearchQuery>(function_name, TextSearchMode::All, direct_read_mode, tokens));
+        out.text_search_queries.emplace_back(std::make_shared<TextSearchQuery>(function_name, TextSearchMode::All, direct_read_mode, std::move(tokens)));
         return true;
     }
     if (function_name == "startsWith" && tokenizer->supportsStringLike())

@@ -10,7 +10,7 @@ CREATE TABLE tab
 (
     id UInt32,
     message String,
-    INDEX idx(`message`) TYPE text(tokenizer = 'splitByNonAlpha'),
+    INDEX idx(`message`) TYPE text(tokenizer = splitByNonAlpha),
 )
 ENGINE = MergeTree
 ORDER BY (id);
@@ -140,7 +140,7 @@ CREATE TABLE tab
 (
     id UInt32,
     message String,
-    INDEX idx(`message`) TYPE text(tokenizer = 'splitByNonAlpha')
+    INDEX idx(`message`) TYPE text(tokenizer = splitByNonAlpha)
 )
 ENGINE = MergeTree
 ORDER BY (id)
@@ -192,7 +192,7 @@ SELECT trimLeft(explain) AS explain FROM (
 WHERE explain LIKE '%Description:%' OR explain LIKE '%Parts:%' OR explain LIKE '%Granules:%'
 LIMIT 2, 3;
 
-SELECT 'Text index should choose 1 parts and 1024 granules (hint mode) for existing tokens but they are in a wrong order';
+SELECT 'Text index should choose 1 part and 1024 granules (hint mode) for existing tokens but they are in a wrong order';
 SELECT trimLeft(explain) AS explain FROM (
     EXPLAIN indexes=1
     SELECT count() FROM tab WHERE hasPhrase(message, 'ClickHouse Hello')
@@ -209,7 +209,7 @@ CREATE TABLE tab
 (
     id UInt32,
     message String,
-    INDEX idx(`message`) TYPE text(tokenizer = 'splitByNonAlpha')
+    INDEX idx(`message`) TYPE text(tokenizer = splitByNonAlpha)
 )
 ENGINE = MergeTree
 ORDER BY (id)

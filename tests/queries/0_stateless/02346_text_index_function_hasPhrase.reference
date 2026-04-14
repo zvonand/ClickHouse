@@ -62,7 +62,7 @@ Text index should choose none if any term does not exist in dictionary
 Description: text GRANULARITY 100000000
 Parts: 0/4
 Granules: 0/4096
-Text index should choose 1 parts and 1024 granules (hint mode) for existing tokens but they are in a wrong order
+Text index should choose 1 part and 1024 granules (hint mode) for existing tokens but they are in a wrong order
 Description: text GRANULARITY 100000000
 Parts: 1/4
 Granules: 1024/4096

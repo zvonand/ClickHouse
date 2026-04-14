@@ -805,7 +805,8 @@ clickhouse-client --query "SELECT count() FROM test.visits"
                 # (e.g. if it was killed with SIGKILL before its signal handlers ran).
                 # clickhouse-test writes the group pid file itself on startup; --cleanup
                 # reads it and kills all orphaned test process groups.
-                subprocess.run(["clickhouse-test", "--cleanup"], check=False)
+                _clickhouse_test = Path(__file__).resolve().parent.parent.parent / "tests" / "clickhouse-test"
+                subprocess.run([sys.executable, str(_clickhouse_test), "--cleanup"], check=False)
 
     def terminate(self, force=False):
         if self.minio_proc:

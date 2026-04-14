@@ -62,15 +62,18 @@ except ImportError:
 # killed with SIGKILL before its cleanup code ran.
 # `__file__` is `{repo}/tests/clickhouse-test`, so this resolves to
 # `{repo}/ci/tmp/clickhouse_test_group_pid`.
-_GROUP_PID_FILE = Path(__file__).resolve().parent.parent / "ci" / "tmp" / "clickhouse_test_group_pid"
+_GROUP_PID_PATH = Path(__file__).resolve().parent.parent / "ci" / "tmp"
 
 
 def write_text_atomic(path: Path, text: str) -> None:
     """Write `text` to `path` atomically via a sibling `.tmp` file and `os.replace`."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(text)
-    os.replace(tmp, path)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(text)
+        os.replace(tmp, path)
+    except Exception as e:
+        print(f"Warning: could not write {path}: {e}", file=sys.stderr)
 
 USE_JINJA = True
 try:
@@ -2718,7 +2721,6 @@ class TestCase:
                         os.getpgid(proc.pid), self.fatal_sanitizer_prefix
                     )
                 kill_output = f.getvalue()
-            (_GROUP_PID_FILE.parent / f"{_GROUP_PID_FILE.name}.{os.getpid()}").unlink(missing_ok=True)
 
         description = ""
 
@@ -3139,10 +3141,8 @@ class TestCase:
         proc = Popen(command, shell=True, executable=BASH, env=tests_env, start_new_session=True, preexec_fn=preexec_fn)
         # proc.pid == PGID after start_new_session=True; write it atomically so
         # `clickhouse-test --cleanup` can find it even if we are killed with SIGKILL.
-        write_text_atomic(
-            _GROUP_PID_FILE.parent / f"{_GROUP_PID_FILE.name}.{os.getpid()}",
-            f"{proc.pid}\n",
-        )
+        _gpid_file = _GROUP_PID_PATH / f"clickhouse-test-gpid.{os.getpid()}"
+        write_text_atomic(_gpid_file, f"{proc.pid}\n")
 
         try:
             proc.wait(args.timeout)
@@ -3152,6 +3152,7 @@ class TestCase:
         finally:
             if cgroup_name:
                 cleanup_cgroup(cgroup_name)
+            _gpid_file.unlink(missing_ok=True)
 
         total_time = (datetime.now() - start_time).total_seconds()
 

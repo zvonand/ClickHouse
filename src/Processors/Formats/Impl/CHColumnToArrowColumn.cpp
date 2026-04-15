@@ -560,7 +560,10 @@ namespace DB
         if (column_tuple->tupleSize() == 0)
         {
             for (size_t i = start; i != end; ++i)
-                checkStatus(builder.Append(), column->getName(), format_name);
+            {
+                auto status = (null_bytemap && (*null_bytemap)[i]) ? builder.AppendNull() : builder.Append();
+                checkStatus(status, column->getName(), format_name);
+            }
             return checkResult(builder.Finish(), column_name, format_name);
         }
 

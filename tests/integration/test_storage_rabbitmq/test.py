@@ -3747,19 +3747,19 @@ def test_connection_info_logging_with_rabbitmq_address(rabbitmq_cluster, db, uni
     not ':0', when rabbitmq_address is used instead of rabbitmq_host_port."""
 
     # Create a table using rabbitmq_address (connection string)
-      instance.query(f"""                                                       
-          CREATE TABLE {db}.rmq_addr_log (key UInt64, value String)
-          ENGINE = RabbitMQ                                                     
-          SETTINGS rabbitmq_address =                                           
+    instance.query(f"""                                                       
+        CREATE TABLE {db}.rmq_addr_log (key UInt64, value String)
+        ENGINE = RabbitMQ                                                     
+        SETTINGS rabbitmq_address =                                           
   'amqp://root:clickhouse@{rabbitmq_cluster.rabbitmq_host}:5672/',
-                  rabbitmq_exchange_name = '{unique}_addr_log_exchange',        
-                  rabbitmq_format = 'JSONEachRow';                              
-          CREATE TABLE {db}.rmq_addr_log_dst (key UInt64, value String)
-              ENGINE = MergeTree ORDER BY key;                                  
-          CREATE MATERIALIZED VIEW {db}.rmq_addr_log_mv TO {db}.rmq_addr_log_dst
-   AS                                                                           
-              SELECT * FROM {db}.rmq_addr_log;
-      """)
+                rabbitmq_exchange_name = '{unique}_addr_log_exchange',        
+                rabbitmq_format = 'JSONEachRow';                              
+        CREATE TABLE {db}.rmq_addr_log_dst (key UInt64, value String)
+            ENGINE = MergeTree ORDER BY key;                                  
+        CREATE MATERIALIZED VIEW {db}.rmq_addr_log_mv TO {db}.rmq_addr_log_dst
+ AS                                                                           
+            SELECT * FROM {db}.rmq_addr_log;
+    """)
 
     # Force a disconnect/reconnect by briefly stopping RabbitMQ
     with rabbitmq_cluster.pause_container('rabbitmq1'):

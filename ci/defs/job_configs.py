@@ -213,6 +213,7 @@ class JobConfigs:
         result_name_for_cidb="Darwin tests",
         allow_merge_on_failure=True,
         post_hooks=[
+            "python3 ./ci/jobs/scripts/job_hooks/clickhouse_test_cleanup_hook.py",
             "sudo rm -rf /Users/ec2-user/actions-runner/_work/ClickHouse/ClickHouse/ci/tmp/run*",
         ],
     ).parametrize(
@@ -1262,7 +1263,8 @@ class JobConfigs:
             ],
         ),
         run_in_docker="clickhouse/docs-builder",
-        requires=[JobNames.STYLE_CHECK, ArtifactNames.CH_ARM_BINARY],
+        requires=[ArtifactNames.CH_ARM_BINARY],
+        run_after=[JobNames.STYLE_CHECK],
     )
     docs_job_mintlify = Job.Config(
         name=JobNames.DOCS_MINTLIFY,
@@ -1291,7 +1293,6 @@ class JobConfigs:
             ],
         ),
         requires=["Build (amd_release)", "Build (arm_release)"],
-        needs_jobs_from_requires=True,
         post_hooks=["python3 ./ci/jobs/scripts/job_hooks/docker_clean_up_hook.py"],
     )
     docker_keeper = Job.Config(
@@ -1306,7 +1307,6 @@ class JobConfigs:
             ],
         ),
         requires=["Build (amd_release)", "Build (arm_release)"],
-        needs_jobs_from_requires=True,
         post_hooks=["python3 ./ci/jobs/scripts/job_hooks/docker_clean_up_hook.py"],
     )
     sqlancer_master_jobs = Job.Config(

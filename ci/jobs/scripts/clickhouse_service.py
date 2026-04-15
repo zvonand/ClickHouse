@@ -1,3 +1,4 @@
+import shutil
 import subprocess
 import time
 import urllib.request
@@ -45,10 +46,23 @@ class ClickHouseService(Service):
             print(f"ERROR: failed to download ClickHouse binary: {e}")
             return False
 
+    def _print_server_log(self) -> None:
+        log_path = Path(self.log_dir) / "clickhouse-server.log"
+        if self._log_fd is not None:
+            self._log_fd.flush()
+        if log_path.exists():
+            print(f"--- {log_path} ---")
+            print(log_path.read_text(errors="replace")[-4096:])
+            print("--- end ---")
+
     def _wait_ready(self, port: int = 9000, attempts: int = 30, delay: int = 2) -> bool:
-        # Wait for the pid file to appear
+        # Wait for the pid file to appear, bail out early if the process exits
         pid = None
         for _ in range(30):
+            if self._proc and self._proc.poll() is not None:
+                print(f"Server process exited with code {self._proc.returncode}")
+                self._print_server_log()
+                return False
             try:
                 pid = int(Path(self.pid_file).read_text().strip())
                 break
@@ -56,6 +70,7 @@ class ClickHouseService(Service):
                 time.sleep(1)
         if pid is None:
             print(f"Failed to get PID from [{self.pid_file}]")
+            self._print_server_log()
             return False
 
         for attempt in range(attempts):
@@ -69,8 +84,10 @@ class ClickHouseService(Service):
             time.sleep(delay)
             if self._proc and self._proc.poll() is not None:
                 print(f"Server process exited with code {self._proc.returncode}")
+                self._print_server_log()
                 return False
         print(f"Server not ready after {attempts * delay}s")
+        self._print_server_log()
         return False
 
     def start(self) -> bool:
@@ -89,16 +106,19 @@ class ClickHouseService(Service):
             if not link_path.exists():
                 Utils.link(clickhouse_bin, link_path)
 
-        # Copy config.xml if absent
-        config_file = Path(self.config_file)
-        if not config_file.exists():
-            config_file.parent.mkdir(parents=True, exist_ok=True)
-            if not Shell.check(
-                f"cp ./programs/server/config.xml {config_file.parent}/",
-                verbose=True,
-            ):
-                print("Failed to copy config.xml")
-                return False
+        # Copy server config files if absent
+        config_dir = Path(self.ch_config_dir)
+        if not (config_dir / "config.xml").exists():
+            config_dir.mkdir(parents=True, exist_ok=True)
+            src_dir = Path("./programs/server")
+            for name in ("config.xml", "users.xml"):
+                shutil.copy(src_dir / name, config_dir / name)
+            shutil.copytree(
+                src_dir / "config.d",
+                config_dir / "config.d",
+                symlinks=False,
+                dirs_exist_ok=True,
+            )
 
         # Prepare directories
         Path(self.run_path).mkdir(parents=True, exist_ok=True)

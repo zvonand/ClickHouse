@@ -551,6 +551,7 @@ def main():
         ft_res_processor = FTResultsProcessor(wd=temp_dir)
 
         global_time_limit = 0
+        max_failures = 10
         if is_flaky_check:
             FLAKY_CHECK_TIME_LIMIT = 45 * 60  # 45 min
             global_time_limit = max(
@@ -566,28 +567,28 @@ def main():
                 batch_num=0,
                 batch_total=0,
                 tests=list(tests) if tests else tests,
-                extra_args=runner_options,
+                extra_args=f"{runner_options} --max-failures {max_failures}",
                 random_order=True,
                 rerun_count=rerun_count,
                 global_time_limit=global_time_limit,
             )
 
         elif is_targeted_check:
-            job_timeout = int(3600 * 2.5)
-            soft_limit_margin = 3600
+            TARGETED_CHECK_TIME_LIMIT = 50 * 60  # 50 min
             global_time_limit = max(
-                job_timeout - soft_limit_margin - int(stop_watch.duration), 0
+                TARGETED_CHECK_TIME_LIMIT - int(stop_watch.duration), 0
             )
             print(
-                f"Soft time limit for test runner: {global_time_limit}s"
-                f" (elapsed so far: {int(stop_watch.duration)}s)"
+                f"Targeted-check time limit: {TARGETED_CHECK_TIME_LIMIT}s"
+                f" (elapsed so far: {int(stop_watch.duration)}s,"
+                f" remaining: {global_time_limit}s)"
             )
 
             run_tests(
                 batch_num=0,
                 batch_total=0,
                 tests=list(tests) if tests else tests,
-                extra_args=runner_options,
+                extra_args=f"{runner_options} --max-failures {max_failures}",
                 random_order=True,
                 rerun_count=rerun_count,
                 global_time_limit=global_time_limit,

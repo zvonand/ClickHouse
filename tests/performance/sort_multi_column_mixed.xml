@@ -13,7 +13,7 @@
         CREATE TABLE sort_mixed (
             uint_col UInt64,
             str_col String
-        ) ENGINE = Memory
+        ) ENGINE = MergeTree ORDER BY tuple()
     </create_query>
 
     <fill_query>

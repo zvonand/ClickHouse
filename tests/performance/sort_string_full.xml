@@ -12,7 +12,7 @@
     <create_query>
         CREATE TABLE sort_string_full (
             str_col String
-        ) ENGINE = Memory
+        ) ENGINE = MergeTree ORDER BY tuple()
     </create_query>
 
     <fill_query>

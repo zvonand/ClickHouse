@@ -675,7 +675,6 @@ void registerOutputFormatAvro(FormatFactory & factory)
     {
         return std::make_shared<AvroConfluentRowOutputFormat>(buf, std::make_shared<const Block>(sample), settings);
     });
-    factory.markFormatHasNoAppendSupport("AvroConfluent");
     factory.markOutputFormatNotTTYFriendly("AvroConfluent");
     factory.setContentType("AvroConfluent", "application/octet-stream");
 }

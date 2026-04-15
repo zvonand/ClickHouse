@@ -5,11 +5,15 @@ from ci.praktika.utils import Utils
 temp_path = f"{Utils.cwd()}/ci/tmp"
 
 if __name__ == "__main__":
-    CH = ClickHouseProc()
+    CH = ClickHouseProc(
+        ch_config_dir=f"{temp_path}/etc/clickhouse-server",
+        ch_var_lib_dir=f"{temp_path}/var/lib/clickhouse",
+    )
 
     res = ClickHouseProc.download_binary()
-    res = res and CH.install_light()
-    res = res and CH.start_light()
+    res = res and CH._install_light()
+    res = res and CH.start()
+    res = res and CH.wait_ready()
 
     if res:
         test_result = Result.from_pytest_run(

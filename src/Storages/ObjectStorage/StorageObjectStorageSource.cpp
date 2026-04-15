@@ -41,7 +41,6 @@
 #include <Common/SipHash.h>
 #include <Common/parseGlobs.h>
 #include <Storages/ObjectStorage/IObjectIterator.h>
-#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergDataObjectInfo.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Utils.h>
 #if ENABLE_DISTRIBUTED_CACHE
 #include <DistributedCache/DistributedCacheRegistry.h>

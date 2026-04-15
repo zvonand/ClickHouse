@@ -46,6 +46,7 @@ function configure
     <profiles>
         <default>
             <ast_fuzzer_runs>5</ast_fuzzer_runs>
+            <ast_fuzzer_any_query>true</ast_fuzzer_any_query>
         </default>
     </profiles>
 </clickhouse>

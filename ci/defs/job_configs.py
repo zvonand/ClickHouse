@@ -184,10 +184,10 @@ class JobConfigs:
     )
     ci_tests = Job.Config(
         name=JobNames.CI_TESTS,
-        runs_on=RunnerLabels.STYLE_CHECK_ARM,
+        runs_on=RunnerLabels.ARM_LARGE,
         command="python3 ./ci/jobs/ci_tests_job.py",
         timeout=1200,
-        run_in_docker="clickhouse/style-test",
+        run_in_docker="clickhouse/integration-tests-runner+root+--privileged+--cap-add=SYS_PTRACE",
     )
     fast_test = Job.Config(
         name=JobNames.FAST_TEST,

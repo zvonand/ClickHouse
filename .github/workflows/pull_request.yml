@@ -322,7 +322,7 @@ jobs:
           for line in sys.stdin: sys.stdout.write(prefix() + " " + line); sys.stdout.flush()' | tee ./ci/tmp/job.log
 
   ci_tests:
-    runs-on: [self-hosted, style-checker-aarch64]
+    runs-on: [self-hosted, arm-large]
     needs: [config_workflow, dockers_build_amd, dockers_build_arm, dockers_build_multiplatform_manifest]
     if: ${{ !cancelled() && !contains(needs.*.outputs.pipeline_status, 'failure') && !contains(needs.*.outputs.pipeline_status, 'undefined') && !contains(fromJson(needs.config_workflow.outputs.data).workflow_config.cache_success_base64, 'Q0kgVGVzdHM=') }}
     name: "CI Tests"

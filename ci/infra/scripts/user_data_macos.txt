@@ -83,10 +83,12 @@ else
   echo "Installing Python packages into venv..."
   sudo -u "$USER" -i bash -c '$(brew --prefix python@3)/bin/python3 -m venv ~/venv && ~/venv/bin/pip install boto3 pygithub requests urllib3 unidiff dohq-artifactory pyjwt'
 
-  # Add venv/bin and GNU coreutils to PATH for both bash and zsh login shells
+  # Add venv/bin and GNU tools to PATH for both bash and zsh login shells
   GNU_COREUTILS_BIN=$(sudo -u "$USER" -i brew --prefix coreutils)/libexec/gnubin
-  sudo -u "$USER" -i bash -c "echo 'export PATH=\"\$HOME/venv/bin:${GNU_COREUTILS_BIN}:\$PATH\"' >> ~/.bash_profile"
-  sudo -u "$USER" -i bash -c "echo 'export PATH=\"\$HOME/venv/bin:${GNU_COREUTILS_BIN}:\$PATH\"' >> ~/.zprofile"
+  GNU_SED_BIN=$(sudo -u "$USER" -i brew --prefix gnu-sed)/libexec/gnubin
+  GNU_GREP_BIN=$(sudo -u "$USER" -i brew --prefix grep)/libexec/gnubin
+  sudo -u "$USER" -i bash -c "echo 'export PATH=\"\$HOME/venv/bin:${GNU_COREUTILS_BIN}:${GNU_SED_BIN}:${GNU_GREP_BIN}:\$PATH\"' >> ~/.bash_profile"
+  sudo -u "$USER" -i bash -c "echo 'export PATH=\"\$HOME/venv/bin:${GNU_COREUTILS_BIN}:${GNU_SED_BIN}:${GNU_GREP_BIN}:\$PATH\"' >> ~/.zprofile"
 
   # Download and install CloudWatch agent
   echo "Installing Amazon CloudWatch agent..."

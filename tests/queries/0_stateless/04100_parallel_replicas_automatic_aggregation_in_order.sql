@@ -1,4 +1,5 @@
--- Tags: no-random-settings, no-random-merge-tree-settings
+-- Tags: no-random-merge-tree-settings
+-- no-random-merge-tree-settings: to stabilize the test
 
 SET use_uncompressed_cache=0;
 
@@ -60,7 +61,7 @@ WHERE ratio > 2;
 
 -- Check output bytes estimation accuracy against known-good values (ratio should be within 2x).
 -- Expected output bytes were measured with default settings on 2e7 rows:
---   agg_in_order_single ~204M, agg_in_order_multi ~203M, agg_in_order_filter ~15M, agg_in_order_multi_agg ~354M
+-- execute queries with parallel replicas and with local plan disabled, then take the network received bytes metric as estimation.
 SELECT format('{}: output estimation off by {}x (expected~{}, estimated={})', log_comment, round(ratio, 2), expected, statistics_output_bytes)
 FROM (
     SELECT

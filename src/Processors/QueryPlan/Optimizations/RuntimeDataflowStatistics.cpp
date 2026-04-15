@@ -1,7 +1,6 @@
 #include <Processors/QueryPlan/Optimizations/RuntimeDataflowStatistics.h>
 
 #include <AggregateFunctions/IAggregateFunction.h>
-#include <Columns/ColumnAggregateFunction.h>
 #include <Compression/CompressedWriteBuffer.h>
 #include <Compression/CompressionFactory.h>
 #include <IO/NullWriteBuffer.h>
@@ -219,24 +218,27 @@ void RuntimeDataflowStatisticsCacheUpdater::recordAggregationKeySizes(
 }
 
 void RuntimeDataflowStatisticsCacheUpdater::recordAggregationStateColumnSizes(
-    const Chunk & chunk, size_t keys_size, const Block & header)
+    const Chunk & chunk, const ColumnNumbers & keys_positions, const Block & header)
 {
     Stopwatch watch;
 
     const auto & columns = chunk.getColumns();
     const auto num_rows = chunk.getNumRows();
 
-    /// Compute uncompressed state sizes (always) and compressed sizes (on sampled blocks).
-    /// Follows the same pattern as recordAggregationKeySizes: accumulate uncompressed bytes precisely,
-    /// sample compressed bytes on selected blocks, let the destructor compute the final estimate via the ratio.
-    /// Estimate compressed state sizes using the same column serialization path as estimateCompressedColumnSize.
-    /// This matches how other output statistics (OutputChunk, AggregationKeys) estimate compression.
+    /// Mark key columns so we can skip them — only non-key columns are aggregate states.
+    std::vector<bool> is_key(columns.size(), false);
+    for (auto pos : keys_positions)
+        is_key[pos] = true;
+
     auto get_state_column_sizes = [&](bool compress)
     {
         size_t sample_bytes = 0;
         size_t compressed_bytes = 0;
-        for (size_t i = keys_size; i < columns.size(); ++i)
+        for (size_t i = 0; i < columns.size(); ++i)
         {
+            if (is_key[i])
+                continue;
+
             if (compress)
             {
                 auto [sample, compressed] = estimateCompressedColumnSize({columns[i], header.getByPosition(i).type, ""});

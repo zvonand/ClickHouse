@@ -343,7 +343,7 @@ void AggregatingInOrderTransform::generate()
         dataflow_cache_updater->recordAggregationKeySizes(
             to_push_chunk, params->aggregator.getKeysPositions(), params->aggregator.getKeyTypes());
         dataflow_cache_updater->recordAggregationStateColumnSizes(
-            to_push_chunk, params->params.keys_size, chunk_header);
+            to_push_chunk, params->aggregator.getKeysPositions(), chunk_header);
     }
 
     /// Clear arenas to allow to free them, when chunk will reach the end of pipeline.

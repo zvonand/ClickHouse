@@ -752,8 +752,14 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
     }
     if (function_name == "hasPhrase")
     {
-        /// The sparseGrams and array tokenizers are not supported with the `hasPhrase` function.
-        if (tokenizer->getType() == ITokenizer::Type::SparseGrams || tokenizer->getType() == ITokenizer::Type::Array)
+        /// The splitByNonAlpha, splitByString, ngrams, and array tokenizers are not supported with the `hasPhrase` function.
+        static const std::unordered_set<std::string_view> supported_tokenizers = {
+            SplitByNonAlphaTokenizer::getExternalName(),
+            SplitByStringTokenizer::getExternalName(),
+            AsciiCJKTokenizer::getExternalName(),
+            NgramsTokenizer::getExternalName(),
+        };
+        if (!supported_tokenizers.contains(tokenizer->getTokenizerExternalName()))
             return false;
 
         auto tokens = stringToTokens(value_field);

@@ -67,7 +67,7 @@ INSERT INTO tab VALUES
     (4, 'lazy dog sleeps'),
     (5, 'the lazy fox');
 
--- ngrams turn a substring search into a token phrase search via the text index
+SELECT '---- ngrams turn a substring search into a token phrase search via the text index';
 -- trimming characters from either side still matches (substring property)
 SELECT groupArray(id) FROM tab WHERE hasPhrase(message, 'uick brow', 'ngrams(3)');
 SELECT groupArray(id) FROM tab WHERE hasPhrase(message, 'rown fo', 'ngrams(3)');
@@ -290,7 +290,7 @@ SELECT trimLeft(explain) AS explain FROM (
 WHERE explain LIKE '%Description:%' OR explain LIKE '%Parts:%' OR explain LIKE '%Granules:%'
 LIMIT 2, 3;
 
-SELECT 'hasPhrase with 3rd argument bypass the index';
+SELECT 'hasPhrase with 3rd argument bypasses the index';
 SELECT trimLeft(explain) AS explain FROM (
     EXPLAIN indexes=1
     SELECT count() FROM tab WHERE hasPhrase(message, 'Hello World', 'splitByNonAlpha')

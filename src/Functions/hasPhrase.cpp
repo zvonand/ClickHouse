@@ -166,7 +166,13 @@ FunctionHasPhraseOverloadResolver::buildImpl(const ColumnsWithTypeAndName & argu
 
     const auto tokenizer_name = arguments.size() < 3 || !arguments[arg_tokenizer].column ? SplitByNonAlphaTokenizer::getExternalName()
                                                                                          : arguments[arg_tokenizer].column->getDataAt(0);
-    if (tokenizer_name == SparseGramsTokenizer::getExternalName() || tokenizer_name == ArrayTokenizer::getExternalName())
+    static const std::unordered_set<std::string_view> supported_tokenizers = {
+        SplitByNonAlphaTokenizer::getExternalName(),
+        SplitByStringTokenizer::getExternalName(),
+        AsciiCJKTokenizer::getExternalName(),
+        NgramsTokenizer::getExternalName(),
+    };
+    if (!supported_tokenizers.contains(tokenizer_name))
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Function '{}' does not support the '{}' tokenizer.", name, tokenizer_name);
 
     auto tokenizer = TokenizerFactory::instance().get(tokenizer_name);
@@ -209,6 +215,7 @@ REGISTER_FUNCTION(HasPhrase)
 Checks if the haystack contains all tokens from the phrase in consecutive order.
 
 Prior to searching, the function tokenizes both the `input` and the `phrase` arguments using the tokenizer specified as the optional third argument.
+The tokenizer argument must be one of `splitByNonAlpha`, `splitByString`, `ngrams`, or `asciiCJK`.
 If no tokenizer is specified, by default the `splitByNonAlpha` tokenizer would be used.
 
 Unlike [`hasToken`](#hasToken), [`hasAnyTokens`](#hasAnyTokens) and [`hasAllTokens`](#hasAllTokens), `hasPhrase` requires the tokens to appear in the same order

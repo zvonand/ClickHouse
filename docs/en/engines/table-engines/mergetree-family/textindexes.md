@@ -486,7 +486,7 @@ Function [hasPhrase](/sql-reference/functions/string-search-functions.md/#hasPhr
 
 Unlike `hasAllTokens`, which only requires all tokens to be present somewhere, `hasPhrase` requires them to appear as a consecutive sequence.
 The search phrase is tokenized using the same tokenizer configured for the index column.
-Note that `hasPhrase` is not supported with the `sparseGrams` and `array` tokenizers.
+Note that the function requires one of the `splitByNonAlpha`, `splitByString`, `ngrams`, or `asciiCJK` tokenizers.
 
 Example:
 
@@ -874,7 +874,6 @@ The text index accelerates phrase search by intersecting the posting lists for a
 Within those granules, ClickHouse then verifies exact token adjacency.
 
 `hasPhrase` is supported with tokenizers `splitByNonAlpha`, `splitByString`, `ngrams`, and `asciiCJK`.
-It is **not** supported with the `sparseGrams` and `array` tokenizers.
 
 The phrase string is tokenized using the index's configured tokenizer.
 Tokenizer separator characters in the phrase are ignored: `hasPhrase(text, 'quick+brown')` is equivalent to `hasPhrase(text, 'quick brown')` for the `splitByNonAlpha` tokenizer.
@@ -885,30 +884,31 @@ Tokenizer separator characters in the phrase are ignored: `hasPhrase(text, 'quic
 CREATE TABLE tab (
     id UInt32,
     text String,
-    INDEX idx(text) TYPE text(tokenizer = splitByNonAlpha))
+    INDEX idx(text) TYPE text(tokenizer = splitByNonAlpha)
+)
 ENGINE = MergeTree
 ORDER BY id;
 
 INSERT INTO tab VALUES
-    (1, 'quick brown fox'),
-    (2, 'brown quick fox'),
-    (3, 'quick fox');
+    (1, 'weather in New York'),
+    (2, 'New weather in York'),
+    (3, 'weather in New Orleans');
 ```
 
 ```sql
-SELECT id, text FROM tab WHERE hasPhrase(text, 'quick brown');
+SELECT id, text FROM tab WHERE hasPhrase(text, 'weather in New York');
 ```
 
 Result:
 
 ```result
-   ┌─id─┬─text────────────┐
-1. │  1 │ quick brown fox │
-   └────┴─────────────────┘
+   ┌─id─┬─text────────────────┐
+1. │  1 │ weather in New York │
+   └────┴─────────────────────┘
 ```
 
-Row 2 (`'brown quick fox'`) does not match because the tokens are in the wrong order.
-Row 3 (`'quick fox'`) does not match because it does not contain the token `'brown'`.
+Row 2 (`'New weather in York'`) does not match because the tokens are in the wrong order.
+Row 3 (`'weather in New Orleans'`) does not match because it does not contain the token `'York'`.
 
 ## Performance Tuning {#performance-tuning}
 
@@ -996,7 +996,7 @@ However, even if the text column is accessed elsewhere in the query, direct read
 Direct read as a hint is based on the same principles as normal direct read, but instead adds an additional filter build from the text index data without removing the underlying text column.
 It is used for functions when reading only from the text index would produce false positives.
 
-Supported functions are: `like`, `startsWith`, `endsWith`, `equals`, `has`, `mapContainsKey`, and `mapContainsValue`.
+Supported functions are: `like`, `startsWith`, `endsWith`, `equals`, `has`, `hasPhrase`, `mapContainsKey`, and `mapContainsValue`.
 
 The additional filter can provide additional selectivity to restrict the result set in combination with other filters further, helping to reduce the amount of data read from other columns.
 

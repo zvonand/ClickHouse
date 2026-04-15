@@ -20,6 +20,7 @@
 [1,2]
 [1,2]
 -- Ngram tokenizer
+---- ngrams turn a substring search into a token phrase search via the text index
 [1,2]
 [1,3]
 [4]
@@ -92,7 +93,7 @@ Text index should choose 50% of granules
 Description: text GRANULARITY 100000000
 Parts: 1/1
 Granules: 512/1024
-hasPhrase with 3rd argument bypass the index
+hasPhrase with 3rd argument bypasses the index
 NOT hasPhrase - Text index analysis
 NOT hasPhrase should choose all parts and granules
 Description: text GRANULARITY 100000000

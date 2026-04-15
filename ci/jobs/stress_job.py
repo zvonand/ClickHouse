@@ -229,6 +229,7 @@ def run_stress_test(upgrade_check: bool = False) -> None:
     for test_result in test_results:
         if test_result.name == "Server died":
             server_died = True
+            continue
         if not test_result.is_ok():
             failed_results.append(test_result)
 

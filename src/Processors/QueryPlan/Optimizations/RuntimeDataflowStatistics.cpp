@@ -1,6 +1,7 @@
 #include <Processors/QueryPlan/Optimizations/RuntimeDataflowStatistics.h>
 
 #include <AggregateFunctions/IAggregateFunction.h>
+#include <Columns/ColumnAggregateFunction.h>
 #include <Compression/CompressedWriteBuffer.h>
 #include <Compression/CompressionFactory.h>
 #include <IO/NullWriteBuffer.h>
@@ -206,6 +207,57 @@ void RuntimeDataflowStatisticsCacheUpdater::recordAggregationKeySizes(
     auto & statistics = output_bytes_statistics[OutputStatisticsType::AggregationKeys];
     if (shouldSampleBlock(statistics, chunk.getNumRows()))
         std::tie(sample_bytes, compressed_bytes) = get_key_column_sizes(/*compressed=*/true);
+
+    std::lock_guard lock(statistics.mutex);
+    statistics.bytes += block_bytes;
+    if (compressed_bytes)
+    {
+        statistics.sample_bytes += sample_bytes;
+        statistics.compressed_bytes += compressed_bytes;
+    }
+    statistics.elapsed_microseconds += watch.elapsedMicroseconds();
+}
+
+void RuntimeDataflowStatisticsCacheUpdater::recordAggregationStateColumnSizes(
+    const Chunk & chunk, size_t keys_size, const Block & header)
+{
+    Stopwatch watch;
+
+    const auto & columns = chunk.getColumns();
+    const auto num_rows = chunk.getNumRows();
+
+    /// Compute uncompressed state sizes (always) and compressed sizes (on sampled blocks).
+    /// Follows the same pattern as recordAggregationKeySizes: accumulate uncompressed bytes precisely,
+    /// sample compressed bytes on selected blocks, let the destructor compute the final estimate via the ratio.
+    /// Estimate compressed state sizes using the same column serialization path as estimateCompressedColumnSize.
+    /// This matches how other output statistics (OutputChunk, AggregationKeys) estimate compression.
+    auto get_state_column_sizes = [&](bool compress)
+    {
+        size_t sample_bytes = 0;
+        size_t compressed_bytes = 0;
+        for (size_t i = keys_size; i < columns.size(); ++i)
+        {
+            if (compress)
+            {
+                auto [sample, compressed] = estimateCompressedColumnSize({columns[i], header.getByPosition(i).type, ""});
+                sample_bytes += sample;
+                compressed_bytes += compressed;
+            }
+            else
+            {
+                sample_bytes += columns[i]->byteSize();
+                compressed_bytes += columns[i]->byteSize();
+            }
+        }
+        return std::make_pair(sample_bytes, compressed_bytes);
+    };
+
+    const auto block_bytes = get_state_column_sizes(/*compress=*/false).first;
+    size_t sample_bytes = 0;
+    size_t compressed_bytes = 0;
+    auto & statistics = output_bytes_statistics[OutputStatisticsType::AggregationState];
+    if (shouldSampleBlock(statistics, num_rows))
+        std::tie(sample_bytes, compressed_bytes) = get_state_column_sizes(/*compress=*/true);
 
     std::lock_guard lock(statistics.mutex);
     statistics.bytes += block_bytes;

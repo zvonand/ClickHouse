@@ -6,6 +6,7 @@
 #include <Processors/Transforms/AggregatingTransform.h>
 #include <Processors/Transforms/finalizeChunk.h>
 #include <Processors/Chunk.h>
+#include <Processors/QueryPlan/Optimizations/RuntimeDataflowStatistics.h>
 
 namespace DB
 {
@@ -29,12 +30,14 @@ public:
                                 const SortDescription & sort_description_for_merging,
                                 const SortDescription & group_by_description_,
                                 size_t max_block_size_, size_t max_block_bytes_,
-                                ManyAggregatedDataPtr many_data, size_t current_variant);
+                                ManyAggregatedDataPtr many_data, size_t current_variant,
+                                RuntimeDataflowStatisticsCacheUpdaterPtr dataflow_cache_updater_ = nullptr);
 
     AggregatingInOrderTransform(SharedHeader header, AggregatingTransformParamsPtr params,
                                 const SortDescription & sort_description_for_merging,
                                 const SortDescription & group_by_description_,
-                                size_t max_block_size_, size_t max_block_bytes_);
+                                size_t max_block_size_, size_t max_block_bytes_,
+                                RuntimeDataflowStatisticsCacheUpdaterPtr dataflow_cache_updater_ = nullptr);
 
     ~AggregatingInOrderTransform() override;
 
@@ -88,6 +91,8 @@ private:
     Chunk to_push_chunk;
 
     RowsBeforeStepCounterPtr rows_before_aggregation;
+
+    RuntimeDataflowStatisticsCacheUpdaterPtr dataflow_cache_updater;
 
     LoggerPtr log = getLogger("AggregatingInOrderTransform");
 };

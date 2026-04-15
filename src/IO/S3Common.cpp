@@ -122,12 +122,18 @@ static bool setValueFromConfig(
         return false;
 
     auto which = field.getValue().getType();
-    if (isInt64OrUInt64FieldType(which))
-        field.setValue(config.getUInt64(path));
-    else if (which == Field::Types::String)
+    if (which == Field::Types::String)
         field.setValue(config.getString(path));
     else if (which == Field::Types::Bool)
         field.setValue(config.getBool(path));
+    else if (isInt64OrUInt64FieldType(which))
+    {
+        const auto type_name = field.getTypeName();
+        if (type_name == "UInt64" || type_name == "Int64")
+            field.setValue(config.getUInt64(path));
+        else
+            field.setValue(Field(config.getString(path)));
+    }
     else
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Unexpected type: {}", field.getTypeName());
 

@@ -76,7 +76,7 @@ TEST_F(AzureAbfssParsingTest, TableMetadataSetLocationAzureAbfssWithEndpoint)
     metadata.setLocation("abfss://mycontainer@mystorageaccount.dfs.core.windows.net/path/to/table");
     metadata.setEndpoint("https://mystorageaccount.dfs.core.windows.net");
 
-    std::string location = metadata.getLocation();
+    std::string location = metadata.getLocationWithEndpoint("https://mystorageaccount.dfs.core.windows.net");
     EXPECT_EQ(location, "https://mystorageaccount.dfs.core.windows.net/mycontainer/path/to/table/");
 }
 

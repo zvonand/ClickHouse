@@ -69,6 +69,11 @@ int RabbitMQHandler::startBlockingLoop()
 void RabbitMQHandler::stopLoop()
 {
     LOG_DEBUG(log, "Implicit loop stop.");
+}
+
+void RabbitMQHandler::stopBlockingLoop()
+{
+    LOG_DEBUG(log, "Stopping blocking loop.");
     uv_stop(loop);
 }
 

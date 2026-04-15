@@ -233,6 +233,7 @@ def test_idle_loop_shutdown_completes_promptly(started_cluster):
     the libuv loop via uv_stop.
     """
 
+    instance.query("DROP DATABASE IF EXISTS test SYNC")
     instance.query("DROP DATABASE IF EXISTS test_idle SYNC")
     instance.query("CREATE DATABASE test_idle ENGINE=Atomic")
 

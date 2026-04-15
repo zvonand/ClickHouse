@@ -358,7 +358,6 @@ void StorageRabbitMQ::loopingFunc()
 
 void StorageRabbitMQ::stopLoop()
 {
-    connection->getHandler().updateLoopState(Loop::STOP);
     connection->getHandler().stopLoop();
 }
 
@@ -373,7 +372,6 @@ void StorageRabbitMQ::stopLoopIfNoReaders()
     std::lock_guard lock(loop_mutex);
     if (readers_count)
         return;
-    connection->getHandler().updateLoopState(Loop::STOP);
     connection->getHandler().stopLoop();
 }
 

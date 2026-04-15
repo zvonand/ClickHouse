@@ -68,7 +68,8 @@ int RabbitMQHandler::startBlockingLoop()
 
 void RabbitMQHandler::stopLoop()
 {
-    LOG_DEBUG(log, "Implicit loop stop.");
+    LOG_DEBUG(log, "Stopping background loop.");
+    loop_state.store(Loop::STOP);
 }
 
 void RabbitMQHandler::stopBlockingLoop()

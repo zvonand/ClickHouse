@@ -564,19 +564,23 @@ static void setRow(Row & row, std::vector<ColumnPtr> & row_columns, const Column
     {
         try
         {
-            /// For some types like Dynamic/JSON doesn't work with Field well.
-            /// For them we store values inside the IColumn.
-            if (raw_columns[i]->hasDynamicStructure())
+            /// Always store a column-level copy to avoid lossy type conversions
+            /// in the Field roundtrip. In particular, Float32 -> Field (Float64) -> Float32
+            /// converts signaling NaN (SNaN) to quiet NaN (QNaN) on x86, changing the bit
+            /// pattern. When the sort key is a hash of a Float32 column (e.g. ORDER BY
+            /// gccMurmurHash(c1)), this silently changes the hash value and breaks sort order
+            /// during SummingMergeTree merges.
             {
                 auto column = raw_columns[i]->cloneEmpty();
                 column->reserve(1);
                 column->insertFrom(*raw_columns[i], row_num);
                 row_columns[i] = std::move(column);
             }
-            else
-            {
+
+            /// Also store the Field representation for backward compatibility —
+            /// it is used by mergeMap() for map-type column summation.
+            if (!raw_columns[i]->hasDynamicStructure())
                 raw_columns[i]->get(row_num, row[i]);
-            }
         }
         catch (const Exception & e)
         {

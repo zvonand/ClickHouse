@@ -666,7 +666,7 @@ std::string symbolizeJemallocHeapProfileToString(
 {
     WriteBufferFromOwnString out;
     pullProfileLines(input_filename, format, symbolize_with_inline, out);
-    return out.str();
+    return std::move(out.str());
 }
 
 }

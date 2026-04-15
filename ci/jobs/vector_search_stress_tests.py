@@ -714,8 +714,15 @@ class RunTest:
         for t in threads:
             t.join()
 
+    def drop_table(self):
+        logger(f"Dropping table {self._table} ...")
+        self._chclient.query(f"DROP TABLE IF EXISTS {self._table} SYNC")
+
 
 def run_single_test(test_name, dataset, test_params):
+    chclient = None
+    test_runner = None
+    result = True
     try:
         chclient = get_new_connection()
         test_runner = RunTest(chclient, dataset, test_params)
@@ -749,9 +756,15 @@ def run_single_test(test_name, dataset, test_params):
             test_runner.concurrency_test()
     except Exception as e:
         print(traceback.format_exc(), file=sys.stdout)
-        return False
+        result = False
+    finally:
+        if test_runner is not None:
+            try:
+                test_runner.drop_table()
+            except Exception:
+                print(traceback.format_exc(), file=sys.stdout)
 
-    return True
+    return result
 
 
 def install_and_start_clickhouse():

@@ -81,7 +81,7 @@ IProcessor::Status LazyReadReplacingFinalSource::prepare()
 
     auto chunk = input.pull();
     output.push(std::move(chunk));
-    return Status::NeedData;
+    return Status::PortFull;
 }
 
 static void calculateGlobalOffset(ActionsDAG & dag, ReadFromMergeTree & reading_step)

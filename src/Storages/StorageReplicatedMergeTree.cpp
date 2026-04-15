@@ -6565,12 +6565,11 @@ bool StorageReplicatedMergeTree::executeMetadataAlter(const StorageReplicatedMer
         auto alter_lock_holder = lockForAlter((*getSettings())[MergeTreeSetting::lock_acquire_timeout_for_background_operations]);
         LOG_INFO(log, "Metadata changed in ZooKeeper. Applying changes locally.");
 
-        const auto current_metadata = getInMemoryMetadataPtr(getContext(), false);
         const auto table_metadata = ReplicatedMergeTreeTableMetadata(*this, current_metadata);
         auto metadata_diff = table_metadata.checkAndFindDiff(metadata_from_entry, current_metadata->columns, current_metadata->virtuals, getStorageID().getNameForLogs(), getContext());
         setTableStructure(table_id, alter_context, std::move(columns_from_entry), metadata_diff, entry.alter_version);
 
-        LOG_INFO(log, "Applied changes to the metadata of the table. Current metadata version: {}", current_metadata->getMetadataVersion());
+        LOG_INFO(log, "Applied changes to the metadata of the table. Current metadata version: {}", getInMemoryMetadataPtr(getContext(), true)->getMetadataVersion());
     }
 
     {

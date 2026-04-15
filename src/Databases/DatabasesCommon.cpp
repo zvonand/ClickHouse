@@ -229,7 +229,7 @@ void applyMetadataChangesToCreateQuery(const ASTPtr & query, const StorageInMemo
         ast_create_query.set(ast_create_query.comment, make_intrusive<ASTLiteral>(metadata.comment));
 
     if (validate_new_create_query)
-        validateCreateQuery(ast_create_query, virtual_columns, context);
+        validateCreateQuery(ast_create_query, metadata.virtuals, context);
 }
 
 

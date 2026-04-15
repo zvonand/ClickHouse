@@ -381,7 +381,7 @@ void ReplicatedMergeTreeTableMetadata::checkImmutableFieldsEquals(
     if (data_format_version != from_zk.data_format_version)
         handleTableMetadataMismatch(table_name_for_error_message, "data format version", DB::toString(from_zk.data_format_version.toUnderType()), "", DB::toString(data_format_version.toUnderType()));
 
-    String parsed_zk_partition_key = formattedAST(KeyDescription::parse(from_zk.partition_key, columns, {}, context, false).expression_list_ast);
+    String parsed_zk_partition_key = formattedAST(KeyDescription::parse(from_zk.partition_key, columns, virtuals, context, false).expression_list_ast);
     if (partition_key != parsed_zk_partition_key)
         handleTableMetadataMismatch(table_name_for_error_message, "partition key expression", from_zk.partition_key, parsed_zk_partition_key, partition_key);
 }
@@ -399,7 +399,7 @@ bool ReplicatedMergeTreeTableMetadata::checkEquals(
     bool is_equal = true;
     checkImmutableFieldsEquals(from_zk, columns, virtuals, table_name_for_error_message, context, check_index_granularity);
 
-    String parsed_zk_sampling_expression = formattedAST(KeyDescription::parse(from_zk.sampling_expression, columns, {}, context, false).definition_ast);
+    String parsed_zk_sampling_expression = formattedAST(KeyDescription::parse(from_zk.sampling_expression, columns, virtuals, context, false).definition_ast);
     if (sampling_expression != parsed_zk_sampling_expression)
     {
         handleTableMetadataMismatch(table_name_for_error_message, "sampling expression", from_zk.sampling_expression, parsed_zk_sampling_expression, sampling_expression, strict_check, logger);

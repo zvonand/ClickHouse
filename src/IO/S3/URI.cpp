@@ -114,6 +114,8 @@ URI::URI(const std::string & uri_, bool allow_archive_path_syntax, bool keep_pre
         String uri_with_question_mark_encode;
         Poco::URI::encode(uri_, "?", uri_with_question_mark_encode);
         uri = Poco::URI(uri_with_question_mark_encode);
+        if (!mapper.empty())
+            URIConverter::modifyURI(uri, mapper);
     }
 
     /// Defer handling of non-versionId, non-presigned queries until after style detection.

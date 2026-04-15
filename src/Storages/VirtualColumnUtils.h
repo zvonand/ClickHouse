@@ -158,8 +158,8 @@ bool hasRowDependentVirtualColumns(const NamesAndTypesList & requested_virtual_c
 
 /// Append virtual columns to a physical columns list for expression analysis.
 /// Virtual columns that already exist in the list are skipped.
+NamesAndTypesList getColumnsWithVirtualsForAnalysis(const ColumnsDescription & columns, const VirtualColumnsDescription & virtual_columns);
 NamesAndTypesList getColumnsWithVirtualsForAnalysis(const NamesAndTypesList & columns, const NamesAndTypesList & virtual_columns);
-NamesAndTypesList getColumnsWithVirtualsForAnalysis(const ColumnsDescription & columns, const NamesAndTypesList & virtual_columns);
 
 /// Find hive partitioning part inside path
 /// /a/b/c/d=e/f=g/h.i => d=e/f=g

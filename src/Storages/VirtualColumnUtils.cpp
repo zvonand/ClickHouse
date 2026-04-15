@@ -747,6 +747,11 @@ Names filterVirtualColumns(
     return result;
 }
 
+NamesAndTypesList getColumnsWithVirtualsForAnalysis(const ColumnsDescription & columns, const VirtualColumnsDescription & virtual_columns)
+{
+    return getColumnsWithVirtualsForAnalysis(columns.getAllPhysical(), virtual_columns.getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::All).getNamesAndTypesList());
+}
+
 NamesAndTypesList getColumnsWithVirtualsForAnalysis(const NamesAndTypesList & columns, const NamesAndTypesList & virtual_columns)
 {
     auto result = columns;
@@ -781,11 +786,6 @@ std::pair<Names, Names> splitPhysicalAndVirtualColumnNames(const Names & column_
     }
 
     return {std::move(physical_names), std::move(virtual_names)};
-}
-
-NamesAndTypesList getColumnsWithVirtualsForAnalysis(const ColumnsDescription & columns, const NamesAndTypesList & virtual_columns)
-{
-    return getColumnsWithVirtualsForAnalysis(columns.get(GetColumnsOptions(GetColumnsOptions::Kind::AllPhysical).withSubcolumns()), virtual_columns);
 }
 
 }

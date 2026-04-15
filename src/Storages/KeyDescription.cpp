@@ -235,7 +235,7 @@ KeyDescription KeyDescription::buildEmptyKey()
 KeyDescription KeyDescription::parse(
     const String & str,
     const ColumnsDescription & columns,
-    const NamesAndTypesList & virtual_columns,
+    const VirtualColumnsDescription & virtuals,
     const ContextPtr & context,
     bool allow_order)
 {
@@ -247,7 +247,7 @@ KeyDescription KeyDescription::parse(
     ASTPtr ast = parseQuery(parser, "(" + str + ")", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS);
     FunctionNameNormalizer::visit(ast.get());
 
-    return getKeyFromAST(ast, columns, virtual_columns, context);
+    return getKeyFromAST(ast, columns, virtuals, context);
 }
 
 }

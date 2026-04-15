@@ -58,7 +58,12 @@ class ClickHouseService:
                 dirs_exist_ok=True,
             )
 
-        # Prepare directories
+        # Recreate data directory so it is owned by the current process user.
+        # If the directory was created on the host by a different UID (e.g. 501
+        # on macOS) and the server runs as root inside Docker, ClickHouse raises
+        # MISMATCHING_USERS_FOR_PROCESS_AND_DATA and refuses to start.
+        if Path(self.run_path).exists():
+            shutil.rmtree(self.run_path)
         Path(self.run_path).mkdir(parents=True, exist_ok=True)
         Path(self.log_dir).mkdir(parents=True, exist_ok=True)
         Path(self.pid_file).unlink(missing_ok=True)

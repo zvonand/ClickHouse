@@ -191,4 +191,31 @@ TEST(JemallocProfileSource, CollapsedNoV2HeaderRawPassthrough)
     std::filesystem::remove(input);
 }
 
+/// When the heap_v2 header has a malformed interval (e.g. "heap_v2/abc"),
+/// parseSamplingInterval should return 0 and raw values should pass through.
+TEST(JemallocProfileSource, CollapsedMalformedHeaderRawPassthrough)
+{
+    std::string profile_malformed = "heap_v2/abc\n";
+    auto nl = test_heap_profile.find('\n');
+    profile_malformed += std::string(test_heap_profile.substr(nl + 1));
+
+    auto input = writeToTempFile(profile_malformed, "gtest_jemalloc_profile_malformed.heap");
+
+    /// Bytes mode — should return raw bytes without Poisson correction.
+    {
+        std::string collapsed_output = runCollapsedProfile(input, /* collapsed_use_count= */ false);
+        UInt64 total = sumCollapsedValues(collapsed_output);
+        EXPECT_EQ(total, expected_raw_total);
+    }
+
+    /// Count mode — should return raw counts without Poisson correction.
+    {
+        std::string collapsed_output = runCollapsedProfile(input, /* collapsed_use_count= */ true);
+        UInt64 total = sumCollapsedValues(collapsed_output);
+        EXPECT_EQ(total, expected_raw_count_total);
+    }
+
+    std::filesystem::remove(input);
+}
+
 #endif

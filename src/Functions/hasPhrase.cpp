@@ -166,16 +166,16 @@ FunctionHasPhraseOverloadResolver::buildImpl(const ColumnsWithTypeAndName & argu
 
     const auto tokenizer_name = arguments.size() < 3 || !arguments[arg_tokenizer].column ? SplitByNonAlphaTokenizer::getExternalName()
                                                                                          : arguments[arg_tokenizer].column->getDataAt(0);
-    static const std::unordered_set<std::string_view> supported_tokenizers = {
-        SplitByNonAlphaTokenizer::getExternalName(),
-        SplitByStringTokenizer::getExternalName(),
-        AsciiCJKTokenizer::getExternalName(),
-        NgramsTokenizer::getExternalName(),
+    auto tokenizer = TokenizerFactory::instance().get(tokenizer_name);
+    static const std::unordered_set<ITokenizer::Type> supported_types = {
+        ITokenizer::Type::SplitByNonAlpha,
+        ITokenizer::Type::SplitByString,
+        ITokenizer::Type::AsciiCJK,
+        ITokenizer::Type::Ngrams,
     };
-    if (!supported_tokenizers.contains(tokenizer_name))
+    if (!supported_types.contains(tokenizer->getType()))
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Function '{}' does not support the '{}' tokenizer.", name, tokenizer_name);
 
-    auto tokenizer = TokenizerFactory::instance().get(tokenizer_name);
     auto phrase_tokens = initializePhraseTokens(arguments, *tokenizer, getName());
     DataTypes argument_types{std::from_range_t{}, arguments | std::views::transform([](auto & elem) { return elem.type; })};
     return std::make_shared<FunctionBaseHasPhrase>(std::move(tokenizer), std::move(phrase_tokens), std::move(argument_types), return_type);

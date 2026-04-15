@@ -716,7 +716,9 @@ class RunTest:
 
     def drop_table(self):
         logger(f"Dropping table {self._table} ...")
-        self._chclient.query(f"DROP TABLE IF EXISTS {self._table} SYNC")
+        self._chclient.query(
+            f"DROP TABLE IF EXISTS {self._table} SYNC SETTINGS max_table_size_to_drop = 0"
+        )
 
 
 def run_single_test(test_name, dataset, test_params):
@@ -826,6 +828,11 @@ def install_and_start_clickhouse():
 # Array of (dataset, test_params)
 TESTS_TO_RUN = [
     (
+        "Test using the cohere wiki dataset",
+        dataset_cohere_wiki_20m,
+        test_params_cohere_wiki_20m,
+    ),
+    (
         "Test using the laion dataset",
         dataset_laion_5b_mini_for_quick_test,
         test_params_laion_5b_1m,
@@ -834,11 +841,6 @@ TESTS_TO_RUN = [
         "Test using the hackernews dataset",
         dataset_hackernews_openai,
         test_params_hackernews_10m,
-    ),
-    (
-        "Test using the cohere wiki dataset",
-        dataset_cohere_wiki_20m,
-        test_params_cohere_wiki_20m,
     ),
 ]
 

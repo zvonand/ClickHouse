@@ -143,22 +143,29 @@ uint32_t ConfluentSchemaRegistry::registerSchema(const std::string & subject, co
     {
         try
         {
-            Poco::URI url(base_url, base_url.getPath() + "/subjects/" + subject + "/versions");
-            LOG_TRACE(getLogger("ConfluentSchemaRegistry"), "Registering schema under subject '{}' at url {}", subject, url.toString());
+            /// Percent-encode the subject for use as a path segment.
+            std::string encoded_subject;
+            Poco::URI::encode(subject, "?#/;+@&=", encoded_subject);
+
+            /// Build the request path directly to preserve percent-encoding.
+            /// Poco::URI normalizes paths by decoding %2F -> /, which breaks
+            /// subjects containing slashes.
+            std::string request_path = base_url.getPath() + "/subjects/" + encoded_subject + "/versions";
+            LOG_TRACE(getLogger("ConfluentSchemaRegistry"), "Registering schema under subject '{}' at path {}", subject, request_path);
 
             auto timeouts = ConnectionTimeouts()
                 .withConnectionTimeout(1)
                 .withSendTimeout(1)
                 .withReceiveTimeout(1);
 
-            Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, url.getPathAndQuery(), Poco::Net::HTTPRequest::HTTP_1_1);
+            Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, request_path, Poco::Net::HTTPRequest::HTTP_1_1);
             request.setContentType("application/vnd.schemaregistry.v1+json");
-            if (url.getPort())
-                request.setHost(url.getHost(), url.getPort());
+            if (base_url.getPort())
+                request.setHost(base_url.getHost(), base_url.getPort());
             else
-                request.setHost(url.getHost());
+                request.setHost(base_url.getHost());
 
-            applyAuth(url, request);
+            applyAuth(base_url, request);
 
             /// Build request body: {"schema": "<schema_json>"}
             Poco::JSON::Object body;
@@ -168,7 +175,7 @@ uint32_t ConfluentSchemaRegistry::registerSchema(const std::string & subject, co
             std::string body_str = body_stream.str();
             request.setContentLength(body_str.size());
 
-            auto session = makeHTTPSession(HTTPConnectionGroupType::HTTP, url, timeouts);
+            auto session = makeHTTPSession(HTTPConnectionGroupType::HTTP, base_url, timeouts);
             std::ostream & os = session->sendRequest(request);
             os << body_str;
 

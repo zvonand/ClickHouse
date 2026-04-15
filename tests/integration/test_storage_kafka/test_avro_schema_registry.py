@@ -5,8 +5,6 @@ Verifies that ClickHouse can produce AvroConfluent-framed messages into Kafka
 through the Confluent Schema Registry.
 """
 
-import io
-import logging
 import struct
 
 import avro.schema

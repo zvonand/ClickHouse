@@ -1,6 +1,7 @@
 import io
+import json
 import logging
-import time
+import urllib.request
 from urllib import parse
 
 import avro.schema
@@ -273,6 +274,71 @@ def test_output_multiple_columns(started_cluster):
         ["2", "bob"],
         ["3", "charlie"],
     ]
+
+
+def test_output_subject_encoding(started_cluster):
+    # type: (ClickHouseCluster) -> None
+
+    # Subject names with reserved URI characters (/, ?, #) must be properly
+    # encoded when registering with the Schema Registry. First register a
+    # schema under such a subject using the official Python client (ground
+    # truth), then do the same from ClickHouse and compare the stored names.
+
+    instance = started_cluster.instances["dummy"]  # type: ClickHouseInstance
+    schema_registry_url = "http://{}:{}".format(
+        started_cluster.schema_registry_host, started_cluster.schema_registry_port
+    )
+    local_registry_url = "http://localhost:{}".format(
+        started_cluster.schema_registry_port
+    )
+
+    subject_with_special_chars = "my/topic?key#value"
+
+    # Now register a schema under the same subject from ClickHouse
+    run_query(
+        instance,
+        "create table avro_output_enc_source(id Int64) engine = Memory()",
+    )
+    run_query(instance, "insert into avro_output_enc_source values (1),(2),(3)")
+
+    settings = {
+        "format_avro_schema_registry_url": schema_registry_url,
+        "output_format_avro_confluent_subject": subject_with_special_chars,
+    }
+    data = run_query(
+        instance,
+        "select * from avro_output_enc_source format AvroConfluent",
+        settings=settings,
+    )
+
+    # Read back via AvroConfluent input to verify the framing is valid
+    run_query(
+        instance,
+        "create table avro_output_enc_sink(id Int64) engine = Memory()",
+    )
+    settings_in = {"format_avro_schema_registry_url": schema_registry_url}
+    run_query(
+        instance,
+        "insert into avro_output_enc_sink format AvroConfluent",
+        data,
+        settings_in,
+    )
+    stdout = run_query(instance, "select * from avro_output_enc_sink")
+    assert list(map(str.split, stdout.splitlines())) == [
+        ["1"],
+        ["2"],
+        ["3"],
+    ]
+
+    # Verify ClickHouse registered the schema under the same subject name
+    # as the Python client (not under a mangled/encoded variant)
+    subjects_after = json.loads(
+        urllib.request.urlopen(local_registry_url + "/subjects").read()
+    )
+    logging.info(f"Subjects in Schema Registry after registration: {subjects_after}")
+    assert subject_with_special_chars in subjects_after, (
+        f"ClickHouse registered under wrong subject: {subjects_after}"
+    )
 
 
 def test_select_auth_encoded_complex(started_cluster):

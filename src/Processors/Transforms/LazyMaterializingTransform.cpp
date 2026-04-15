@@ -1,5 +1,5 @@
-#include <iostream>
 #include <Processors/Transforms/LazyMaterializingTransform.h>
+
 #include <Processors/QueryPlan/Optimizations/RuntimeDataflowStatistics.h>
 #include <Interpreters/Squashing.h>
 #include <Interpreters/sortBlock.h>
@@ -7,6 +7,7 @@
 #include <Core/SortDescription.h>
 #include <Columns/ColumnsNumber.h>
 #include <Storages/MergeTree/IMergeTreeDataPart.h>
+#include <Common/RadixSort.h>
 #include <Common/Stopwatch.h>
 #include <Common/logger_useful.h>
 
@@ -278,13 +279,26 @@ void LazyMaterializingTransform::prepareMainChunk()
     columns.erase(columns.begin() + pos);
     result_chunk = Chunk(std::move(columns), rows);
 
-    /// Here we create a block with one column with empty name, and sort description with empty name.
-    /// It just works.
-    Block block({{index_col, std::make_shared<DataTypeUInt64>(), {}}});
-    SortDescription descr;
-    descr.emplace_back(std::string{});
-
+    if (pass_through)
     {
+        /// In pass-through mode we only need sorted indexes, no permutation.
+        Stopwatch sort_watch;
+
+        auto mutable_col = IColumn::mutate(std::move(index_col));
+        sorted_indexes = std::move(assert_cast<ColumnUInt64 &>(*mutable_col).getData());
+        radixSortLSD(sorted_indexes.data(), sorted_indexes.size());
+
+        sort_ms = sort_watch.elapsedMilliseconds();
+        permute_ms = 0;
+    }
+    else
+    {
+        /// Here we create a block with one column with empty name, and sort description with empty name.
+        /// It just works.
+        Block block({{index_col, std::make_shared<DataTypeUInt64>(), {}}});
+        SortDescription descr;
+        descr.emplace_back(std::string{});
+
         Stopwatch permutation_watch;
         stableGetPermutation(block, descr, permutation);
         sort_ms = permutation_watch.elapsedMilliseconds();

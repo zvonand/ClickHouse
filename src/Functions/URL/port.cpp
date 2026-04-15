@@ -99,8 +99,9 @@ private:
             return default_port;
 
         p = host.data() + host.size();
-        if (*p++ != ':')
+        if (p >= end || *p != ':')
             return default_port;
+        ++p;
 
         Int64 port = default_port;
         while (p < end)

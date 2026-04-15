@@ -36,7 +36,8 @@ SYSTEM FLUSH LOGS query_log;
 SELECT '-- use text index reader for all parts';
 SELECT ProfileEvents['TextIndexReadPostings'] = ProfileEvents['SelectedPartsTotal'] FROM system.query_log WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'tab_fully_hasAnyToken';
 SELECT ProfileEvents['TextIndexReadPostings'] = ProfileEvents['SelectedPartsTotal'] FROM system.query_log WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'tab_fully_hasAllToken';
-SELECT ProfileEvents['TextIndexReadPostings'] = ProfileEvents['SelectedPartsTotal'] FROM system.query_log WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'tab_fully_hasPhrase';
+-- "ello50 wor" contains 8 tokens when tokenized by ngrams(3)
+SELECT ProfileEvents['TextIndexReadPostings'] = (8 * ProfileEvents['SelectedPartsTotal']) FROM system.query_log WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'tab_fully_hasPhrase';
 
 SELECT '-- verify all parts have a materialized index';
 SELECT count() = 0 FROM system.parts WHERE database = currentDatabase() AND table = 'tab_fully' AND active AND secondary_indices_marks_bytes = 0;
@@ -70,7 +71,8 @@ SYSTEM FLUSH LOGS query_log;
 SELECT '-- use text index reader for parts have a materialized index';
 SELECT ProfileEvents['TextIndexReadPostings'] < ProfileEvents['SelectedPartsTotal'] FROM system.query_log WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'tab_partially_hasAnyToken';
 SELECT ProfileEvents['TextIndexReadPostings'] < ProfileEvents['SelectedPartsTotal'] FROM system.query_log WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'tab_partially_hasAllToken';
-SELECT ProfileEvents['TextIndexReadPostings'] < ProfileEvents['SelectedPartsTotal'] FROM system.query_log WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'tab_partially_hasPhrase';
+-- "ello50 wor" contains 8 tokens when tokenized by ngrams(3)
+SELECT ProfileEvents['TextIndexReadPostings'] < (8 * ProfileEvents['SelectedPartsTotal']) FROM system.query_log WHERE event_date >= yesterday() AND event_time >= now() - 600 AND type = 'QueryFinish' AND current_database = currentDatabase() AND log_comment = 'tab_partially_hasPhrase';
 
 SELECT '-- verify some parts do not have a materialized index';
 SELECT count() > 0 FROM system.parts WHERE database = currentDatabase() AND table = 'tab_partially' AND secondary_indices_marks_bytes = 0;

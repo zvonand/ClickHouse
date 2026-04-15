@@ -667,7 +667,15 @@ AvroDeserializer::DeserializeFn AvroDeserializer::createDeserializeFn(const avro
             break;
         }
         case avro::AVRO_SYMBOLIC:
-            return createDeserializeFn(avro::resolveSymbol(root_node), target_type);
+        {
+            const auto & sym_name = root_node->name().fullname();
+            if (!symbolic_deserialize_guard.insert(sym_name).second)
+                throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                    "Recursive Avro schema is not supported: type '{}' references itself", sym_name);
+            auto result = createDeserializeFn(avro::resolveSymbol(root_node), target_type);
+            symbolic_deserialize_guard.erase(sym_name);
+            return result;
+        }
         case avro::AVRO_RECORD:
         {
             if (target.isTuple())
@@ -916,15 +924,22 @@ AvroDeserializer::Action AvroDeserializer::createAction(const Block & header, co
 {
     if (node->type() == avro::AVRO_SYMBOLIC)
     {
+        const auto & sym_name = node->name().fullname();
+        if (!symbolic_deserialize_guard.insert(sym_name).second)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                "Recursive Avro schema is not supported: type '{}' references itself", sym_name);
+
         /// continue traversal only if some column name starts with current_path
         auto keep_going = std::any_of(header.begin(), header.end(), [&current_path](const ColumnWithTypeAndName & col)
         {
             return col.name.starts_with(current_path);
         });
         auto resolved_node = avro::resolveSymbol(node);
-        if (keep_going)
-            return createAction(header, resolved_node, current_path);
-        return AvroDeserializer::Action(createSkipFn(resolved_node));
+        Action result = keep_going
+            ? createAction(header, resolved_node, current_path)
+            : AvroDeserializer::Action(createSkipFn(resolved_node));
+        symbolic_deserialize_guard.erase(sym_name);
+        return result;
     }
 
     if (header.has(current_path))
@@ -1338,6 +1353,12 @@ NamesAndTypesList AvroSchemaReader::readSchema()
 
 DataTypePtr AvroSchemaReader::avroNodeToDataType(avro::NodePtr node)
 {
+    std::unordered_set<std::string> seen_names;
+    return avroNodeToDataTypeImpl(node, seen_names);
+}
+
+DataTypePtr AvroSchemaReader::avroNodeToDataTypeImpl(const avro::NodePtr & node, std::unordered_set<std::string> & seen_names)
+{
     switch (node->type())
     {
         case avro::Type::AVRO_INT:
@@ -1406,7 +1427,7 @@ DataTypePtr AvroSchemaReader::avroNodeToDataType(avro::NodePtr node)
             return std::make_shared<DataTypeFixedString>(node->fixedSize());
         }
         case avro::Type::AVRO_ARRAY:
-            return std::make_shared<DataTypeArray>(avroNodeToDataType(node->leafAt(0)));
+            return std::make_shared<DataTypeArray>(avroNodeToDataTypeImpl(node->leafAt(0), seen_names));
         case avro::Type::AVRO_NULL:
             return std::make_shared<DataTypeNothing>();
         case avro::Type::AVRO_UNION:
@@ -1414,7 +1435,7 @@ DataTypePtr AvroSchemaReader::avroNodeToDataType(avro::NodePtr node)
             // Treat union[T] as just T
             if (node->leaves() == 1)
             {
-                return avroNodeToDataType(node->leafAt(0));
+                return avroNodeToDataTypeImpl(node->leafAt(0), seen_names);
             }
 
             // Treat union[T, NULL] and union[NULL, T] as Nullable(T)
@@ -1423,7 +1444,7 @@ DataTypePtr AvroSchemaReader::avroNodeToDataType(avro::NodePtr node)
                 && (node->leafAt(0)->type() == avro::Type::AVRO_NULL || node->leafAt(1)->type() == avro::Type::AVRO_NULL))
             {
                 int nested_leaf_index = node->leafAt(0)->type() == avro::Type::AVRO_NULL ? 1 : 0;
-                auto nested_type = avroNodeToDataType(node->leafAt(nested_leaf_index));
+                auto nested_type = avroNodeToDataTypeImpl(node->leafAt(nested_leaf_index), seen_names);
                 return nested_type->canBeInsideNullable() ? makeNullable(nested_type) : nested_type;
             }
 
@@ -1439,27 +1460,37 @@ DataTypePtr AvroSchemaReader::avroNodeToDataType(avro::NodePtr node)
                 if (node->leafAt(i)->type() == avro::Type::AVRO_NULL) continue;
 
                 const auto & avro_node = node->leafAt(i);
-                nested_types.push_back(avroNodeToDataType(avro_node));
+                nested_types.push_back(avroNodeToDataTypeImpl(avro_node, seen_names));
             }
             return std::make_shared<DataTypeVariant>(nested_types);
         }
         case avro::Type::AVRO_SYMBOLIC:
-            return avroNodeToDataType(avro::resolveSymbol(node));
+        {
+            auto resolved = avro::resolveSymbol(node);
+            return avroNodeToDataTypeImpl(resolved, seen_names);
+        }
         case avro::Type::AVRO_RECORD:
         {
+            const auto & name = node->name().fullname();
+            if (!seen_names.insert(name).second)
+                throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                    "Recursive Avro schema is not supported: type '{}' references itself", name);
+
             DataTypes nested_types;
             nested_types.reserve(node->leaves());
             Names nested_names;
             nested_names.reserve(node->leaves());
             for (int i = 0; i != static_cast<int>(node->leaves()); ++i)
             {
-                nested_types.push_back(avroNodeToDataType(node->leafAt(i)));
+                nested_types.push_back(avroNodeToDataTypeImpl(node->leafAt(i), seen_names));
                 nested_names.push_back(node->nameAt(i));
             }
+
+            seen_names.erase(name);
             return std::make_shared<DataTypeTuple>(nested_types, nested_names);
         }
         case avro::Type::AVRO_MAP:
-            return std::make_shared<DataTypeMap>(avroNodeToDataType(node->leafAt(0)), avroNodeToDataType(node->leafAt(1)));
+            return std::make_shared<DataTypeMap>(avroNodeToDataTypeImpl(node->leafAt(0), seen_names), avroNodeToDataTypeImpl(node->leafAt(1), seen_names));
         default:
             throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Avro column {} is not supported for inserting.", nodeName(node));
     }

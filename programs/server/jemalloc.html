@@ -2318,7 +2318,6 @@
             const statusColor = isEnabled ? 'var(--success-color)' : 'var(--error-color)';
             const statusText = isEnabled ? 'Enabled' : 'Disabled';
             const statusIcon = isEnabled ? '✓' : '✗';
-            const instanceName = isKeeper ? 'Keeper' : 'server';
             const enableHint = isKeeper
                 ? 'To enable it, set <code style="background: var(--table-header-bg); padding: 0.2rem 0.4rem; border-radius: 3px;">jemalloc_enable_global_profiler</code> in Keeper config and restart.'
                 : 'To enable it, set <code style="background: var(--table-header-bg); padding: 0.2rem 0.4rem; border-radius: 3px;">jemalloc_enable_global_profiler</code> in server config and restart the instance. Note that per-query profiling can still be used independently.';

@@ -12,6 +12,7 @@
 
 #if USE_JEMALLOC
 #include <Common/Jemalloc.h>
+#include <Processors/Sources/JemallocProfileSource.h>
 #include <IO/ReadBufferFromFile.h>
 #include <IO/ReadHelpers.h>
 #include <Poco/JSON/Object.h>
@@ -106,7 +107,7 @@ try
 
     if (format == "collapsed")
     {
-        output = Jemalloc::heapProfileToCollapsedStacks(raw_file);
+        output = symbolizeJemallocHeapProfileToString(raw_file, JemallocProfileFormat::Collapsed, /* symbolize_with_inline= */ false);
     }
     else
     {

@@ -1017,7 +1017,7 @@ void ZooKeeper::receiveEvent()
             const WatchResponse & watch_response = dynamic_cast<const WatchResponse &>(response_);
 
             auto event_type = watch_response.type;
-            auto trigger_watches = [&watch_response](Watches & watches_container)
+            auto trigger_watches = [this, &watch_response](Watches & watches_container)
             {
                 auto it = watches_container.find(watch_response.path);
                 if (it == watches_container.end())
@@ -1158,6 +1158,9 @@ void ZooKeeper::receiveEvent()
 
             if (!callbacks.insert(watch).second)
                 return;
+
+            if (watches_tracker)
+                watches_tracker->add(req_path, req, watch);
 
             /// Warn only for debug or sanitizers builds (i.e. CI), since it is OK to have 100 replicas,
             /// but if we will log only if the number of watches > 1000..10000, then, CI will not capture anything.

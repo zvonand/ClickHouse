@@ -134,14 +134,6 @@ workflow = Workflow.Config(
         ],
         *[
             job.set_run_after(FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES)
-            for job in JobConfigs.stress_test_serverfuzz_jobs
-        ],
-        *[
-            job.set_run_after(FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES)
-            for job in JobConfigs.buzz_fuzzer_serverfuzz_jobs
-        ],
-        *[
-            job.set_run_after(FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES)
             for job in JobConfigs.performance_comparison_with_master_head_jobs
         ],
         JobConfigs.llvm_coverage_job,

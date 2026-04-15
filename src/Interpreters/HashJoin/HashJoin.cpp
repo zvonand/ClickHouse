@@ -2158,7 +2158,7 @@ void HashJoin::reinitUsedFlags()
             prefer_use_maps_all,
             [this](auto kind_, auto strictness_, auto & map_)
             {
-                used_flags->reinit<kind_, strictness_, std::is_same_v<std::decay_t<decltype(map_)>, MapsAll>>(
+                used_flags->reinitAllowShrinking<kind_, strictness_, std::is_same_v<std::decay_t<decltype(map_)>, MapsAll>>(
                     map_.getBufferSizeInCells(data->type) + 1);
             });
     }

@@ -460,16 +460,7 @@ class Result(MetaClasses.Serializable):
                 name = f"pytest_{command}"
 
             # Run pytest
-            # Exit codes 0 and 1 are normal pytest outcomes (all tests passed / some
-            # tests failed).  Any other exit code means pytest itself could not run
-            # (e.g. missing plugin, bad arguments), so raise immediately with a clear
-            # message instead of propagating a misleading "report file not found" error.
-            exit_code = Shell.run(full_command, log_file=logfile, timeout=timeout)
-            if exit_code not in (0, 1):
-                raise RuntimeError(
-                    f"pytest command failed with exit code {exit_code}; "
-                    f"check the log: {logfile}"
-                )
+            Shell.run(full_command, log_file=logfile, timeout=timeout)
             test_result = ResultTranslator.from_pytest_jsonl(
                 pytest_report_file=pytest_report_file
             )

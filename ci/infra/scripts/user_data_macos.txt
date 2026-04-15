@@ -84,8 +84,9 @@ else
   sudo -u "$USER" -i bash -c '$(brew --prefix python@3)/bin/python3 -m venv ~/venv && ~/venv/bin/pip install boto3 pygithub requests urllib3 unidiff dohq-artifactory pyjwt'
 
   # Add venv/bin and GNU coreutils to PATH for both bash and zsh login shells
-  sudo -u "$USER" -i bash -c "echo 'export PATH=\"\$HOME/venv/bin:/opt/homebrew/opt/coreutils/libexec/gnubin:\$PATH\"' >> ~/.bash_profile"
-  sudo -u "$USER" -i bash -c "echo 'export PATH=\"\$HOME/venv/bin:/opt/homebrew/opt/coreutils/libexec/gnubin:\$PATH\"' >> ~/.zprofile"
+  GNU_COREUTILS_BIN=$(sudo -u "$USER" -i brew --prefix coreutils)/libexec/gnubin
+  sudo -u "$USER" -i bash -c "echo 'export PATH=\"\$HOME/venv/bin:${GNU_COREUTILS_BIN}:\$PATH\"' >> ~/.bash_profile"
+  sudo -u "$USER" -i bash -c "echo 'export PATH=\"\$HOME/venv/bin:${GNU_COREUTILS_BIN}:\$PATH\"' >> ~/.zprofile"
 
   # Download and install CloudWatch agent
   echo "Installing Amazon CloudWatch agent..."

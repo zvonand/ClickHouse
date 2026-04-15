@@ -251,31 +251,6 @@ class ClickHouseProc:
             f"Set max_server_memory_usage_to_ram_ratio to {ratio} in {file_path}"
         )
 
-    @staticmethod
-    def download_binary():
-        """
-        Downloads the latest master ClickHouse binary from S3 into the ci/tmp directory.
-        The architecture is detected automatically (aarch64 / amd64).
-        Skips the download if the binary is already present.
-        Returns True on success, False on failure.
-        """
-        dest = Path(temp_dir) / "clickhouse"
-        if dest.exists():
-            print(f"ClickHouse binary already present at [{dest}], skipping download")
-            dest.chmod(0o755)
-            return True
-        arch = "aarch64" if Utils.is_arm() else "amd64"
-        url = f"https://clickhouse-builds.s3.us-east-1.amazonaws.com/master/{arch}/clickhouse"
-        print(f"Downloading ClickHouse binary from [{url}] to [{dest}]")
-        try:
-            import urllib.request
-            urllib.request.urlretrieve(url, dest)
-            dest.chmod(0o755)
-            return True
-        except Exception as e:
-            print(f"ERROR: failed to download ClickHouse binary: {e}")
-            return False
-
     def install_light(self):
         """
         Public interface for `_install_light`: sets up a minimal ClickHouse config

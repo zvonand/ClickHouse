@@ -127,12 +127,12 @@ namespace
 class StorageProjectionSource final : public IStorage
 {
 public:
-    explicit StorageProjectionSource(ColumnsDescription columns_description)
+    explicit StorageProjectionSource(const ColumnsDescription & columns_description, const KeyDescription * partition_key)
         : IStorage({"_", "_"})
     {
         StorageInMemoryMetadata storage_metadata;
         storage_metadata.setColumns(columns_description);
-        storage_metadata.setVirtuals(MergeTreeData::createVirtuals(nullptr));
+        storage_metadata.setVirtuals(MergeTreeData::createVirtuals(partition_key));
         setInMemoryMetadata(storage_metadata);
     }
 
@@ -301,7 +301,7 @@ void ProjectionDescription::fillProjectionDescriptionByQuery(
     /// physical column either because it's used to build part offset mapping during merge.
     bool can_hold_parent_part_offset = !(columns.has("_part_index") || columns.has("_part_offset") || columns.has("_parent_part_offset"));
 
-    StoragePtr storage = std::make_shared<StorageProjectionSource>(columns);
+    StoragePtr storage = std::make_shared<StorageProjectionSource>(columns, partition_key);
 
     bool positional_arguments_for_projections = query_context->getSettingsRef()[Setting::enable_positional_arguments_for_projections];
 
@@ -318,7 +318,7 @@ void ProjectionDescription::fillProjectionDescriptionByQuery(
         /// (which may fail when session settings like allow_nonconst_timezone_arguments are unavailable,
         /// e.g. during ATTACH TABLE), while still allowing the projection query to reference any column
         /// including table-level ALIAS columns by name.
-        StoragePtr analyzer_storage = std::make_shared<StorageProjectionSource>(ColumnsDescription(columns.getAll()));
+        StoragePtr analyzer_storage = std::make_shared<StorageProjectionSource>(ColumnsDescription(columns.getAll()), partition_key);
 
         auto query_tree = buildQueryTree(result.query_ast, mut_context);
         auto & query_node = query_tree->as<QueryNode &>();
@@ -501,7 +501,7 @@ ProjectionDescription ProjectionDescription::getMinMaxCountProjection(
     result.name = MINMAX_COUNT_PROJECTION_NAME;
     result.query_ast = select_query->cloneToASTSelect();
 
-    StoragePtr storage = std::make_shared<StorageProjectionSource>(columns);
+    StoragePtr storage = std::make_shared<StorageProjectionSource>(columns, partition_key);
     InterpreterSelectQuery select(
         result.query_ast,
         query_context,

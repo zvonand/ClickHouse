@@ -471,11 +471,17 @@ void AccessRightsElements::formatElementsWithoutOptions(WriteBuffer & buffer) co
         if (keywords.empty() || (!element.anyColumn() && element.columns.empty()))
             continue;
 
-        /// Only output keywords not already present in the current group.
-        AccessFlags new_flags = element.access_flags - group_flags;
-        group_flags |= element.access_flags;
+        /// Deduplicate keywords only for table-wide grants (anyColumn()).
+        /// Column-scoped grants (e.g., SELECT(a), SELECT(b)) must output each
+        /// keyword+column combination even when the access flag is the same.
+        auto output_keywords = keywords;
+        if (element.anyColumn())
+        {
+            output_keywords = (element.access_flags - group_flags).toKeywords();
+            group_flags |= element.access_flags;
+        }
 
-        for (const auto & keyword : new_flags.toKeywords())
+        for (const auto & keyword : output_keywords)
         {
             if (!std::exchange(no_output, false))
                 buffer << ", ";

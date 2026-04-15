@@ -28,3 +28,13 @@ SELECT formatQuery('REVOKE READ, WRITE ON FILE FROM x');
 SELECT formatQuery('GRANT READ, WRITE ON S3 TO x');
 SELECT formatQuery('GRANT READ, WRITE ON URL TO x');
 SELECT formatQuery('GRANT READ, WRITE ON HDFS TO x');
+
+-- Column-scoped grants must NOT be deduplicated — different column lists are distinct grants.
+SELECT formatQuery('GRANT SELECT(a), SELECT(b) ON db.t TO x');
+SELECT formatQuery('GRANT SELECT(a, b), INSERT(c) ON db.t TO x');
+
+-- Mixed: table-wide and column-scoped grants in the same statement.
+SELECT formatQuery('GRANT SELECT, SELECT(a) ON db.t TO x');
+
+-- Multiple column-scoped grants with the same flag on different tables stay separate.
+SELECT formatQuery('GRANT SELECT(a) ON db.t1, SELECT(b) ON db.t2 TO x');

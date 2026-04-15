@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test that DETACH DATABASE with synchronous wait responds to query cancellation (KILL QUERY).
+# Test that DETACH DATABASE SYNC responds to query cancellation (KILL QUERY).
 # Regression test for a bug where waitDetachedTableNotInUse would hang indefinitely
 # when the DETACH DATABASE query was killed, because it never checked for cancellation.
 
@@ -50,13 +50,12 @@ if [ "$result" != "1" ]; then
     exit 1
 fi
 
-# Start DETACH DATABASE with synchronous wait in background.
-# This will detach all tables but then wait in waitDetachedTableNotInUse
-# because the table is still "in use" by the long SELECT.
+# Start DETACH DATABASE SYNC in background.
+# The SYNC keyword triggers waitDetachedTableNotInUse for each table UUID.
+# Since the table is still "in use" by the long SELECT, it will block there.
 $CLICKHOUSE_CLIENT \
     --query_id="${DETACH_QUERY_ID}" \
-    --database_atomic_wait_for_drop_and_detach_synchronously=1 \
-    --query "DETACH DATABASE ${DB_NAME}" 2>&1 | tr '\n' ' ' | grep -v QUERY_WAS_CANCELLED &
+    --query "DETACH DATABASE ${DB_NAME} SYNC" 2>&1 | tr '\n' ' ' | grep -qv QUERY_WAS_CANCELLED &
 DETACH_PID=$!
 
 # Wait for the DETACH query to appear in system.processes

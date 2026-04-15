@@ -7,6 +7,7 @@
 
 #include <Core/ColumnsWithTypeAndName.h>
 #include <Core/Settings.h>
+#include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <Databases/DataLake/Common.h>
 #include <Disks/DiskObjectStorage/ObjectStorages/StoredObject.h>

@@ -9,6 +9,7 @@
 
 #include <Core/ColumnsWithTypeAndName.h>
 #include <Core/Settings.h>
+#include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <Disks/DiskObjectStorage/ObjectStorages/IObjectStorage.h>
 #include <Disks/DiskObjectStorage/ObjectStorages/StoredObject.h>

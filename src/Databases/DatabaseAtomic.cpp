@@ -797,7 +797,7 @@ void DatabaseAtomic::waitDetachedTableNotInUse(const UUID & uuid, std::function<
     while (!DatabaseCatalog::instance().isShuttingDown())
     {
         bool found = true;
-        long use_count = 0;
+        int64_t use_count = 0;
         bool log_slow_wait = false;
         DetachedTables not_in_use;
         {

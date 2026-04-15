@@ -55,7 +55,7 @@ fi
 # Since the table is still "in use" by the long SELECT, it will block there.
 $CLICKHOUSE_CLIENT \
     --query_id="${DETACH_QUERY_ID}" \
-    --query "DETACH DATABASE ${DB_NAME} SYNC" 2>&1 | tr '\n' ' ' | grep -qv QUERY_WAS_CANCELLED &
+    --query "DETACH DATABASE ${DB_NAME} SYNC" >/dev/null 2>&1 &
 DETACH_PID=$!
 
 # Wait for the DETACH query to appear in system.processes
@@ -75,7 +75,21 @@ sleep 2
 # Kill the DETACH query
 $CLICKHOUSE_CLIENT --query "KILL QUERY WHERE query_id = '${DETACH_QUERY_ID}' SYNC FORMAT Null"
 
-# Wait for the DETACH process to finish (should return quickly after being killed)
+# Wait for the DETACH process to finish (should return quickly after being killed).
+# Use a bounded wait: on the old binary without the fix, KILL QUERY has no effect
+# and the DETACH hangs forever — detect that and fail explicitly.
+for _ in $(seq 1 100); do
+    kill -0 $DETACH_PID 2>/dev/null || break
+    sleep 0.1
+done
+
+if kill -0 $DETACH_PID 2>/dev/null; then
+    echo "FAIL: DETACH query was not cancelled within 10 seconds" >&2
+    kill $DETACH_PID 2>/dev/null ||:
+    wait $DETACH_PID 2>/dev/null ||:
+    exit 1
+fi
+
 wait $DETACH_PID 2>/dev/null &&:
 
 echo "DETACH query was cancelled successfully"

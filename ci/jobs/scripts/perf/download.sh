@@ -74,6 +74,15 @@ function download
         fi
         echo "Processing dataset '$dataset_name'..."
         if wget -nv -nd -c "$dataset_path" -O- | tar --extract --verbose; then
+            # The tpch.tar has a broken layout: table data is at data/<table>/ instead of data/tpch10/<table>/. Move folders into place.
+            if [ "$dataset_name" = "tpch10" ]; then
+                for t in customer lineitem nation orders part partsupp region supplier; do
+                    if [ -d "data/$t" ] && [ ! -d "data/tpch10/$t" ]; then
+                        mv "data/$t" "data/tpch10/$t"
+                        echo "Moved data/$t -> data/tpch10/$t"
+                    fi
+                done
+            fi
             touch "$done_flag"
             echo "Dataset '$dataset_name' completed."
         else

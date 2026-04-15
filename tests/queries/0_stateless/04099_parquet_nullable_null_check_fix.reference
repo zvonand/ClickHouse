@@ -8,7 +8,7 @@
 6	\N
 --- non-nullable null_as_default=0 should error ---
 CANNOT_INSERT_NULL_IN_ORDINARY_COLUMN
---- non-nullable null_as_default=0 non-null rows ---
+--- non-nullable null_as_default=0 no nulls in file ---
 1	1
 2	2
 4	4

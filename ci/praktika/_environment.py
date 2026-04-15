@@ -282,6 +282,18 @@ class _Environment(MetaClasses.Serializable):
             or ""
         )
 
+        # Override WORKFLOW_JOB_DATA with the current job's data so that
+        # check_run_id refers to this job rather than to the config job whose
+        # serialised environment we loaded above.
+        if Path(Settings.WORKFLOW_JOB_FILE).is_file():
+            with open(Settings.WORKFLOW_JOB_FILE, "r", encoding="utf8") as f:
+                env_dict["WORKFLOW_JOB_DATA"] = json.load(f)
+        else:
+            print(
+                f"NOTE: Workflow job file [{Settings.WORKFLOW_JOB_FILE}] does not exist"
+            )
+            env_dict["WORKFLOW_JOB_DATA"] = {}
+
         return cls.from_dict(env_dict)
 
     def add_info(self, info):

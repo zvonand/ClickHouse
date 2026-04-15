@@ -93,7 +93,7 @@ std::vector<UInt64> parseStackAddresses(std::string_view line)
 }
 
 /// Parse the sampling interval from a jemalloc heap_v2 header line ("heap_v2/N").
-/// Returns 0 if the header doesn't match heap_v2 format.
+/// Returns 0 if the header doesn't match heap_v2 format or the value is not a valid integer.
 UInt64 parseSamplingInterval(std::string_view header)
 {
     static constexpr std::string_view prefix = "heap_v2/";
@@ -103,7 +103,11 @@ UInt64 parseSamplingInterval(std::string_view header)
     trim(header);
     if (header.empty())
         return 0;
-    return parseInt<UInt64>(header);
+    UInt64 result = 0;
+    ReadBufferFromMemory buf(header.data(), header.size());
+    if (!tryReadIntText(result, buf) || !buf.eof())
+        return 0;
+    return result;
 }
 
 /// Apply Poisson sampling correction as jeprof does for heap_v2 profiles.

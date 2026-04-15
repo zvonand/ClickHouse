@@ -668,7 +668,7 @@ void AlterCommand::apply(StorageInMemoryMetadata & metadata, ContextPtr context)
     }
     else if (type == MODIFY_SAMPLE_BY)
     {
-        metadata.sampling_key.recalculateWithNewAST(sample_by, metadata.columns, {}, context);
+        metadata.sampling_key.recalculateWithNewAST(sample_by, metadata.columns, metadata.virtuals, context);
     }
     else if (type == REMOVE_SAMPLE_BY)
     {
@@ -1325,7 +1325,7 @@ void AlterCommands::apply(StorageInMemoryMetadata & metadata, ContextPtr context
     /// And in partition key expression
     if (metadata_copy.partition_key.definition_ast != nullptr)
     {
-        metadata_copy.partition_key.recalculateWithNewAST(metadata_copy.partition_key.definition_ast, metadata_copy.columns, {}, context);
+        metadata_copy.partition_key.recalculateWithNewAST(metadata_copy.partition_key.definition_ast, metadata_copy.columns, metadata_copy.virtuals, context);
 
         /// If partition key expression is changed, we also need to rebuild minmax_count_projection
         if (metadata.minmax_count_projection && !blocksHaveEqualStructure(metadata_copy.partition_key.sample_block, metadata.partition_key.sample_block))
@@ -1340,7 +1340,7 @@ void AlterCommands::apply(StorageInMemoryMetadata & metadata, ContextPtr context
 
     // /// And in sample key expression
     if (metadata_copy.sampling_key.definition_ast != nullptr)
-        metadata_copy.sampling_key.recalculateWithNewAST(metadata_copy.sampling_key.definition_ast, metadata_copy.columns, {}, context);
+        metadata_copy.sampling_key.recalculateWithNewAST(metadata_copy.sampling_key.definition_ast, metadata_copy.columns, metadata_copy.virtuals, context);
 
     /// Changes in columns may lead to changes in secondary indices
     for (auto & index : metadata_copy.secondary_indices)

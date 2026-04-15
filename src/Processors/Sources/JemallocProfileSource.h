@@ -16,6 +16,8 @@
 namespace DB
 {
 
+class WriteBuffer;
+
 /// Source that reads a jemalloc heap profile file and outputs lines according to the requested format.
 ///
 /// Supported formats:
@@ -90,6 +92,13 @@ private:
     };
     std::optional<CollapsedState> collapsed_state;
 };
+
+/// Convenience wrapper: runs JemallocProfileSource and writes every output line to a WriteBuffer.
+void symbolizeJemallocHeapProfile(
+    const std::string & input_filename,
+    WriteBuffer & out,
+    JemallocProfileFormat format = JemallocProfileFormat::Symbolized,
+    bool symbolize_with_inline = true);
 
 /// Convenience wrapper: runs JemallocProfileSource and writes every output line to output_filename.
 void symbolizeJemallocHeapProfile(

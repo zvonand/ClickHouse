@@ -37,6 +37,16 @@ LazyMaterializingTransform::LazyMaterializingTransform(SharedHeader main_header,
 {
 }
 
+void LazyMaterializingTransform::setPassThrough(bool value)
+{
+    if (value && !blocksHaveEqualStructure(inputs.back().getHeader(), outputs.front().getHeader()))
+        throw Exception(ErrorCodes::LOGICAL_ERROR,
+            "LazyMaterializingTransform: pass-through requires lazy header to match output header, "
+            "got lazy={} vs output={}",
+            inputs.back().getHeader().dumpStructure(), outputs.front().getHeader().dumpStructure());
+    pass_through = value;
+}
+
 LazyMaterializingTransform::Status LazyMaterializingTransform::prepare()
 {
     auto & output = outputs.front();
@@ -77,6 +87,27 @@ LazyMaterializingTransform::Status LazyMaterializingTransform::prepare()
         }
 
         return Status::Ready;
+    }
+
+    if (pass_through)
+    {
+        /// In pass-through mode, forward lazy chunks directly to output
+        /// without buffering or permuting. Main columns are not needed.
+        if (lazy_input.isFinished())
+        {
+            output.finish();
+            return Status::Finished;
+        }
+
+        lazy_input.setNeeded();
+        if (!lazy_input.hasData())
+            return Status::NeedData;
+
+        auto chunk = lazy_input.pull();
+        if (updater)
+            updater->recordOutputChunk(chunk, output.getHeader());
+        output.push(std::move(chunk));
+        return Status::PortFull;
     }
 
     if (!lazy_input.isFinished())
@@ -339,7 +370,7 @@ void LazyMaterializingTransform::prepareLazyChunk()
     IColumn::Permutation inverted_permutation;
 
     size_t rows = permutation.size();
-    bool is_identity_permutation = skip_inverse_permutation || isIdentityPermutation(permutation, rows);
+    bool is_identity_permutation = isIdentityPermutation(permutation, rows);
     bool should_replicate = offsets.size() != rows;
 
     if (!is_identity_permutation)

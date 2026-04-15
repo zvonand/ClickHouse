@@ -528,7 +528,7 @@ void optimizeLazyFinal(const Stack & stack, QueryPlan & query_plan, QueryPlan::N
 
         auto join_lazy_columns = std::make_unique<JoinLazyColumnsStep>(
             true_plan.getCurrentHeader(), lazy_plan.getCurrentHeader(), lazy_materializing_rows);
-        join_lazy_columns->setSkipInversePermutation(true);
+        join_lazy_columns->setPassThrough(true);
 
         std::vector<QueryPlanPtr> join_plans;
         join_plans.emplace_back(std::make_unique<QueryPlan>(std::move(true_plan)));

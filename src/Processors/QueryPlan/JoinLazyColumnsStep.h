@@ -25,13 +25,13 @@ public:
 
     bool supportsDataflowStatisticsCollection() const override { return true; }
 
-    void setSkipInversePermutation(bool value) { skip_inverse_permutation = value; }
+    void setPassThrough(bool value);
 
 protected:
     void updateOutputHeader() override;
 
     LazyMaterializingRowsPtr lazy_materializing_rows;
-    bool skip_inverse_permutation = false;
+    bool pass_through = false;
 };
 
 }

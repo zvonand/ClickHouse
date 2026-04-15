@@ -20,6 +20,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int BAD_ARGUMENTS;
+    extern const int ILLEGAL_COLUMN;
     extern const int ILLEGAL_TYPE_OF_ARGUMENT;
 }
 
@@ -163,14 +164,21 @@ FunctionHasPhraseOverloadResolver::buildImpl(const ColumnsWithTypeAndName & argu
     if (arguments.size() < 2)
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Function '{}' requires at least 2 arguments, got {}", name, arguments.size());
 
-    DataTypes argument_types{std::from_range_t{}, arguments | std::views::transform([](auto & elem) { return elem.type; })};
+    if (!isString(arguments[arg_phrase].type))
+        throw Exception(
+            ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
+            "A value of illegal type was provided as 2nd argument 'phrase' to function '{}'. Expected: const String, got: {}",
+            name,
+            arguments[arg_phrase].type->getName());
 
-    /// Return a valid FunctionBase with empty phrase tokens so that buildImpl does not crash.
-    if (!arguments[arg_phrase].column)
-    {
-        auto tokenizer = TokenizerFactory::instance().get(SplitByNonAlphaTokenizer::getExternalName());
-        return std::make_shared<FunctionBaseHasPhrase>(std::move(tokenizer), std::vector<String>{}, std::move(argument_types), return_type);
-    }
+    if (!arguments[arg_phrase].column || !isColumnConst(*arguments[arg_phrase].column))
+        throw Exception(
+            ErrorCodes::ILLEGAL_COLUMN,
+            "A value of illegal type was provided as 2nd argument 'phrase' to function '{}'. Expected: const String, got: {}",
+            name,
+            arguments[arg_phrase].type->getName());
+
+    DataTypes argument_types{std::from_range_t{}, arguments | std::views::transform([](auto & elem) { return elem.type; })};
 
     const auto tokenizer_name = arguments.size() < 3 || !arguments[arg_tokenizer].column ? SplitByNonAlphaTokenizer::getExternalName()
                                                                                          : arguments[arg_tokenizer].column->getDataAt(0);

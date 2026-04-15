@@ -59,6 +59,8 @@ public:
 
     bool isStateful() const override { return function_overload_resolver->isStateful(); }
 
+    bool isInjective(const ColumnsWithTypeAndName & sample_columns) const override { return function_overload_resolver->isInjective(sample_columns); }
+
     bool isDeterministic() const override { return function_overload_resolver->isDeterministic(); }
 
     bool isDeterministicInScopeOfQuery() const override { return function_overload_resolver->isDeterministicInScopeOfQuery(); }

@@ -623,31 +623,6 @@ def clickhouse_execute_json(
 # Should we capture client's stacktraces via SIGTSTP
 CAPTURE_CLIENT_STACKTRACE = False
 
-# Accumulated set of all child process-group IDs spawned by this process.
-_PGIDS: Set[int] = set()
-_PGID_FILE = f"/tmp/clickhouse-test-pgids-{os.getpid()}"
-_PGID_FILE_TMP = _PGID_FILE + ".tmp"
-
-
-def _track_pgid(pgid: int) -> None:
-    """Add *pgid* to *_PGIDS* and atomically persist the set to *_PGID_FILE*."""
-    _PGIDS.add(pgid)
-    _flush_pgid_file()
-
-
-def _untrack_pgid(pgid: int) -> None:
-    """Remove *pgid* from *_PGIDS* and atomically persist the set to *_PGID_FILE*."""
-    _PGIDS.discard(pgid)
-    _flush_pgid_file()
-
-
-def _flush_pgid_file() -> None:
-    """Write every pgid in *_PGIDS* (one per line) to *_PGID_FILE* atomically."""
-    with open(_PGID_FILE_TMP, "w") as f:
-        for p in _PGIDS:
-            f.write(f"{p}\n")
-    os.rename(_PGID_FILE_TMP, _PGID_FILE)
-
 
 def kill_process_group(pgid, fatal_log):
     try:

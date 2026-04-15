@@ -15,6 +15,7 @@
 
 #include <mongocxx/instance.hpp>
 #include <mongocxx/client.hpp>
+#include <mongoc/mongoc-init.h>
 
 namespace DB
 {
@@ -34,6 +35,19 @@ public:
     {
         static MongoDBInstanceHolder instance;
         return instance;
+    }
+
+    ~MongoDBInstanceHolder()
+    {
+        /// The mongocxx driver deliberately skips calling `mongoc_cleanup` under ASan
+        /// to avoid issues with dynamically loaded libraries becoming unloaded.
+        /// In ClickHouse all libraries (including OpenSSL) are statically linked,
+        /// so that concern does not apply. Calling `mongoc_cleanup` explicitly prevents
+        /// LeakSanitizer from reporting global allocations (handshake data, etc.)
+        /// made by libmongoc as memory leaks.
+        /// This is safe because `mongoc_cleanup` is idempotent (`bson_once`-guarded),
+        /// and the destructor body runs before the `mongocxx::instance` member destructor.
+        mongoc_cleanup();
     }
 private:
     MongoDBInstanceHolder() = default;

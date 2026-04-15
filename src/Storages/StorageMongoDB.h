@@ -15,7 +15,8 @@
 
 #include <mongocxx/instance.hpp>
 #include <mongocxx/client.hpp>
-#include <mongoc/mongoc-init.h>
+
+extern "C" void mongoc_cleanup(void);
 
 namespace DB
 {

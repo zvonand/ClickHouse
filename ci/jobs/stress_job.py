@@ -314,6 +314,15 @@ def run_stress_test(upgrade_check: bool = False) -> None:
                     )
                 )
 
+    if server_died and not failed_results:
+        failed_results.append(
+            Result.create_from(
+                name="Server died",
+                info="Server died and no specific error was extracted",
+                status=Result.Status.FAILED,
+            )
+        )
+
     if exit_code != 0:
         failed_results.append(
             Result.create_from(

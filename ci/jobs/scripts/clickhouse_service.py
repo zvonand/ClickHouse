@@ -1,4 +1,7 @@
+import os
+import shlex
 import shutil
+import signal
 import subprocess
 import time
 import urllib.request
@@ -125,21 +128,23 @@ class ClickHouseService(Service):
         Path(self.log_dir).mkdir(parents=True, exist_ok=True)
         Path(self.pid_file).unlink(missing_ok=True)
 
-        command = (
-            f"clickhouse-server --config-file {self.config_file}"
-            f" --pid-file {self.pid_file}"
-            f" -- --path {self.run_path}"
-            f" --user_files_path {self.user_files_path}"
-            f" --top_level_domains_path {self.ch_config_dir}/top_level_domains"
-            f" --logger.stderr {self.log_dir}/stderr.log"
-        )
-        print(f"Starting ClickHouse server: {command}")
+        argv = [
+            str(Path(temp_dir) / "clickhouse-server"),
+            "--config-file", self.config_file,
+            "--pid-file", self.pid_file,
+            "--",
+            "--path", self.run_path,
+            "--user_files_path", self.user_files_path,
+            "--top_level_domains_path", f"{self.ch_config_dir}/top_level_domains",
+            "--logger.stderr", f"{self.log_dir}/stderr.log",
+        ]
+        print(f"Starting ClickHouse server: {shlex.join(argv)}")
         self._log_fd = open(f"{self.log_dir}/clickhouse-server.log", "w")
         self._proc = subprocess.Popen(
-            command,
+            argv,
             stderr=subprocess.STDOUT,
             stdout=self._log_fd,
-            shell=True,
+            start_new_session=True,
             cwd=self.run_path,
         )
 
@@ -148,11 +153,18 @@ class ClickHouseService(Service):
     def shutdown(self) -> bool:
         if self._proc is None:
             return True
-        self._proc.terminate()
+        try:
+            pgid = os.getpgid(self._proc.pid)
+            os.killpg(pgid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
         try:
             self._proc.wait(timeout=30)
         except subprocess.TimeoutExpired:
-            self._proc.kill()
+            try:
+                os.killpg(os.getpgid(self._proc.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             self._proc.wait()
         if self._log_fd is not None:
             self._log_fd.close()

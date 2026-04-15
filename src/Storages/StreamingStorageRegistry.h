@@ -21,7 +21,7 @@ class StreamingStorageRegistry final : private boost::noncopyable
 public:
     static StreamingStorageRegistry & instance();
 
-    void registerTable(const StorageID & storage, bool if_not_exists = false);
+    void registerTable(const StorageID & storage);
 
     void unregisterTable(const StorageID & storage, bool if_exists = false);
 

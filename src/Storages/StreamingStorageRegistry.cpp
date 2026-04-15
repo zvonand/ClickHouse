@@ -38,7 +38,7 @@ StreamingStorageRegistry & StreamingStorageRegistry::instance()
     return ret;
 }
 
-void StreamingStorageRegistry::registerTable(const StorageID & storage, bool if_not_exists)
+void StreamingStorageRegistry::registerTable(const StorageID & storage)
 {
     std::lock_guard lock(mutex);
 
@@ -47,12 +47,7 @@ void StreamingStorageRegistry::registerTable(const StorageID & storage, bool if_
 
     const bool inserted = storages.emplace(storage).second;
     if (!inserted)
-    {
-        if (if_not_exists)
-            throw Exception(ErrorCodes::TABLE_ALREADY_EXISTS, "Table with storage id {} already registered", storage.getNameForLogs());
-
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "Table with storage id {} already registered", storage.getNameForLogs());
-    }
+        throw Exception(ErrorCodes::TABLE_ALREADY_EXISTS, "Table with storage id {} already registered", storage.getNameForLogs());
 
     LOG_TRACE(log, "Registered table: {}", storage.getNameForLogs());
 }

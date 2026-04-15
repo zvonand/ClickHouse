@@ -11,7 +11,6 @@
 #include <Core/SettingsEnums.h>
 #include <DataTypes/DataTypeString.h>
 #include <IO/readIntText.h>
-#include <IO/WriteBufferFromString.h>
 #include <IO/WriteHelpers.h>
 #include <Processors/Executors/PullingPipelineExecutor.h>
 #include <Processors/Sources/JemallocProfileSource.h>
@@ -133,9 +132,7 @@ TEST(JemallocProfileSource, CollapsedSamplingCorrection)
 {
     auto input = writeToTempFile(test_heap_profile, "gtest_jemalloc_profile.heap");
 
-    std::string collapsed_output;
-    WriteBufferFromString out(collapsed_output);
-    symbolizeJemallocHeapProfile(input, out, JemallocProfileFormat::Collapsed, false);
+    auto collapsed_output = symbolizeJemallocHeapProfileToString(input, JemallocProfileFormat::Collapsed, false);
 
     UInt64 total = sumCollapsedValues(collapsed_output);
 

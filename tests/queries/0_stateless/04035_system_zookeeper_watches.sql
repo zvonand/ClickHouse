@@ -1,4 +1,5 @@
 -- Tags: zookeeper, no-replicated-database
+-- Tag no-replicated-database: Old syntax is not allowed
 
 -- Schema check
 SELECT name FROM system.columns WHERE table = 'zookeeper_watches' AND database = 'system' ORDER BY position;

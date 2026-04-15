@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Columns/ColumnsNumber.h>
-#include <Core/NamesAndTypes.h>
 #include <Interpreters/Context_fwd.h>
 #include <Interpreters/StorageID.h>
 #include <Parsers/IAST_fwd.h>
@@ -16,6 +15,7 @@ namespace DB
 
 class Block;
 class Chunk;
+class NamesAndTypesList;
 class ColumnsDescription;
 
 class ExpressionActions;

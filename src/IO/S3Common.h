@@ -5,6 +5,7 @@
 #include <base/types.h>
 #include <Common/Exception.h>
 #include <Core/Field.h>
+#include <Poco/Util/AbstractConfiguration.h>
 
 #include "config.h"
 

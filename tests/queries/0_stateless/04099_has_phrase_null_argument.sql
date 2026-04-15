@@ -1,0 +1,1 @@
+SELECT hasPhrase('', materialize(NULL));

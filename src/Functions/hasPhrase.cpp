@@ -163,6 +163,15 @@ FunctionHasPhraseOverloadResolver::buildImpl(const ColumnsWithTypeAndName & argu
     if (arguments.size() < 2)
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Function '{}' requires at least 2 arguments, got {}", name, arguments.size());
 
+    DataTypes argument_types{std::from_range_t{}, arguments | std::views::transform([](auto & elem) { return elem.type; })};
+
+    /// Return a valid FunctionBase with empty phrase tokens so that buildImpl does not crash.
+    if (!arguments[arg_phrase].column)
+    {
+        auto tokenizer = TokenizerFactory::instance().get(SplitByNonAlphaTokenizer::getExternalName());
+        return std::make_shared<FunctionBaseHasPhrase>(std::move(tokenizer), std::vector<String>{}, std::move(argument_types), return_type);
+    }
+
     const auto tokenizer_name = arguments.size() < 3 || !arguments[arg_tokenizer].column ? SplitByNonAlphaTokenizer::getExternalName()
                                                                                          : arguments[arg_tokenizer].column->getDataAt(0);
     if (tokenizer_name == SparseGramsTokenizer::getExternalName() || tokenizer_name == ArrayTokenizer::getExternalName())
@@ -170,7 +179,6 @@ FunctionHasPhraseOverloadResolver::buildImpl(const ColumnsWithTypeAndName & argu
 
     auto tokenizer = TokenizerFactory::instance().get(tokenizer_name);
     auto phrase_tokens = initializePhraseTokens(arguments, *tokenizer, getName());
-    DataTypes argument_types{std::from_range_t{}, arguments | std::views::transform([](auto & elem) { return elem.type; })};
     return std::make_shared<FunctionBaseHasPhrase>(std::move(tokenizer), std::move(phrase_tokens), std::move(argument_types), return_type);
 }
 

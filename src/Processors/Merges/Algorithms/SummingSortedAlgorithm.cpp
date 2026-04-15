@@ -482,6 +482,20 @@ static SummingSortedAlgorithm::ColumnsDefinition defineColumns(
         }
     }
 
+    /// Mark Float32/Float64 columns for bit-exact copy in setRow().
+    /// The Field roundtrip (Float32 → Field as Float64 → back to Float32) silently converts
+    /// signaling NaN (SNaN) to quiet NaN (QNaN) on x86, corrupting bit patterns.
+    /// When the sort key is a hash expression over such a column (e.g. ORDER BY gccMurmurHash(c1)),
+    /// this changes the hash value and causes sort order violations during merges.
+    def.columns_need_exact_copy.resize(num_columns, false);
+    for (size_t i = 0; i < num_columns; ++i)
+    {
+        const auto & col = header.safeGetByPosition(i);
+        WhichDataType which(recursiveRemoveLowCardinality(col.type));
+        if (which.isFloat())
+            def.columns_need_exact_copy[i] = true;
+    }
+
     return def;
 }
 
@@ -545,7 +559,8 @@ static void postprocessChunk(
     chunk.setColumns(std::move(res_columns), num_rows);
 }
 
-static void setRow(Row & row, std::vector<ColumnPtr> & row_columns, const ColumnRawPtrs & raw_columns, size_t row_num, const Names & column_names)
+static void setRow(Row & row, std::vector<ColumnPtr> & row_columns, const ColumnRawPtrs & raw_columns, size_t row_num,
+                   const Names & column_names, const std::vector<bool> & columns_need_exact_copy)
 {
     size_t num_columns = row.size();
     const auto handle_exception = [&](const char * logger_name, const char * reason, const size_t column_index)
@@ -564,23 +579,29 @@ static void setRow(Row & row, std::vector<ColumnPtr> & row_columns, const Column
     {
         try
         {
-            /// Always store a column-level copy to avoid lossy type conversions
-            /// in the Field roundtrip. In particular, Float32 -> Field (Float64) -> Float32
-            /// converts signaling NaN (SNaN) to quiet NaN (QNaN) on x86, changing the bit
-            /// pattern. When the sort key is a hash of a Float32 column (e.g. ORDER BY
-            /// gccMurmurHash(c1)), this silently changes the hash value and breaks sort order
-            /// during SummingMergeTree merges.
+            if (raw_columns[i]->hasDynamicStructure() || columns_need_exact_copy[i])
             {
+                /// Store a column-level copy to preserve exact bit patterns.
+                /// - For Dynamic/JSON types: Field roundtrip doesn't work correctly.
+                /// - For Float32/Float64: the Field roundtrip (Float32 → Float64 → Float32)
+                ///   converts signaling NaN (SNaN) to quiet NaN (QNaN) on x86, changing the
+                ///   bit pattern. When the sort key is a hash of a Float column (e.g. ORDER BY
+                ///   gccMurmurHash(c1)), this silently changes the hash value and breaks sort
+                ///   order during SummingMergeTree merges.
                 auto column = raw_columns[i]->cloneEmpty();
                 column->reserve(1);
                 column->insertFrom(*raw_columns[i], row_num);
                 row_columns[i] = std::move(column);
-            }
 
-            /// Also store the Field representation for backward compatibility —
-            /// it is used by mergeMap() for map-type column summation.
-            if (!raw_columns[i]->hasDynamicStructure())
+                /// Also store the Field representation for mergeMap() backward compatibility.
+                if (!raw_columns[i]->hasDynamicStructure())
+                    raw_columns[i]->get(row_num, row[i]);
+            }
+            else
+            {
                 raw_columns[i]->get(row_num, row[i]);
+                row_columns[i] = nullptr;
+            }
         }
         catch (const Exception & e)
         {
@@ -657,7 +678,7 @@ void SummingSortedAlgorithm::SummingMergedData::startGroup(ColumnRawPtrs & raw_c
 {
     is_group_started = true;
 
-    setRow(current_row, current_row_columns, raw_columns, row, def.column_names);
+    setRow(current_row, current_row_columns, raw_columns, row, def.column_names, def.columns_need_exact_copy);
 
     /// Reset aggregation states for next row
     for (auto & desc : def.columns_to_aggregate)

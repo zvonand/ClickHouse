@@ -55,7 +55,7 @@ namespace ErrorCodes
 }
 namespace
 {
-void validateCreateQuery(const ASTCreateQuery & query, const NamesAndTypesList & virtual_columns, ContextPtr context)
+void validateCreateQuery(const ASTCreateQuery & query, const VirtualColumnsDescription & virtuals, ContextPtr context)
 {
     /// First validate that the query can be parsed
     const auto serialized_query = query.formatWithSecretsOneLine();
@@ -126,19 +126,19 @@ void validateCreateQuery(const ASTCreateQuery & query, const NamesAndTypesList &
     std::optional<KeyDescription> primary_key;
     /// First get the key description from order by, so if there is no primary key we will use that
     if (storage.order_by)
-        primary_key = KeyDescription::getKeyFromAST(storage.order_by->ptr(), columns_desc, virtual_columns, context);
+        primary_key = KeyDescription::getKeyFromAST(storage.order_by->ptr(), columns_desc, virtuals, context);
     if (storage.primary_key)
-        primary_key = KeyDescription::getKeyFromAST(storage.primary_key->ptr(), columns_desc, virtual_columns, context);
+        primary_key = KeyDescription::getKeyFromAST(storage.primary_key->ptr(), columns_desc, virtuals, context);
     if (storage.partition_by)
-        KeyDescription::getKeyFromAST(storage.partition_by->ptr(), columns_desc, virtual_columns, context);
+        KeyDescription::getKeyFromAST(storage.partition_by->ptr(), columns_desc, virtuals, context);
     if (storage.sample_by)
-        KeyDescription::getKeyFromAST(storage.sample_by->ptr(), columns_desc, virtual_columns, context);
+        KeyDescription::getKeyFromAST(storage.sample_by->ptr(), columns_desc, virtuals, context);
     if (storage.ttl_table && primary_key.has_value())
         TTLTableDescription::getTTLForTableFromAST(storage.ttl_table->ptr(), columns_desc, context, *primary_key, true);
 }
 }
 
-void applyMetadataChangesToCreateQuery(const ASTPtr & query, const StorageInMemoryMetadata & metadata, const NamesAndTypesList & virtual_columns, ContextPtr context, const bool validate_new_create_query)
+void applyMetadataChangesToCreateQuery(const ASTPtr & query, const StorageInMemoryMetadata & metadata, ContextPtr context, const bool validate_new_create_query)
 {
     auto & ast_create_query = query->as<ASTCreateQuery &>();
 

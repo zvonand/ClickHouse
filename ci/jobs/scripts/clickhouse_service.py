@@ -88,7 +88,11 @@ class ClickHouseService:
             cwd=self.run_path,
         )
 
-        self._wait_ready()
+        try:
+            self._wait_ready()
+        except Exception:
+            self.__exit__(None, None, None)
+            raise
         return self
 
     def __exit__(self, *_):

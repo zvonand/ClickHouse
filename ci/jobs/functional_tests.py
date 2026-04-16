@@ -237,7 +237,7 @@ def main():
     runner_options += f" --jobs {workers}"
 
     if is_flaky_check or is_targeted_check:
-        # Stop after 10 total failures across all parallel workers (fast feedback on broken PRs).
+        # Stop after 5 total failures across all parallel workers (fast feedback on broken PRs).
         runner_options += " --max-failures 5"
 
     if is_excluded_from_llvm:

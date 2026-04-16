@@ -181,8 +181,8 @@ StorageView::StorageView(
 
     is_parameterized_view = is_parameterized_view_ || query.isParameterizedView();
     storage_metadata.setSelectQuery(description);
+    storage_metadata.setVirtuals(createVirtuals());
     setInMemoryMetadata(storage_metadata);
-    setVirtuals(createVirtuals());
 }
 
 /// Build and resolve the view's inner query tree

@@ -212,7 +212,6 @@ namespace Setting
     extern const SettingsBool use_statistics;
     extern const SettingsBool use_statistics_cache;
     extern const SettingsBool use_partition_pruning;
-    extern const SettingsBool apply_deleted_mask;
 }
 
 namespace MergeTreeSetting
@@ -2106,6 +2105,9 @@ MergeTreeData::LoadPartResult MergeTreeData::loadDataPart(
         addPartContributionToUncompressedBytesInPatches(res.part);
     }
 
+    if (res.part->hasLightweightDelete())
+        has_lightweight_delete_parts.store(true);
+
     LOG_TRACE(log, "Finished loading {} part {} on disk {}", magic_enum::enum_name(to_state), part_name, part_disk_ptr->getName());
     return res;
 }
@@ -2397,6 +2399,7 @@ void MergeTreeData::loadDataParts(bool skip_sanity_checks, std::optional<std::un
     size_t suspicious_broken_unexpected_parts_bytes = 0;
     bool have_adaptive_parts = false;
     bool have_non_adaptive_parts = false;
+    bool have_lightweight_in_parts = false;
     bool have_parts_with_version_metadata = false;
 
     bool is_static_storage = isStaticStorage();
@@ -2441,6 +2444,7 @@ void MergeTreeData::loadDataParts(bool skip_sanity_checks, std::optional<std::un
                 bool is_adaptive = res.part->index_granularity_info.mark_type.adaptive;
                 have_adaptive_parts |= is_adaptive;
                 have_non_adaptive_parts |= !is_adaptive;
+                have_lightweight_in_parts |= res.part->hasLightweightDelete();
                 have_parts_with_version_metadata |= res.part->wasInvolvedInTransaction();
             }
         }
@@ -2452,6 +2456,7 @@ void MergeTreeData::loadDataParts(bool skip_sanity_checks, std::optional<std::un
                         "but `setting enable_mixed_granularity_parts` is disabled");
 
     has_non_adaptive_index_granularity_parts = have_non_adaptive_parts;
+    has_lightweight_delete_parts = have_lightweight_in_parts;
     transactions_enabled = have_parts_with_version_metadata;
 
     if (!skip_sanity_checks)
@@ -2644,6 +2649,7 @@ try
     }
 
     bool have_non_adaptive_parts = false;
+    bool have_lightweight_in_parts = false;
     bool have_parts_with_version_metadata = false;
 
     for (const auto & my_part : parts_to_add)
@@ -2668,11 +2674,13 @@ try
 
             bool is_adaptive = res.part->index_granularity_info.mark_type.adaptive;
             have_non_adaptive_parts |= !is_adaptive;
+            have_lightweight_in_parts |= res.part->hasLightweightDelete();
             have_parts_with_version_metadata |= res.part->wasInvolvedInTransaction();
         }
     }
 
     has_non_adaptive_index_granularity_parts = have_non_adaptive_parts;
+    has_lightweight_delete_parts = have_lightweight_in_parts;
     transactions_enabled = have_parts_with_version_metadata;
 
     auto old_parts = grabOldParts(true);
@@ -5159,6 +5167,9 @@ bool MergeTreeData::addTempPart(
     if (&out_transaction.data != this)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "MergeTreeData::Transaction for one table cannot be used with another. It is a bug.");
 
+    if (part->hasLightweightDelete())
+        has_lightweight_delete_parts.store(true);
+
     checkPartPartition(part, lock);
     checkPartDuplicate(part, out_transaction, lock);
 
@@ -5223,6 +5234,9 @@ bool MergeTreeData::renameTempPartAndReplaceImpl(
 
     if (hierarchy.duplicate_part)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Unexpected duplicate part {}. It is a bug.", hierarchy.duplicate_part->getNameWithState());
+
+    if (part->hasLightweightDelete())
+        has_lightweight_delete_parts.store(true);
 
     /// All checks are passed. Now we can rename the part on disk.
     /// So, we maintain invariant: if a non-temporary part in filesystem then it is in data_parts
@@ -10412,16 +10426,21 @@ SerializationInfoByName MergeTreeData::getSerializationHints() const
 bool MergeTreeData::supportsTrivialCountOptimization(const StorageSnapshotPtr & storage_snapshot, ContextPtr query_context) const
 {
     const auto & settings = query_context->getSettingsRef();
-    bool apply_any_mutations = settings[Setting::apply_mutations_on_fly] || settings[Setting::apply_patch_parts] || settings[Setting::apply_deleted_mask];
+
+    auto supports_trivial_count = [&]()
+    {
+        /// Fallback for callers that don't provide a storage snapshot (e.g. StorageMerge).
+        return !has_lightweight_delete_parts.load(std::memory_order_relaxed) && !settings[Setting::apply_mutations_on_fly] && !settings[Setting::apply_patch_parts];
+    };
 
     if (!storage_snapshot)
-        return !apply_any_mutations;
+        return supports_trivial_count();
 
     const auto & snapshot_data = assert_cast<const MergeTreeData::SnapshotData &>(*storage_snapshot->data);
     const auto & mutations_snapshot = snapshot_data.mutations_snapshot;
 
     if (!mutations_snapshot)
-        return !apply_any_mutations;
+        return supports_trivial_count();
 
     return !mutations_snapshot->hasDataMutations() && !mutations_snapshot->hasPatchParts() && !mutations_snapshot->hasLightweightDeletedMask();
 }

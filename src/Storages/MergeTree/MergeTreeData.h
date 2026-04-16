@@ -1297,6 +1297,11 @@ public:
 
     bool has_non_adaptive_index_granularity_parts = false;
 
+    /// True if at least one part contains a lightweight delete mask.
+    /// Used as a fallback in `supportsTrivialCountOptimization` when
+    /// no storage snapshot is available (e.g. from `StorageMerge`).
+    mutable std::atomic_bool has_lightweight_delete_parts = false;
+
     /// Parts that currently moving from disk/volume to another.
     /// This set have to be used with `currently_processing_in_background_mutex`.
     /// Moving may conflict with merges and mutations, but this is OK, because

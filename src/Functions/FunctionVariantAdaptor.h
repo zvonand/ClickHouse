@@ -34,8 +34,8 @@ private:
     /// We remember the original IFunctionOverloadResolver to be able to build function for types inside Variant column.
     std::shared_ptr<const IFunctionOverloadResolver> function_overload_resolver;
     size_t variant_argument_index;
-    /// When true, throw an exception if a variant type is incompatible with the function.
-    /// When false (default), return NULL for incompatible rows instead.
+    /// When true (default), throw an exception if a variant type is incompatible with the function.
+    /// When false, return NULL for incompatible rows instead.
     /// Read from `variant_throw_on_type_mismatch` setting via CurrentThread at construction time.
     bool throw_on_type_mismatch = true;
 };

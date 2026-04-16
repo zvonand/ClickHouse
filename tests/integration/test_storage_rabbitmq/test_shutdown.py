@@ -265,9 +265,6 @@ def test_idle_loop_shutdown_completes_promptly(started_cluster):
     """
     )
 
-    # Wait for the connection to be established and the loop to start running.
-    time.sleep(10)
-
     instance.query(
         """
         CREATE MATERIALIZED VIEW test_idle.consumer TO test_idle.destination AS

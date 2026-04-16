@@ -37,7 +37,7 @@ ExecutableFunctionDynamicAdaptor::ExecutableFunctionDynamicAdaptor(
 {
     if (CurrentThread::isInitialized())
     {
-        if (auto query_context = CurrentThread::get().getQueryContext())
+        if (auto query_context = CurrentThread::tryGetQueryContext())
             throw_on_type_mismatch = query_context->getSettingsRef()[Setting::dynamic_throw_on_type_mismatch];
     }
 }

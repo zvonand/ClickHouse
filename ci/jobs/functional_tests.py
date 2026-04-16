@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import random
 import subprocess
@@ -619,58 +620,64 @@ def main():
         res = results[-1].is_ok()
 
     if JobStages.RETRIES in stages and test_result and test_result.is_failure():
-        # retry all failed tests and mark original failed either as success on retry or failed on retry
+        has_random_settings = "--no-random-settings" not in runner_options
         failed_tests = []
+        has_errors = False
         for t in test_result.results:
             if t.is_failure() and t.name and t.name[0].isdigit():
                 failed_tests.append(t.name)
             elif t.is_error():
-                failed_tests = []
+                has_errors = True
                 print(
-                    "NOTE: Skipping retry stage because the main test run ended with errors"
+                    "NOTE: Skipping diagnostics because the main test run ended with errors"
                 )
                 break
 
-        if len(failed_tests) > 10:
+        if has_errors:
+            pass
+        elif len(failed_tests) > 10:
             results.append(
                 Result(
-                    name="Retries",
+                    name="Random settings diagnostics",
                     status=Result.Status.SKIPPED,
                     info="Too many failed tests",
                 )
             )
-        elif failed_tests:
-            ft_res_processor = FTResultsProcessor(wd=temp_dir)
-            run_tests(
-                batch_num=0,
-                batch_total=0,
-                tests=failed_tests,
-                extra_args=runner_options,
-                random_order=True,
-                rerun_count=1,
+        elif failed_tests and has_random_settings:
+            diagnostics_dir = "/tmp/clickhouse-random-settings-diagnostics"
+            memory_limit = (
+                10 * 2**30 if "asan_ubsan" in Info().job_name else 5 * 2**30
             )
-            retry_result = ft_res_processor.run(task_name="Retries")
-            if retry_result.is_failure():
-                # do not produce noise failures
-                retry_result.set_success()
-            success_after_rerun = [t.name for t in retry_result.results if t.is_ok()]
-            failed_after_rerun = [
-                t.name for t in retry_result.results if t.is_failure()
-            ]
-            if success_after_rerun or failed_after_rerun:
-                for test_case in test_result.results:
-                    if test_case.name in success_after_rerun:
-                        if is_llvm_coverage:
-                            print(
-                                f"Test {test_case.name} has succeeded after rerun. Mark it as OK"
+            diag_command = (
+                f"clickhouse-test --testname --check-zookeeper-session --hung-check"
+                f" --memory-limit {memory_limit} --trace --capture-client-stacktrace"
+                f" --queries ./tests/queries --shard --zookeeper"
+                f" --diagnose-random-settings"
+                f" --no-random-settings --no-random-merge-tree-settings"
+                f" -- {' '.join(failed_tests)}"
+            )
+            print(f"Running random settings diagnostics for {len(failed_tests)} test(s)...")
+            Shell.run(diag_command, verbose=True)
+
+            # Read diagnostics results and prepend to original test info
+            diag_results_path = os.path.join(
+                diagnostics_dir, "random_settings_diagnostics_results.jsonl"
+            )
+            diag_results = {}
+            if os.path.isfile(diag_results_path):
+                with open(diag_results_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            entry = json.loads(line)
+                            diag_results[entry["test_name"]] = entry.get(
+                                "diagnosis", ""
                             )
-                            test_case.remove_label(Result.Status.FAIL)
-                            test_case.set_status(Result.Status.OK)
-                        else:
-                            test_case.set_label(Result.Label.OK_ON_RETRY)
-                    elif test_case.name in failed_after_rerun:
-                        test_case.set_label(Result.Label.FAILED_ON_RETRY)
-            results.append(retry_result)
+            for test_case in test_result.results:
+                if test_case.name in diag_results and diag_results[test_case.name]:
+                    test_case.info = (
+                        diag_results[test_case.name] + "\n" + test_case.info
+                    )
 
     if args.debug:
         print("\n\n=== Debug mode enabled, starting clickhouse-client ===\n")

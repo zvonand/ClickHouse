@@ -35,6 +35,8 @@ For these libraries, updating the submodule often requires regenerating `rust/wo
 
 ### 1. Gather information about the library
 
+Throughout this skill, `$LIB` refers to the library name passed as `$0` and `$VERSION` to the target version once resolved (step 2). Both must match `[A-Za-z0-9._-]+` so they are safe to use unquoted in paths and branch names; reject anything else.
+
 Extract the submodule URL, current commit, and whether it uses a fork:
 
 ```bash
@@ -82,7 +84,7 @@ git -C "contrib/$LIB" tag -l --sort=-v:refname | head -20
 
 If the library uses a ClickHouse fork, also check the upstream repo for the latest release. Use `gh release list` or `git ls-remote --tags` against the upstream URL if available.
 
-Present the current and target versions to the user with `AskUserQuestion` for confirmation before proceeding.
+Present the current and target versions to the user with `AskUserQuestion` for confirmation before proceeding. `VERSION` is whatever the user confirmed here — either `$1` if it was passed in, or a tag picked from the fresh upstream tag list. Verify it matches the charset above before using it in branch names or commits.
 
 ### 3. Check for ClickHouse patches (forked libraries only)
 
@@ -288,7 +290,6 @@ If there were build integration or source fixes, stage those too.
 Commit message guidelines:
 - First line: `Use \`<lib>\` <version>` or `Bump \`<lib>\` to <version>` or a description of the motivation
 - Body (optional): list key changes from upstream, CVEs fixed, or motivation for the update
-- Include `Assisted-by:` line per repository conventions
 
 Examples of good commit messages from past PRs:
 - `Use \`simdjson\` v4.2.4`

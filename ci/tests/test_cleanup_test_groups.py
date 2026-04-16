@@ -92,7 +92,15 @@ def test_cleanup_kills_orphaned_test_process():
             def got_procs(procs) -> str:
                 return ", got\n" + '\n'.join(f"{p[0]} {p[3]}" for p in procs)
 
-            procs = pgrep(pgid=pgid)
+            # Poll until we see exactly 7 processes.  The SELECT 1 client writes
+            # to stdout (triggering our file-size check above) and then exits,
+            # but may still be visible to pgrep for a brief moment.
+            deadline_procs = time.monotonic() + 5
+            while time.monotonic() < deadline_procs:
+                procs = pgrep(pgid=pgid)
+                if len(procs) == 7:
+                    break
+                time.sleep(0.05)
             assert len(procs) == 7, "(Before kill) Expect 7 processes (two bash processes + 5 test processes)" + got_procs(procs)
 
             # Kill clickhouse-test with SIGKILL — simulates the OOM killer or an

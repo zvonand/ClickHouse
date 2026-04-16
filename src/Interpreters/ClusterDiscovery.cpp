@@ -487,6 +487,9 @@ void ClusterDiscovery::removeCluster(const String & name, bool is_dynamic)
         std::lock_guard lock(mutex);
         cluster_impls.erase(name);
     }
+    /// For static clusters (defined in config), `clusters_to_update` and `get_nodes_callbacks`
+    /// are initialized once at startup and must persist so the cluster can be re-registered after
+    /// a ZooKeeper session loss. Dynamic clusters own their entries and must clean them up.
     if (is_dynamic)
     {
         clusters_to_update->remove(name);

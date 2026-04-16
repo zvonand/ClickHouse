@@ -52,7 +52,17 @@ void HTTPChunkedStreamBuf::close()
 	if (_mode & std::ios::out && _chunk != std::char_traits<char>::eof())
 	{
 		sync();
-		_session.write("0\r\n\r\n", 5);
+
+		const char* finalChunk = "0\r\n\r\n";
+		std::streamsize remaining = 5;
+		std::streamsize offset = 0;
+		while (offset < remaining)
+		{
+			int written = _session.write(finalChunk + offset, remaining - offset);
+			if (written <= 0)
+				break;
+			offset += written;
+		}
 
 		_chunk = std::char_traits<char>::eof();
 	}
@@ -167,7 +177,16 @@ int HTTPChunkedStreamBuf::writeToDevice(const char* buffer, std::streamsize leng
 	_chunkBuffer.append("\r\n", 2);
 	_chunkBuffer.append(buffer, static_cast<std::string::size_type>(length));
 	_chunkBuffer.append("\r\n", 2);
-	_session.write(_chunkBuffer.data(), static_cast<std::streamsize>(_chunkBuffer.size()));
+
+	std::streamsize chunkSize = static_cast<std::streamsize>(_chunkBuffer.size());
+	std::streamsize offset = 0;
+	while (offset < chunkSize)
+	{
+		int written = _session.write(_chunkBuffer.data() + offset, chunkSize - offset);
+		if (written <= 0)
+			return 0;
+		offset += written;
+	}
 	return static_cast<int>(length);
 }
 

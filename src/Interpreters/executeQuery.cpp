@@ -1525,9 +1525,17 @@ static BlockIO executeQueryImpl(
         {
             if (const auto & storage = DatabaseCatalog::instance().tryGetTable(insert_query->table_id, context))
             {
+                std::optional<Names> insert_column_names;
+                if (insert_query->columns)
+                {
+                    Names names;
+                    for (const auto & identifier : insert_query->columns->children)
+                        names.emplace_back(identifier->getColumnName());
+                    insert_column_names = std::move(names);
+                }
                 context->setInsertionTable(
                     insert_query->table_id,
-                    /*column_names=*/ std::nullopt,
+                    insert_column_names,
                     std::make_shared<ColumnsDescription>(storage->getInMemoryMetadataPtr()->columns));
             }
         }

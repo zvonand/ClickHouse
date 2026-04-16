@@ -579,6 +579,16 @@ MsgPackSchemaReader::MsgPackSchemaReader(ReadBuffer & in_, const FormatSettings 
         throw Exception(ErrorCodes::BAD_ARGUMENTS,
                         "You must specify setting input_format_msgpack_number_of_columns "
                         "to extract table schema from MsgPack data");
+
+    /// Guard against absurdly large values that would cause std::length_error
+    /// or trigger sanitizer OOM aborts in vector::reserve() below.  1 million
+    /// columns is already far beyond any realistic MsgPack schema.
+    static constexpr size_t max_number_of_columns = 1'000'000;
+    if (number_of_columns > max_number_of_columns)
+        throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                        "input_format_msgpack_number_of_columns = {} is too large "
+                        "(maximum: {})",
+                        number_of_columns, max_number_of_columns);
 }
 
 

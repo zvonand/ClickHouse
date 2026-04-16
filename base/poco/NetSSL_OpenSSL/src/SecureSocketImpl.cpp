@@ -403,7 +403,10 @@ int SecureSocketImpl::completeHandshake()
 	while (mustRetry(rc, remaining_time));
 	if (rc <= 0)
 	{
-		return handleError(rc);
+		rc = handleError(rc);
+		if (rc < 0 && _pSocket->getBlocking())
+			throw Poco::TimeoutException("SSL handshake timed out");
+		return rc;
 	}
 	_needHandshake = false;
 	return rc;

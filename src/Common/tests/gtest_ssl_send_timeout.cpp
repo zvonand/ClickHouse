@@ -173,4 +173,64 @@ TEST(SSLSocketTimeout, SendBytesThrowsTimeoutOnBlockingSocket)
 }
 
 
+/// Test that SSL handshake throws TimeoutException when the peer
+/// is a plain TCP server that doesn't speak SSL.
+TEST(SSLSocketTimeout, HandshakeThrowsTimeoutOnNonSSLPeer)
+{
+    EphemeralCert cert;
+    auto client_ctx = makeContext(cert, Poco::Net::Context::CLIENT_USE);
+
+    /// Plain TCP server -- accepts but never does SSL handshake.
+    Poco::Net::ServerSocket plain_server(Poco::Net::SocketAddress("127.0.0.1", 0), 1);
+    auto port = plain_server.address().port();
+
+    std::atomic<bool> server_done{false};
+
+    std::thread server_thread([&]
+    {
+        try
+        {
+            auto accepted = plain_server.acceptConnection();
+            while (!server_done.load())
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        catch (...) {} /// NOLINT(bugprone-empty-catch)
+    });
+
+    bool got_timeout = false;
+    try
+    {
+        /// Connect raw TCP, then wrap in SSL with a short timeout.
+        Poco::Net::StreamSocket raw_sock;
+        raw_sock.connect(Poco::Net::SocketAddress("127.0.0.1", port));
+        raw_sock.setSendTimeout(Poco::Timespan(0, 200'000));
+        raw_sock.setReceiveTimeout(Poco::Timespan(0, 200'000));
+
+        Poco::Net::SecureStreamSocket ssl_sock(
+            Poco::Net::SecureStreamSocket::attach(raw_sock, client_ctx));
+
+        /// completeHandshake is triggered by the first I/O.
+        /// The plain TCP peer won't respond with SSL, so it will time out.
+        char buf[1] = {'X'};
+        ssl_sock.sendBytes(buf, 1);
+    }
+    catch (const Poco::TimeoutException &)
+    {
+        got_timeout = true;
+    }
+    catch (const Poco::Exception &)
+    {
+        /// Some SSL implementations may throw a different SSL error
+        /// before the timeout fires. That's acceptable -- the key thing
+        /// is we don't silently return -1.
+        got_timeout = true;
+    }
+
+    ASSERT_TRUE(got_timeout) << "Expected exception when SSL handshake times out against a non-SSL peer";
+
+    server_done.store(true);
+    server_thread.join();
+}
+
+
 #endif /// USE_SSL

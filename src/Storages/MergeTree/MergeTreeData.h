@@ -560,6 +560,7 @@ public:
             bool need_data_mutations = false;
             bool need_alter_mutations = false;
             bool need_patch_parts = false;
+            bool has_lightweight_delete_parts = false;
         };
 
         static Int64 getMinPartDataVersionForPartition(const Params & params, const String & partition_id);
@@ -581,6 +582,7 @@ public:
         virtual bool hasDataMutations() const = 0;
         virtual bool hasAlterMutations() const = 0;
         virtual bool hasMetadataMutations() const = 0;
+        virtual bool hasLightweightDeletedMask() const = 0;
     };
 
     struct MutationsSnapshotBase : public IMutationsSnapshot
@@ -601,6 +603,7 @@ public:
         bool hasAlterMutations() const final { return counters.num_alter > 0; }
         bool hasMetadataMutations() const final { return counters.num_metadata > 0; }
         bool hasAnyMutations() const { return hasDataMutations() || hasAlterMutations() || hasMetadataMutations(); }
+        bool hasLightweightDeletedMask() const final { return params.has_lightweight_delete_parts; }
 
     protected:
         NameSet getColumnsUpdatedInPatches() const;
@@ -1197,11 +1200,16 @@ public:
     /// Returns a snapshot of mutations that probably will be applied on the fly to parts during reading.
     virtual MutationsSnapshotPtr getMutationsSnapshot(const IMutationsSnapshot::Params & params) const = 0;
 
-    /// Returns the minimum version of metadata among parts.
-    static Int64 getMinMetadataVersion(const DataPartsVector & parts);
+    /// Computes snapshot-related part statistics in a single pass:
+    /// min metadata version, per-partition min data version, and whether any part has a lightweight delete mask.
+    struct PartsSnapshotInfo
+    {
+        Int64 min_metadata_version = -1;
+        PartitionIdToMinBlockPtr min_data_versions;
+        bool has_lightweight_delete_parts = false;
+    };
 
-    /// Returns minimum data version among parts inside each of the partitions.
-    static PartitionIdToMinBlockPtr getMinDataVersionForEachPartition(const DataPartsVector & parts);
+    static PartsSnapshotInfo getPartsSnapshotInfo(const DataPartsVector & parts);
 
     /// Return alter conversions for part which must be applied on fly.
     static AlterConversionsPtr getAlterConversionsForPart(
@@ -1288,9 +1296,6 @@ public:
     SimpleIncrement insert_increment;
 
     bool has_non_adaptive_index_granularity_parts = false;
-
-    /// True if at least one part contains lightweight delete.
-    mutable std::atomic_bool has_lightweight_delete_parts = false;
 
     /// Parts that currently moving from disk/volume to another.
     /// This set have to be used with `currently_processing_in_background_mutex`.

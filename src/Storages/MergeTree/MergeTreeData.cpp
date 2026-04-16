@@ -212,6 +212,7 @@ namespace Setting
     extern const SettingsBool use_statistics;
     extern const SettingsBool use_statistics_cache;
     extern const SettingsBool use_partition_pruning;
+    extern const SettingsBool apply_deleted_mask;
 }
 
 namespace MergeTreeSetting
@@ -2105,9 +2106,6 @@ MergeTreeData::LoadPartResult MergeTreeData::loadDataPart(
         addPartContributionToUncompressedBytesInPatches(res.part);
     }
 
-    if (res.part->hasLightweightDelete())
-        has_lightweight_delete_parts.store(true);
-
     LOG_TRACE(log, "Finished loading {} part {} on disk {}", magic_enum::enum_name(to_state), part_name, part_disk_ptr->getName());
     return res;
 }
@@ -2399,7 +2397,6 @@ void MergeTreeData::loadDataParts(bool skip_sanity_checks, std::optional<std::un
     size_t suspicious_broken_unexpected_parts_bytes = 0;
     bool have_adaptive_parts = false;
     bool have_non_adaptive_parts = false;
-    bool have_lightweight_in_parts = false;
     bool have_parts_with_version_metadata = false;
 
     bool is_static_storage = isStaticStorage();
@@ -2444,7 +2441,6 @@ void MergeTreeData::loadDataParts(bool skip_sanity_checks, std::optional<std::un
                 bool is_adaptive = res.part->index_granularity_info.mark_type.adaptive;
                 have_adaptive_parts |= is_adaptive;
                 have_non_adaptive_parts |= !is_adaptive;
-                have_lightweight_in_parts |= res.part->hasLightweightDelete();
                 have_parts_with_version_metadata |= res.part->wasInvolvedInTransaction();
             }
         }
@@ -2456,7 +2452,6 @@ void MergeTreeData::loadDataParts(bool skip_sanity_checks, std::optional<std::un
                         "but `setting enable_mixed_granularity_parts` is disabled");
 
     has_non_adaptive_index_granularity_parts = have_non_adaptive_parts;
-    has_lightweight_delete_parts = have_lightweight_in_parts;
     transactions_enabled = have_parts_with_version_metadata;
 
     if (!skip_sanity_checks)
@@ -2649,7 +2644,6 @@ try
     }
 
     bool have_non_adaptive_parts = false;
-    bool have_lightweight_in_parts = false;
     bool have_parts_with_version_metadata = false;
 
     for (const auto & my_part : parts_to_add)
@@ -2674,13 +2668,11 @@ try
 
             bool is_adaptive = res.part->index_granularity_info.mark_type.adaptive;
             have_non_adaptive_parts |= !is_adaptive;
-            have_lightweight_in_parts |= res.part->hasLightweightDelete();
             have_parts_with_version_metadata |= res.part->wasInvolvedInTransaction();
         }
     }
 
     has_non_adaptive_index_granularity_parts = have_non_adaptive_parts;
-    has_lightweight_delete_parts = have_lightweight_in_parts;
     transactions_enabled = have_parts_with_version_metadata;
 
     auto old_parts = grabOldParts(true);
@@ -5167,9 +5159,6 @@ bool MergeTreeData::addTempPart(
     if (&out_transaction.data != this)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "MergeTreeData::Transaction for one table cannot be used with another. It is a bug.");
 
-    if (part->hasLightweightDelete())
-        has_lightweight_delete_parts.store(true);
-
     checkPartPartition(part, lock);
     checkPartDuplicate(part, out_transaction, lock);
 
@@ -5234,10 +5223,6 @@ bool MergeTreeData::renameTempPartAndReplaceImpl(
 
     if (hierarchy.duplicate_part)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Unexpected duplicate part {}. It is a bug.", hierarchy.duplicate_part->getNameWithState());
-
-
-    if (part->hasLightweightDelete())
-        has_lightweight_delete_parts.store(true);
 
     /// All checks are passed. Now we can rename the part on disk.
     /// So, we maintain invariant: if a non-temporary part in filesystem then it is in data_parts
@@ -10426,50 +10411,50 @@ SerializationInfoByName MergeTreeData::getSerializationHints() const
 
 bool MergeTreeData::supportsTrivialCountOptimization(const StorageSnapshotPtr & storage_snapshot, ContextPtr query_context) const
 {
-    if (hasLightweightDeletedMask())
-        return false;
-
     const auto & settings = query_context->getSettingsRef();
+    bool apply_any_mutations = settings[Setting::apply_mutations_on_fly] || settings[Setting::apply_patch_parts] || settings[Setting::apply_deleted_mask];
+
     if (!storage_snapshot)
-        return !settings[Setting::apply_mutations_on_fly] && !settings[Setting::apply_patch_parts];
+        return !apply_any_mutations;
 
     const auto & snapshot_data = assert_cast<const MergeTreeData::SnapshotData &>(*storage_snapshot->data);
     const auto & mutations_snapshot = snapshot_data.mutations_snapshot;
 
     if (!mutations_snapshot)
-        return !settings[Setting::apply_mutations_on_fly] && !settings[Setting::apply_patch_parts];
+        return !apply_any_mutations;
 
-    return !mutations_snapshot->hasDataMutations() && !mutations_snapshot->hasPatchParts();
+    return !mutations_snapshot->hasDataMutations() && !mutations_snapshot->hasPatchParts() && !mutations_snapshot->hasLightweightDeletedMask();
 }
 
-Int64 MergeTreeData::getMinMetadataVersion(const DataPartsVector & parts)
+MergeTreeData::PartsSnapshotInfo MergeTreeData::getPartsSnapshotInfo(const DataPartsVector & parts)
 {
-    Int64 version = -1;
-    for (const auto & part : parts)
-    {
-        Int64 part_version = part->getMetadataVersion();
-        if (version == -1 || part_version < version)
-            version = part_version;
-    }
-    return version;
-}
-
-MergeTreeData::PartitionIdToMinBlockPtr MergeTreeData::getMinDataVersionForEachPartition(const DataPartsVector & parts)
-{
-    PartitionIdToMinBlock partition_to_min_data_version;
+    PartsSnapshotInfo info;
+    PartitionIdToMinBlock min_data_versions;
 
     for (const auto & part : parts)
     {
-        const String & partition_id = part->info.getPartitionId();
-        const Int64 data_version = part->info.getDataVersion();
+        {
+            Int64 part_metadata_version = part->getMetadataVersion();
+            if (info.min_metadata_version == -1 || part_metadata_version < info.min_metadata_version)
+                info.min_metadata_version = part_metadata_version;
+        }
 
-        if (auto partition_it = partition_to_min_data_version.find(partition_id); partition_it != partition_to_min_data_version.end())
-            partition_it->second = std::min(partition_it->second, data_version);
-        else
-            partition_to_min_data_version.emplace(partition_id, data_version);
+        {
+            const String & partition_id = part->info.getPartitionId();
+            const Int64 data_version = part->info.getDataVersion();
+
+            if (auto it = min_data_versions.find(partition_id); it != min_data_versions.end())
+                it->second = std::min(it->second, data_version);
+            else
+                min_data_versions.emplace(partition_id, data_version);
+        }
+
+        if (!info.has_lightweight_delete_parts && part->hasLightweightDelete())
+            info.has_lightweight_delete_parts = true;
     }
 
-    return std::make_shared<PartitionIdToMinBlock>(std::move(partition_to_min_data_version));
+    info.min_data_versions = std::make_shared<PartitionIdToMinBlock>(std::move(min_data_versions));
+    return info;
 }
 
 MergeTreeSettingsPtr MergeTreeData::getSettings(ProjectionDescriptionRawPtr projection) const
@@ -10523,18 +10508,21 @@ MergeTreeData::createStorageSnapshot(const StorageMetadataPtr & metadata_snapsho
     auto [query_ranges, query_parts] = getPossiblySharedVisibleDataPartsRanges(query_context);
     snapshot_data->parts = query_ranges;
 
+    auto parts_info = getPartsSnapshotInfo(*query_parts);
+
     bool apply_mutations_on_fly = query_context->getSettingsRef()[Setting::apply_mutations_on_fly];
     bool apply_patch_parts = query_context->getSettingsRef()[Setting::apply_patch_parts];
 
     IMutationsSnapshot::Params params
     {
         .metadata_version = metadata_snapshot->getMetadataVersion(),
-        .min_part_metadata_version = getMinMetadataVersion(*query_parts),
-        .min_part_data_versions = getMinDataVersionForEachPartition(*query_parts),
+        .min_part_metadata_version = parts_info.min_metadata_version,
+        .min_part_data_versions = std::move(parts_info.min_data_versions),
         .max_mutation_versions = query_context->getPartitionIdToMaxBlock(getStorageID().uuid),
         .need_data_mutations = apply_mutations_on_fly,
         .need_alter_mutations = apply_mutations_on_fly || apply_patch_parts,
         .need_patch_parts = apply_patch_parts,
+        .has_lightweight_delete_parts = parts_info.has_lightweight_delete_parts,
     };
 
     snapshot_data->mutations_snapshot = getMutationsSnapshot(params);

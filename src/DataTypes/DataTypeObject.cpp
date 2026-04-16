@@ -322,6 +322,19 @@ String removeJSONTypeParameters(const String & type_name)
                     ++i;
                 continue;
             }
+            if (result[i] == '\'')
+            {
+                /// Use tryReadQuotedString to properly skip single-quoted strings,
+                /// so that parentheses inside them (e.g. in SKIP REGEXP '...')
+                /// don't affect the nesting depth.
+                ReadBufferFromMemory buf(result.data() + i, result.size() - i);
+                String tmp;
+                if (tryReadQuotedString(tmp, buf))
+                    i += buf.count();
+                else
+                    ++i;
+                continue;
+            }
             if (result[i] == '(')
                 ++depth;
             else if (result[i] == ')')

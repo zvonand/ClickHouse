@@ -7,15 +7,11 @@ title: 'system.zookeeper_watches'
 doc_type: 'reference'
 ---
 
-import SystemTableCloud from '@site/docs/_snippets/_system_table_cloud.md';
-
-# system.zookeeper_watches
-
-<SystemTableCloud/>
+## Description {#description}
 
 This table does not exist if ZooKeeper is not configured. Shows currently active [watches](https://zookeeper.apache.org/doc/r3.3.3/zookeeperProgrammers.html#ch_zkWatches) registered by this ClickHouse server on ZooKeeper nodes (including auxiliary ZooKeepers). Each row represents one watch.
 
-Columns:
+## Columns {#columns}
 
 - `zookeeper_name` ([String](../../sql-reference/data-types/string.md)) — Name of the ZooKeeper connection (`default` for the main connection, or the auxiliary name).
 - `create_time` ([DateTime](../../sql-reference/data-types/datetime.md)) — Time when the watch was created.
@@ -29,15 +25,11 @@ Columns:
   - `Exists` — watching for node creation or deletion.
   - `Data` — watching for changes in node data (set by `Get` operations).
 
-**Example**
-
-Query:
+Example:
 
 ```sql
 SELECT * FROM system.zookeeper_watches FORMAT Vertical;
 ```
-
-Result:
 
 ```text
 Row 1:

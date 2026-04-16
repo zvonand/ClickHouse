@@ -5,11 +5,10 @@
 #include <Poco/Net/ServerSocket.h>
 #include <Poco/Net/StreamSocket.h>
 #include <Poco/Net/SocketAddress.h>
-#include <Poco/Net/MessageException.h>
+#include <Poco/Net/NetException.h>
 
 #include <thread>
 #include <atomic>
-#include <vector>
 
 
 namespace
@@ -54,7 +53,7 @@ public:
         });
     }
 
-    int port() const { return server_socket.address().port(); }
+    Poco::UInt16 port() const { return server_socket.address().port(); }
 
 private:
     Poco::Net::ServerSocket server_socket;
@@ -71,7 +70,7 @@ TEST(HTTPFixedLengthStreamBuf, WriteExactLength)
     SinkServer server;
     server.start();
 
-    Poco::Net::HTTPClientSession session("127.0.0.1", server.port());
+    Poco::Net::HTTPClientSession session(Poco::Net::SocketAddress("127.0.0.1", server.port()));
     session.setKeepAlive(false);
 
     Poco::Net::HTTPFixedLengthOutputStream stream(session, 10);
@@ -89,7 +88,7 @@ TEST(HTTPFixedLengthStreamBuf, WriteOverLengthThrows)
     SinkServer server;
     server.start();
 
-    Poco::Net::HTTPClientSession session("127.0.0.1", server.port());
+    Poco::Net::HTTPClientSession session(Poco::Net::SocketAddress("127.0.0.1", server.port()));
     session.setKeepAlive(false);
 
     /// Content-Length is 5, but we will try to write 10 bytes.
@@ -119,7 +118,7 @@ TEST(HTTPFixedLengthStreamBuf, WriteBoundaryPlusOneThrows)
     SinkServer server;
     server.start();
 
-    Poco::Net::HTTPClientSession session("127.0.0.1", server.port());
+    Poco::Net::HTTPClientSession session(Poco::Net::SocketAddress("127.0.0.1", server.port()));
     session.setKeepAlive(false);
 
     Poco::Net::HTTPFixedLengthOutputStream stream(session, 5);

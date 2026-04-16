@@ -22,15 +22,15 @@
 -- Float specials
 -inf
 -1
--0
 0
+-0
 1
 inf
 nan
 inf
 1
--0
 0
+-0
 -1
 -inf
 nan

@@ -7,8 +7,8 @@ SELECT x FROM (SELECT arrayJoin([toInt64(-9223372036854775808), toInt64(92233720
 SELECT x FROM (SELECT arrayJoin([toInt64(-9223372036854775808), toInt64(9223372036854775807), toInt64(0), toInt64(-1), toInt64(1)]) AS x) ORDER BY x DESC;
 
 SELECT '-- Float specials';
-SELECT x FROM (SELECT arrayJoin([toFloat64(-inf), toFloat64(-1.0), toFloat64(-0.0), toFloat64(0.0), toFloat64(1.0), toFloat64(inf), toFloat64(nan)]) AS x) ORDER BY x ASC;
-SELECT x FROM (SELECT arrayJoin([toFloat64(-inf), toFloat64(-1.0), toFloat64(-0.0), toFloat64(0.0), toFloat64(1.0), toFloat64(inf), toFloat64(nan)]) AS x) ORDER BY x DESC;
+SELECT x FROM (SELECT arrayJoin([toFloat64(-inf), toFloat64(-1.0), toFloat64(-0.0), toFloat64(0.0), toFloat64(1.0), toFloat64(inf), toFloat64(nan)]) AS x) ORDER BY x ASC, reinterpretAsUInt64(x) SETTINGS optimize_redundant_functions_in_order_by = 0;
+SELECT x FROM (SELECT arrayJoin([toFloat64(-inf), toFloat64(-1.0), toFloat64(-0.0), toFloat64(0.0), toFloat64(1.0), toFloat64(inf), toFloat64(nan)]) AS x) ORDER BY x DESC, reinterpretAsUInt64(x) SETTINGS optimize_redundant_functions_in_order_by = 0;
 
 SELECT '-- Negative zero';
 SELECT toFloat64(-0.0) = toFloat64(0.0) AS eq, toFloat64(-0.0) < toFloat64(0.0) AS lt;

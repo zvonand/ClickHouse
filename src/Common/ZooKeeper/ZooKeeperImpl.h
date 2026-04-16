@@ -303,13 +303,6 @@ private:
     Operations operations TSA_GUARDED_BY(operations_mutex);
     std::mutex operations_mutex;
 
-    struct WatchCreateInfo
-    {
-        std::chrono::system_clock::time_point create_time{};
-        XID request_xid{0};
-        OpNum op_num{OpNum::Error};
-    };
-
     using WatchCallbacksWithCreateInfo = std::unordered_map<WatchCallbackPtrOrEventPtr, WatchCreateInfo>;
     using WatchesWithCreateInfo = std::unordered_map<String, WatchCallbacksWithCreateInfo>;
 

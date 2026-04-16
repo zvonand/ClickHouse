@@ -67,24 +67,27 @@ void StorageSystemZooKeeperWatches::fillData(
 
         auto zk_args = zookeeper->getArgs();
 
-        for (const auto & watch_info : zookeeper->getWatchesSnapshot())
+        for (const auto & [path, watches] : zookeeper->getWatchesSnapshot())
         {
-            auto create_ts = watch_info.create_time.time_since_epoch();
-            auto create_ts_sec = duration_cast<seconds>(create_ts).count();
-            auto create_ts_mcsec = Decimal64(duration_cast<microseconds>(create_ts).count());
-
-            auto full_path = watch_info.path;
+            auto full_path = path;
             if (!zk_args.chroot.empty())
-                full_path = watch_info.path == "/" ? zk_args.chroot : zk_args.chroot + watch_info.path;
+                full_path = path == "/" ? zk_args.chroot : zk_args.chroot + path;
 
-            res_columns[0]->insert(name);
-            res_columns[1]->insert(create_ts_sec);
-            res_columns[2]->insert(create_ts_mcsec);
-            res_columns[3]->insert(full_path);
-            res_columns[4]->insert(zookeeper->getClientID());
-            res_columns[5]->insert(watch_info.request_xid);
-            res_columns[6]->insert(static_cast<Int16>(watch_info.op_num));
-            res_columns[7]->insert(watchTypeFromOpNum(watch_info.op_num));
+            for (const auto & watch_info : watches)
+            {
+                auto create_ts = watch_info.create_time.time_since_epoch();
+                auto create_ts_sec = duration_cast<seconds>(create_ts).count();
+                auto create_ts_mcsec = Decimal64(duration_cast<microseconds>(create_ts).count());
+
+                res_columns[0]->insert(name);
+                res_columns[1]->insert(create_ts_sec);
+                res_columns[2]->insert(create_ts_mcsec);
+                res_columns[3]->insert(full_path);
+                res_columns[4]->insert(zookeeper->getClientID());
+                res_columns[5]->insert(watch_info.request_xid);
+                res_columns[6]->insert(static_cast<Int16>(watch_info.op_num));
+                res_columns[7]->insert(watchTypeFromOpNum(watch_info.op_num));
+            }
         }
     };
 

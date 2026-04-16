@@ -863,14 +863,14 @@ public:
     using WatchCallbacks = std::unordered_set<WatchCallbackPtrOrEventPtr>;
     using Watches = std::map<String /* path, relative of root_path */, WatchCallbacks>;
 
-    struct WatchInfo
+    struct WatchCreateInfo
     {
-        String path;
-        std::chrono::system_clock::time_point create_time;
-        XID request_xid;
-        OpNum op_num;
+        std::chrono::system_clock::time_point create_time{};
+        XID request_xid{0};
+        OpNum op_num{OpNum::Error};
     };
-    using WatchesSnapshot = std::vector<WatchInfo>;
+
+    using WatchesSnapshot = std::unordered_map<String, std::vector<WatchCreateInfo>>;
 
 protected:
     std::unordered_map<String, WatchCallbackPtrOrEventPtr> watches_by_id TSA_GUARDED_BY(watches_mutex);

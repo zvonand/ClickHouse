@@ -2203,11 +2203,11 @@ ZooKeeper::WatchesSnapshot ZooKeeper::getWatchesSnapshot() const
 
     for (const auto & [path, callbacks] : watches)
         for (const auto & [_, create_info] : callbacks)
-            result.push_back({path, create_info.create_time, create_info.request_xid, create_info.op_num});
+            result[path].push_back(create_info);
 
     for (const auto & [path, callbacks] : list_watches)
         for (const auto & [_, create_info] : callbacks)
-            result.push_back({path, create_info.create_time, create_info.request_xid, create_info.op_num});
+            result[path].push_back(create_info);
 
     return result;
 }

@@ -10,8 +10,7 @@ $CLICKHOUSE_CLIENT -q "
 DROP TABLE IF EXISTS t0 SYNC;
 DROP TABLE IF EXISTS t1 SYNC;
 
-CREATE TABLE t0 (c1 Int) ENGINE = MergeTree() ORDER BY c1 PARTITION BY (c1 % 6451);
-SET min_insert_block_size_rows = 64, optimize_trivial_insert_select = 1;
+CREATE TABLE t0 (c1 Int) ENGINE = MergeTree() ORDER BY c1 PARTITION BY (c1 % 10);
 INSERT INTO TABLE t0 (c1) SELECT number FROM numbers(500);
 
 BACKUP TABLE t0 TO Disk('backups', '03760_backup_tar_archive_$CLICKHOUSE_TEST_UNIQUE_NAME.tar') FORMAT Null;

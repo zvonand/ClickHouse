@@ -1438,11 +1438,12 @@
                 if (column === lastColumn) td.classList.add('time-column');
 
                 if (column === 'status') {
+                    const value_ = value ? value.toLowerCase() : "";
                     const span = document.createElement('span');
-                    span.className = getStatusClass(value);
-                    span.textContent = value;
+                    span.className = getStatusClass(value_);
+                    span.textContent = value_;
                     td.classList.add('status-column');
-                    row.dataset.status = value ? value.toLowerCase() : "";
+                    row.dataset.status = value_;
                     if ((result.info && result.info.trim() !== "") || (Array.isArray(result.links) && result.links.length > 0) || (Array.isArray(result.results) && result.results.length > 0)) {
                         span.style.cursor = "pointer";
                         span.addEventListener('click', () => toggleInfoRow(row, result.info, result.results, result.links));

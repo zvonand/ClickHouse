@@ -1696,16 +1696,20 @@ def save_random_settings_artifact(args, test_name, settings, mt_settings):
 
 
 def load_random_settings_artifacts(args):
-    """Read all entries from the diagnostics JSONL file."""
+    """Read all entries from the diagnostics JSONL file, keeping only the first per test."""
     path = get_random_settings_diagnostics_path(args)
     if not os.path.isfile(path):
         return []
+    seen = set()
     entries = []
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
-                entries.append(json.loads(line))
+                entry = json.loads(line)
+                if entry["test_name"] not in seen:
+                    seen.add(entry["test_name"])
+                    entries.append(entry)
     return entries
 
 
@@ -2064,10 +2068,21 @@ class TestCase:
         failed_settings = dict(self.effective_settings)
         failed_mt_settings = dict(self.effective_merge_tree_settings)
 
-        if not failed_settings and not failed_mt_settings:
-            return ""
-
         step_budget = args.diagnose_random_settings_step_time_budget
+
+        # No randomized settings — rerun up to 3 times to check reproducibility.
+        if not failed_settings and not failed_mt_settings:
+            max_reruns = 3
+            fail_count = 0
+            for i in range(max_reruns):
+                result = self._run_with_settings(args, suite, client_options, {}, {})
+                if result.status == TestStatus.FAIL:
+                    fail_count += 1
+            return (
+                f"\n\n--- Failure reproducibility check ---\n"
+                f"Failed {fail_count} out of {max_reruns} reruns.\n"
+            )
+
         diagnosis_lines = ["\n\n--- Randomized settings diagnosis ---"]
 
         # Step 1: Re-run with the same settings within the time budget
@@ -4219,12 +4234,11 @@ def run_tests_array(
                     break
                 restarted_tests.append(test_result)
 
-            # Save randomized settings for failed tests so that diagnostics
-            # can be run later via --diagnose-random-settings.
+            # Save failed test info so that diagnostics can be run later
+            # via --diagnose-random-settings.
             if (
                 test_result
                 and test_result.status == TestStatus.FAIL
-                and (test_case.effective_settings or test_case.effective_merge_tree_settings)
                 and test_result.reason != FailureReason.SERVER_DIED
             ):
                 save_random_settings_artifact(

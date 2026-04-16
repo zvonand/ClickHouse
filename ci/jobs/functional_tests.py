@@ -21,7 +21,7 @@ class JobStages(metaclass=MetaClasses.WithIter):
     INSTALL_CLICKHOUSE = "install"
     START = "start"
     TEST = "test"
-    RETRIES = "retries"
+    DIAGNOSTICS = "diagnostics"
     CHECK_ERRORS = "check_errors"
     COLLECT_LOGS = "collect_logs"
     COLLECT_COVERAGE = "collect_coverage"
@@ -253,6 +253,9 @@ def main():
         else:
             runner_options += " --no-random-settings --no-random-merge-tree-settings  --no-long"
 
+    diagnostics_dir = f"{temp_dir}/random-settings-diagnostics"
+    runner_options += f" --random-settings-diagnostics-dir {diagnostics_dir}"
+
     if (
         not is_flaky_check
         and not is_targeted_check
@@ -357,7 +360,7 @@ def main():
         or is_targeted_check
         or info.is_local_run
     ):
-        stages.remove(JobStages.RETRIES)
+        stages.remove(JobStages.DIAGNOSTICS)
 
     tests = args.test
 
@@ -619,13 +622,15 @@ def main():
 
         res = results[-1].is_ok()
 
-    if JobStages.RETRIES in stages and test_result and test_result.is_failure():
-        has_random_settings = "--no-random-settings" not in runner_options
+    if JobStages.DIAGNOSTICS in stages and test_result and test_result.is_failure():
+        failed_tests_seen = set()
         failed_tests = []
         has_errors = False
         for t in test_result.results:
             if t.is_failure() and t.name and t.name[0].isdigit():
-                failed_tests.append(t.name)
+                if t.name not in failed_tests_seen:
+                    failed_tests_seen.add(t.name)
+                    failed_tests.append(t.name)
             elif t.is_error():
                 has_errors = True
                 print(
@@ -638,13 +643,12 @@ def main():
         elif len(failed_tests) > 10:
             results.append(
                 Result(
-                    name="Random settings diagnostics",
+                    name="Diagnostics",
                     status=Result.Status.SKIPPED,
                     info="Too many failed tests",
                 )
             )
-        elif failed_tests and has_random_settings:
-            diagnostics_dir = "/tmp/clickhouse-random-settings-diagnostics"
+        elif failed_tests:
             memory_limit = (
                 10 * 2**30 if "asan_ubsan" in Info().job_name else 5 * 2**30
             )
@@ -653,10 +657,11 @@ def main():
                 f" --memory-limit {memory_limit} --trace --capture-client-stacktrace"
                 f" --queries ./tests/queries --shard --zookeeper"
                 f" --diagnose-random-settings"
+                f" --random-settings-diagnostics-dir {diagnostics_dir}"
                 f" --no-random-settings --no-random-merge-tree-settings"
                 f" -- {' '.join(failed_tests)}"
             )
-            print(f"Running random settings diagnostics for {len(failed_tests)} test(s)...")
+            print(f"Running diagnostics for {len(failed_tests)} test(s)...")
             Shell.run(diag_command, verbose=True)
 
             # Read diagnostics results and prepend to original test info

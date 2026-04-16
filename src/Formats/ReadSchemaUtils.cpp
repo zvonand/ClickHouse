@@ -199,35 +199,6 @@ try
                     e.addMessage("The data format cannot be detected by the contents of the files. You can specify the format manually");
                 throw;
             }
-            /// See comment above about std::length_error / std::out_of_range.
-            catch (const std::length_error & e)
-            {
-                if (format_name)
-                    throw Exception(
-                        ErrorCodes::CANNOT_EXTRACT_TABLE_STRUCTURE,
-                        "The table structure cannot be extracted from a {} format file:\n{}.\nYou can specify the structure manually",
-                        *format_name,
-                        e.what());
-
-                throw Exception(
-                    ErrorCodes::CANNOT_DETECT_FORMAT,
-                    "The data format cannot be detected by the contents of the files:\n{}.\nYou can specify the format manually",
-                    e.what());
-            }
-            catch (const std::out_of_range & e)
-            {
-                if (format_name)
-                    throw Exception(
-                        ErrorCodes::CANNOT_EXTRACT_TABLE_STRUCTURE,
-                        "The table structure cannot be extracted from a {} format file:\n{}.\nYou can specify the structure manually",
-                        *format_name,
-                        e.what());
-
-                throw Exception(
-                    ErrorCodes::CANNOT_DETECT_FORMAT,
-                    "The data format cannot be detected by the contents of the files:\n{}.\nYou can specify the format manually",
-                    e.what());
-            }
             catch (...)
             {
                 auto exception_message = getCurrentExceptionMessage(false);
@@ -298,32 +269,6 @@ try
                         break;
 
                     schemas_for_union_mode.emplace_back(names_and_types, read_buffer_iterator.getLastFilePath());
-                }
-                /// std::length_error and std::out_of_range inherit from std::logic_error.
-                /// In debug/sanitizer builds, getCurrentExceptionMessage() aborts on any
-                /// std::logic_error (treating it as a programming bug). But these exceptions
-                /// can legitimately occur from user input during schema inference — e.g.,
-                /// an enormous input_format_msgpack_number_of_columns causing vector::reserve()
-                /// to exceed max_size(), or a third-party library throwing on malformed data.
-                /// Catch them explicitly and convert to a proper DB::Exception before the
-                /// general handler calls getCurrentExceptionMessage().
-                catch (const std::length_error & e)
-                {
-                    throw Exception(
-                        ErrorCodes::CANNOT_EXTRACT_TABLE_STRUCTURE,
-                        "The table structure cannot be extracted from a {} format file. "
-                        "Error:\n{}.\nYou can specify the structure manually",
-                        *format_name,
-                        e.what());
-                }
-                catch (const std::out_of_range & e)
-                {
-                    throw Exception(
-                        ErrorCodes::CANNOT_EXTRACT_TABLE_STRUCTURE,
-                        "The table structure cannot be extracted from a {} format file. "
-                        "Error:\n{}.\nYou can specify the structure manually",
-                        *format_name,
-                        e.what());
                 }
                 catch (...)
                 {

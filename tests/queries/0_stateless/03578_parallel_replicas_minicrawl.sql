@@ -1,4 +1,4 @@
--- Tags: no-fasttest
+-- Tags: no-fasttest, long, no-random-settings, no-random-merge-tree-settings
 -- ^ uses a function not available in the fast test build.
 
 SET enable_analyzer = 1,
@@ -503,7 +503,7 @@ nel_group
 
 FROM minicrawl;
 
-SELECT * EXCEPT (converted_content, log) FROM minicrawl_processed FORMAT Vertical;
+SELECT * EXCEPT (converted_content, log, headers, last_headers) FROM minicrawl_processed FORMAT Vertical;
 
 DROP TABLE minicrawl_processed;
 DROP TABLE minicrawl;

@@ -1,5 +1,9 @@
 DROP TABLE IF EXISTS table_map;
-CREATE TABLE table_map (id UInt32, col Map(String, UInt64)) engine = MergeTree() ORDER BY tuple();
+-- Pin map serialization to 'basic' to prevent key reordering when CI randomizes
+-- map_serialization_version_for_zero_level_parts to 'with_buckets' (bucketed serialization
+-- stores keys in hash-bucket order instead of insertion order).
+CREATE TABLE table_map (id UInt32, col Map(String, UInt64)) engine = MergeTree() ORDER BY tuple()
+    SETTINGS map_serialization_version = 'basic', map_serialization_version_for_zero_level_parts = 'basic';
 INSERT INTO table_map SELECT number, map('key1', number, 'key2', number * 2) FROM numbers(1111, 3);
 INSERT INTO table_map SELECT number, map('key3', number, 'key2', number + 1, 'key4', number + 2) FROM numbers(100, 4);
 

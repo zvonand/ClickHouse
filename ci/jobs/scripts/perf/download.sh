@@ -25,7 +25,7 @@ dataset_paths["hits10"]="https://clickhouse-private-datasets.s3.amazonaws.com/hi
 dataset_paths["hits100"]="https://clickhouse-private-datasets.s3.amazonaws.com/hits_100m_single/partitions/hits_100m_single.tar"
 dataset_paths["hits1"]="https://clickhouse-datasets.s3.amazonaws.com/hits/partitions/hits_v1.tar"
 dataset_paths["values"]="https://clickhouse-datasets.s3.amazonaws.com/values_with_expressions/partitions/test_values.tar"
-dataset_paths["tpch10"]="https://clickhouse-datasets.s3.amazonaws.com/h/10/tpch.tar"
+dataset_paths["tpch10"]="https://clickhouse-datasets.s3.amazonaws.com/h/10/tpch_sf10.tar"
 dataset_paths["tpcds1"]="https://clickhouse-datasets.s3.amazonaws.com/ds/scale_1/tpcds.tar"
 
 
@@ -74,15 +74,6 @@ function download
         fi
         echo "Processing dataset '$dataset_name'..."
         if wget -nv -nd -c "$dataset_path" -O- | tar --extract --verbose; then
-            # The tpch.tar has a broken layout: table data is at data/<table>/ instead of data/tpch10/<table>/. Move folders into place.
-            if [ "$dataset_name" = "tpch10" ]; then
-                for t in customer lineitem nation orders part partsupp region supplier; do
-                    if [ -d "data/$t" ] && [ ! -d "data/tpch10/$t" ]; then
-                        mv "data/$t" "data/tpch10/$t"
-                        echo "Moved data/$t -> data/tpch10/$t"
-                    fi
-                done
-            fi
             touch "$done_flag"
             echo "Dataset '$dataset_name' completed."
         else

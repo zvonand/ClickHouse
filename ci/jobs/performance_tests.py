@@ -493,7 +493,7 @@ def main():
                 "hits100": "https://clickhouse-datasets.s3.amazonaws.com/hits/partitions/hits_100m_single.tar",
                 "hits1": "https://clickhouse-datasets.s3.amazonaws.com/hits/partitions/hits_v1.tar",
                 "values": "https://clickhouse-datasets.s3.amazonaws.com/values_with_expressions/partitions/test_values.tar",
-                "tpch10": "https://clickhouse-datasets.s3.amazonaws.com/h/10/tpch.tar",
+                "tpch10": "https://clickhouse-datasets.s3.amazonaws.com/h/10/tpch_sf10.tar",
                 "tpcds1": "https://clickhouse-datasets.s3.amazonaws.com/ds/scale_1/tpcds.tar",
             }
             cmds = []
@@ -509,15 +509,6 @@ def main():
                 )
             )
             if res:
-                # The tpch.tar has a broken layout: table data is at data/<table>/ instead of data/tpch10/<table>/. Move folders into place.
-                tpch_tables = ["customer","lineitem","nation","orders","part","partsupp","region","supplier"]
-                for t in tpch_tables:
-                    src = Path(f"{db_path}/data/{t}")
-                    dst = Path(f"{db_path}/data/tpch10/{t}")
-                    if src.is_dir() and not dst.exists():
-                        src.rename(dst)
-                        print(f"Moved {src} -> {dst}")
-
                 Shell.check(f"touch {db_path}/.done")
 
     if res and JobStages.CONFIGURE in stages:

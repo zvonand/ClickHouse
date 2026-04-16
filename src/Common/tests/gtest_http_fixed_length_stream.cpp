@@ -64,14 +64,22 @@ private:
 }
 
 
+Poco::Net::StreamSocket connectTo(const SinkServer & server)
+{
+    Poco::Net::StreamSocket sock;
+    sock.connect(Poco::Net::SocketAddress("127.0.0.1", server.port()));
+    return sock;
+}
+
+
 /// Writing exactly Content-Length bytes should succeed.
 TEST(HTTPFixedLengthStreamBuf, WriteExactLength)
 {
     SinkServer server;
     server.start();
 
-    Poco::Net::HTTPClientSession session(Poco::Net::SocketAddress("127.0.0.1", server.port()));
-    session.setKeepAlive(false);
+    auto sock = connectTo(server);
+    Poco::Net::HTTPClientSession session(sock);
 
     Poco::Net::HTTPFixedLengthOutputStream stream(session, 10);
 
@@ -88,8 +96,8 @@ TEST(HTTPFixedLengthStreamBuf, WriteOverLengthThrows)
     SinkServer server;
     server.start();
 
-    Poco::Net::HTTPClientSession session(Poco::Net::SocketAddress("127.0.0.1", server.port()));
-    session.setKeepAlive(false);
+    auto sock = connectTo(server);
+    Poco::Net::HTTPClientSession session(sock);
 
     /// Content-Length is 5, but we will try to write 10 bytes.
     Poco::Net::HTTPFixedLengthOutputStream stream(session, 5);
@@ -120,8 +128,8 @@ TEST(HTTPFixedLengthStreamBuf, WriteBoundaryPlusOneThrows)
     SinkServer server;
     server.start();
 
-    Poco::Net::HTTPClientSession session(Poco::Net::SocketAddress("127.0.0.1", server.port()));
-    session.setKeepAlive(false);
+    auto sock = connectTo(server);
+    Poco::Net::HTTPClientSession session(sock);
 
     Poco::Net::HTTPFixedLengthOutputStream stream(session, 5);
 

@@ -132,7 +132,7 @@ public:
     /// Useful to check owner of ephemeral node.
     int64_t getSessionID() const override { return session_id; }
 
-    std::shared_ptr<const ZooKeeperWatchesTracker> getWatchesTracker() const { return watches_tracker; }
+    WatchesSnapshot getWatchesSnapshot() const;
 
     void executeGenericRequest(
         const ZooKeeperRequestPtr & request,
@@ -303,8 +303,18 @@ private:
     Operations operations TSA_GUARDED_BY(operations_mutex);
     std::mutex operations_mutex;
 
-    Watches watches TSA_GUARDED_BY(watches_mutex);
-    Watches list_watches TSA_GUARDED_BY(watches_mutex);
+    struct WatchCreateInfo
+    {
+        std::chrono::system_clock::time_point create_time{};
+        XID request_xid{0};
+        OpNum op_num{OpNum::Error};
+    };
+
+    using WatchCallbacksWithCreateInfo = std::unordered_map<WatchCallbackPtrOrEventPtr, WatchCreateInfo>;
+    using WatchesWithCreateInfo = std::map<String, WatchCallbacksWithCreateInfo>;
+
+    WatchesWithCreateInfo watches TSA_GUARDED_BY(watches_mutex);
+    WatchesWithCreateInfo list_watches TSA_GUARDED_BY(watches_mutex);
 
     /// A wrapper around ThreadFromGlobalPool that allows to call join() on it from multiple threads.
     class ThreadReference
@@ -375,7 +385,6 @@ private:
     CurrentMetrics::Increment active_session_metric_increment{CurrentMetrics::ZooKeeperSession};
     std::shared_ptr<ZooKeeperLog> zk_log;
     std::shared_ptr<AggregatedZooKeeperLog> aggregated_zookeeper_log;
-    std::shared_ptr<ZooKeeperWatchesTracker> watches_tracker;
 
     std::atomic<int64_t> last_zxid_seen;
 

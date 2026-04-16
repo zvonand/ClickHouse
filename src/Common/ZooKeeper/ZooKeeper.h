@@ -18,11 +18,6 @@
 #include <unistd.h>
 
 
-namespace Coordination
-{
-    class ZooKeeperWatchesTracker;
-}
-
 namespace Poco::Net
 {
     class SocketAddress;
@@ -456,7 +451,7 @@ public:
 
     Int64 getClientID() const;
 
-    std::shared_ptr<const Coordination::ZooKeeperWatchesTracker> getWatchesTracker() const;
+    Coordination::IKeeper::WatchesSnapshot getWatchesSnapshot() const;
 
     /// Remove the node with the subtree.
     /// If Keeper supports RemoveRecursive operation then it will be performed atomically.

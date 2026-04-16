@@ -63,8 +63,6 @@ struct ZooKeeperArgs
     /// Linux nice value for the send and receive threads in ZooKeeper Client.
     Int32 send_receive_os_threads_nice_value = 0;
 
-    bool enable_watches_tracking = true;
-
     struct PathAclInfo
     {
         Coordination::ACL acl;

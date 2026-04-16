@@ -1502,11 +1502,11 @@ Int64 ZooKeeper::getClientID() const
     return impl->getSessionID();
 }
 
-std::shared_ptr<const Coordination::ZooKeeperWatchesTracker> ZooKeeper::getWatchesTracker() const
+Coordination::IKeeper::WatchesSnapshot ZooKeeper::getWatchesSnapshot() const
 {
     if (auto * zk_impl = dynamic_cast<Coordination::ZooKeeper *>(impl.get()))
-        return zk_impl->getWatchesTracker();
-    return nullptr;
+        return zk_impl->getWatchesSnapshot();
+    return {};
 }
 
 Coordination::WatchCallbackPtrOrEventPtr ZooKeeper::createWatchFromRawCallback(const String & id, const Coordination::IKeeper::WatchCallbackCreator & creator)

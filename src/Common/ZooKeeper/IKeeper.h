@@ -3,7 +3,9 @@
 #include <base/defines.h>
 #include <base/types.h>
 #include <Common/ZooKeeper/KeeperFeatureFlags.h>
+#include <Common/ZooKeeper/ZooKeeperConstants.h>
 
+#include <chrono>
 #include <limits>
 #include <map>
 #include <mutex>
@@ -861,9 +863,18 @@ public:
     using WatchCallbacks = std::unordered_set<WatchCallbackPtrOrEventPtr>;
     using Watches = std::map<String /* path, relative of root_path */, WatchCallbacks>;
 
+    struct WatchInfo
+    {
+        String path;
+        std::chrono::system_clock::time_point create_time;
+        XID request_xid;
+        OpNum op_num;
+    };
+    using WatchesSnapshot = std::vector<WatchInfo>;
+
 protected:
     std::unordered_map<String, WatchCallbackPtrOrEventPtr> watches_by_id TSA_GUARDED_BY(watches_mutex);
-    std::mutex watches_mutex;
+    mutable std::mutex watches_mutex;
 };
 
 }

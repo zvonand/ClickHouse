@@ -470,20 +470,7 @@ bool ClusterDiscovery::upsertCluster(ClusterInfo & cluster_info)
 
     if (nodes_info.empty())
     {
-        if (cluster_info.zk_root_index != 0)
-        {
-            String name = cluster_info.name;
-            /// cluster_info removed inside removeCluster, can't use reference to name.
-            removeCluster(name);
-        }
-        else
-        {
-            /// Static cluster (defined in config) with no nodes. Don't erase watch callback
-            /// (via removeCluster) - nodes may reappear, and the callback is needed to detect that.
-            /// Just hide the cluster from system.clusters until nodes come back.
-            std::lock_guard lock(mutex);
-            cluster_impls.erase(cluster_info.name);
-        }
+        removeCluster(cluster_info.name, /* is_dynamic_cluster */cluster_info.zk_root_index != 0);
         return true;
     }
 
@@ -494,15 +481,18 @@ bool ClusterDiscovery::upsertCluster(ClusterInfo & cluster_info)
     return true;
 }
 
-void ClusterDiscovery::removeCluster(const String & name)
+void ClusterDiscovery::removeCluster(const String & name, bool is_dynamic)
 {
     {
         std::lock_guard lock(mutex);
         cluster_impls.erase(name);
     }
-    clusters_to_update->remove(name);
-    get_nodes_callbacks.erase(name);
-    LOG_DEBUG(log, "Dynamic cluster '{}' removed successfully", name);
+    if (is_dynamic)
+    {
+        clusters_to_update->remove(name);
+        get_nodes_callbacks.erase(name);
+        LOG_DEBUG(log, "Dynamic cluster '{}' removed successfully", name);
+    }
 }
 
 void ClusterDiscovery::registerInZk(zkutil::ZooKeeperPtr & zk, ClusterInfo & info)
@@ -730,7 +720,7 @@ bool ClusterDiscovery::runMainThread(std::function<void()> up_to_date_callback)
             clusters_to_insert.insert(cluster_name);
 
         for (const auto & cluster_name : clusters_to_remove)
-            removeCluster(cluster_name);
+            removeCluster(cluster_name, /* is_dynamic_cluster */true);
 
         clusters_info.merge(new_dynamic_clusters_info);
 

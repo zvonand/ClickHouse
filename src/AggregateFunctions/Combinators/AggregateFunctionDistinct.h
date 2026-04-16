@@ -303,12 +303,9 @@ public:
 
     bool canMergeStateFromDifferentVariant(const IAggregateFunction & rhs) const override
     {
-        if (rhs.getName() != getName())
-            return false;
-
         /// Distinct state contains a history of unique values and can be merged across
         /// variants without reading the nested function state from rhs
-        return this->haveEqualArgumentTypes(rhs);
+        return this->haveSameDefinition(rhs);
     }
 
     void mergeStateFromDifferentVariant(

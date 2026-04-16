@@ -49,7 +49,7 @@ public:
 
     bool canMergeStateFromDifferentVariant(const IAggregateFunction & rhs) const override
     {
-        if (rhs.getName() != getName())
+        if (!this->haveSameDefinition(rhs))
             return false;
 
         chassert(rhs.getNestedFunction() != nullptr);

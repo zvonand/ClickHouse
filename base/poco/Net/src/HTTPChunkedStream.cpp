@@ -52,18 +52,7 @@ void HTTPChunkedStreamBuf::close()
 	if (_mode & std::ios::out && _chunk != std::char_traits<char>::eof())
 	{
 		sync();
-
-		const char* finalChunk = "0\r\n\r\n";
-		std::streamsize remaining = 5;
-		std::streamsize offset = 0;
-		while (offset < remaining)
-		{
-			int written = _session.write(finalChunk + offset, remaining - offset);
-			if (written <= 0)
-				break;
-			offset += written;
-		}
-
+		writeToDevice("", 0);
 		_chunk = std::char_traits<char>::eof();
 	}
 }

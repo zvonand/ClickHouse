@@ -33,8 +33,6 @@ PyJWT==2.10.1
 pylint==3.1.0
 PyNaCl==1.5.0
 python-dateutil==2.9.0.post0
-pytest==8.3.5
-pytest-reportlog==1.0.0
 PyYAML==6.0.2
 RapidFuzz==3.13.0
 requests==2.32.4

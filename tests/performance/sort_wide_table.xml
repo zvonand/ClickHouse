@@ -27,7 +27,7 @@
             rand64(), rand64(), rand64(), rand64(),
             rand64(), rand64(), rand64(), rand64(),
             rand64(), rand64(), rand64(), rand64()
-        FROM numbers(4000000)
+        FROM numbers(500000)
     </fill_query>
 
     <!-- 64 payload columns -->

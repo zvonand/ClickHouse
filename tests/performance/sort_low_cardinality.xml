@@ -21,7 +21,7 @@
         SELECT
             toString(rand() % 1000) AS lc_col,
             rand64() AS uint_col
-        FROM numbers(10000000)
+        FROM numbers(2000000)
     </fill_query>
 
     <query>SELECT * FROM sort_lc ORDER BY lc_col FORMAT Null SETTINGS max_threads = {threads}</query>

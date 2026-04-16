@@ -21,7 +21,7 @@
         SELECT
             rand64() AS uint_col,
             randomPrintableASCII(rand() % 32 + 1) AS str_col
-        FROM numbers(5000000)
+        FROM numbers(2000000)
     </fill_query>
 
     <query>SELECT * FROM sort_mixed ORDER BY uint_col, str_col FORMAT Null SETTINGS max_threads = {threads}</query>

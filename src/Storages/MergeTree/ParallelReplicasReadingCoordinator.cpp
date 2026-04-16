@@ -176,7 +176,7 @@ public:
     Stats stats;
     const size_t replicas_count{0};
     const CoordinationMode mode;
-    const String table_name;
+    const String stream_id;
     size_t unavailable_replicas_count{0};
     size_t received_initial_requests{0};
 
@@ -192,11 +192,11 @@ public:
     };
     std::vector<ReplicaStatus> replica_status;
 
-    ImplInterface(size_t replicas_count_, CoordinationMode mode_, const String & table_name_ = {})
+    ImplInterface(size_t replicas_count_, CoordinationMode mode_, const String & stream_id_ = {})
         : stats{replicas_count_}
         , replicas_count(replicas_count_)
         , mode(mode_)
-        , table_name(table_name_)
+        , stream_id(stream_id_)
         , replica_status(replicas_count_)
     {
     }
@@ -253,9 +253,9 @@ using PartRefs = std::deque<Parts::iterator>;
 class DefaultCoordinator : public ParallelReplicasReadingCoordinator::ImplInterface
 {
 public:
-    DefaultCoordinator(size_t replicas_count_, CoordinationMode mode_, const String & table_name_ = {})
-        : ParallelReplicasReadingCoordinator::ImplInterface(replicas_count_, mode_, table_name_)
-        , log(getLogger(table_name_.empty() ? "DefaultCoordinator" : fmt::format("DefaultCoordinator({})", table_name_)))
+    DefaultCoordinator(size_t replicas_count_, CoordinationMode mode_, const String & stream_id_ = {})
+        : ParallelReplicasReadingCoordinator::ImplInterface(replicas_count_, mode_, stream_id_)
+        , log(getLogger(stream_id_.empty() ? "DefaultCoordinator" : fmt::format("DefaultCoordinator({})", stream_id_)))
         , distribution_by_hash_queue(replicas_count_)
     {
     }
@@ -923,11 +923,11 @@ bool DefaultCoordinator::isReadingCompleted() const
 class InOrderCoordinator : public ParallelReplicasReadingCoordinator::ImplInterface
 {
 public:
-    InOrderCoordinator([[maybe_unused]] size_t replicas_count_, CoordinationMode mode_, const String & table_name_ = {})
-        : ParallelReplicasReadingCoordinator::ImplInterface(replicas_count_, mode_, table_name_)
-        , log(getLogger(table_name_.empty()
+    InOrderCoordinator([[maybe_unused]] size_t replicas_count_, CoordinationMode mode_, const String & stream_id_ = {})
+        : ParallelReplicasReadingCoordinator::ImplInterface(replicas_count_, mode_, stream_id_)
+        , log(getLogger(stream_id_.empty()
             ? fmt::format("{}Coordinator", magic_enum::enum_name(mode))
-            : fmt::format("{}Coordinator({})", magic_enum::enum_name(mode), table_name_)))
+            : fmt::format("{}Coordinator({})", magic_enum::enum_name(mode), stream_id_)))
     {
         chassert(mode_ == CoordinationMode::WithOrder || mode_ == CoordinationMode::ReverseOrder);
     }

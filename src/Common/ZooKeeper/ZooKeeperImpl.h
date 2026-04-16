@@ -311,7 +311,7 @@ private:
     };
 
     using WatchCallbacksWithCreateInfo = std::unordered_map<WatchCallbackPtrOrEventPtr, WatchCreateInfo>;
-    using WatchesWithCreateInfo = std::map<String, WatchCallbacksWithCreateInfo>;
+    using WatchesWithCreateInfo = std::unordered_map<String, WatchCallbacksWithCreateInfo>;
 
     WatchesWithCreateInfo watches TSA_GUARDED_BY(watches_mutex);
     WatchesWithCreateInfo list_watches TSA_GUARDED_BY(watches_mutex);

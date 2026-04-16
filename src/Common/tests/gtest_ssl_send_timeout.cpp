@@ -174,33 +174,22 @@ TEST(SSLSocketTimeout, SendBytesThrowsTimeoutOnBlockingSocket)
 
 
 /// Test that SSL handshake throws TimeoutException when the peer
-/// is a plain TCP server that doesn't speak SSL.
+/// is a plain TCP listener that never speaks SSL.
+/// No server thread needed -- the kernel's listen backlog completes the
+/// TCP handshake, but nobody reads the accepted socket so the SSL
+/// ClientHello gets no response.
 TEST(SSLSocketTimeout, HandshakeThrowsTimeoutOnNonSSLPeer)
 {
     EphemeralCert cert;
     auto client_ctx = makeContext(cert, Poco::Net::Context::CLIENT_USE);
 
-    /// Plain TCP server -- accepts but never does SSL handshake.
-    Poco::Net::ServerSocket plain_server(Poco::Net::SocketAddress("127.0.0.1", 0), 1);
-    auto port = plain_server.address().port();
-
-    std::atomic<bool> server_done{false};
-
-    std::thread server_thread([&]
-    {
-        try
-        {
-            auto accepted = plain_server.acceptConnection();
-            while (!server_done.load())
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
-        catch (...) {} /// NOLINT(bugprone-empty-catch)
-    });
+    /// Listen but never accept -- kernel backlog handles TCP handshake.
+    Poco::Net::ServerSocket listener(Poco::Net::SocketAddress("127.0.0.1", 0), 1);
+    auto port = listener.address().port();
 
     bool got_timeout = false;
     try
     {
-        /// Connect raw TCP, then wrap in SSL with a short timeout.
         Poco::Net::StreamSocket raw_sock;
         raw_sock.connect(Poco::Net::SocketAddress("127.0.0.1", port));
         raw_sock.setSendTimeout(Poco::Timespan(0, 200'000));
@@ -210,7 +199,7 @@ TEST(SSLSocketTimeout, HandshakeThrowsTimeoutOnNonSSLPeer)
             Poco::Net::SecureStreamSocket::attach(raw_sock, client_ctx));
 
         /// completeHandshake is triggered by the first I/O.
-        /// The plain TCP peer won't respond with SSL, so it will time out.
+        /// The peer won't respond with ServerHello, so it will time out.
         char buf[1] = {'X'};
         ssl_sock.sendBytes(buf, 1);
     }
@@ -227,9 +216,6 @@ TEST(SSLSocketTimeout, HandshakeThrowsTimeoutOnNonSSLPeer)
     }
 
     ASSERT_TRUE(got_timeout) << "Expected exception when SSL handshake times out against a non-SSL peer";
-
-    server_done.store(true);
-    server_thread.join();
 }
 
 

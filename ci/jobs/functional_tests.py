@@ -236,10 +236,9 @@ def main():
 
     runner_options += f" --jobs {workers}"
 
-    if is_flaky_check:
-        # Stop after 5 total failures across all parallel workers (fast feedback on broken PRs).
-        # The 45-min global_time_limit is the primary stopping condition for healthy PRs.
-        runner_options += " --max-failures 5"
+    if is_flaky_check or is_targeted_check:
+        # Stop after 10 total failures across all parallel workers (fast feedback on broken PRs).
+        runner_options += " --max-failures 10"
 
     if is_excluded_from_llvm:
         # Run only tests that are normally disabled under LLVM coverage
@@ -270,7 +269,7 @@ def main():
     elif is_flaky_check:
         # Large repeat count so the 45-min global_time_limit is the effective stopping
         # condition, not the repeat count.  Tests run in parallel (--jobs N) with fresh
-        # random settings per TestCase; --max-failures 5 stops early on broken PRs.
+        # random settings per TestCase; --max-failures 10 stops early on broken PRs.
         rerun_count = 50
     elif is_targeted_check:
         rerun_count = 50
@@ -551,7 +550,6 @@ def main():
         ft_res_processor = FTResultsProcessor(wd=temp_dir)
 
         global_time_limit = 0
-        max_failures = 10
         if is_flaky_check:
             FLAKY_CHECK_TIME_LIMIT = 45 * 60  # 45 min
             global_time_limit = max(
@@ -567,7 +565,7 @@ def main():
                 batch_num=0,
                 batch_total=0,
                 tests=list(tests) if tests else tests,
-                extra_args=f"{runner_options} --max-failures {max_failures}",
+                extra_args=runner_options,
                 random_order=True,
                 rerun_count=rerun_count,
                 global_time_limit=global_time_limit,
@@ -588,7 +586,7 @@ def main():
                 batch_num=0,
                 batch_total=0,
                 tests=list(tests) if tests else tests,
-                extra_args=f"{runner_options} --max-failures {max_failures}",
+                extra_args=runner_options,
                 random_order=True,
                 rerun_count=rerun_count,
                 global_time_limit=global_time_limit,

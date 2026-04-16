@@ -1147,7 +1147,7 @@ void ZooKeeper::receiveEvent()
             std::lock_guard lock(watches_mutex);
             auto & callbacks = is_list_request ? list_watches[req_path] : watches[req_path];
 
-            if (!callbacks.emplace(watch, WatchCreateInfo{std::chrono::system_clock::now(), req->xid, req->getOpNum()}).second)
+            if (!callbacks.emplace(watch, WatchCreateInfo{std::chrono::system_clock::now(), req->xid, op_num}).second)
                 return;
 
             /// Warn only for debug or sanitizers builds (i.e. CI), since it is OK to have 100 replicas,

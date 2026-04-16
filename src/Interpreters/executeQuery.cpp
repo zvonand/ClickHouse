@@ -43,6 +43,7 @@
 
 #include <Formats/FormatFactory.h>
 #include <Storages/StorageInput.h>
+#include <Storages/ColumnsDescription.h>
 
 #include <Access/ContextAccess.h>
 #include <Access/EnabledQuota.h>
@@ -1518,6 +1519,19 @@ static BlockIO executeQueryImpl(
                     async_insert_enabled |= table->areAsynchronousInsertsEnabled();
         }
 
+        /// For HTTP path: set insertion table info early so that input('auto') can
+        /// derive its structure from the INSERT target table's columns.
+        if (insert_query && insert_query->table_id && !context->hasInsertionTableColumnsDescription())
+        {
+            if (const auto & storage = DatabaseCatalog::instance().tryGetTable(insert_query->table_id, context))
+            {
+                context->setInsertionTable(
+                    insert_query->table_id,
+                    /*column_names=*/ std::nullopt,
+                    std::make_shared<ColumnsDescription>(storage->getInMemoryMetadataPtr()->columns));
+            }
+        }
+
         if (insert_query && insert_query->select)
         {
             /// Prepare Input storage before executing interpreter if we already got a buffer with data.
@@ -1527,7 +1541,14 @@ static BlockIO executeQueryImpl(
                 insert_query->tryFindInputFunction(input_function);
                 if (input_function)
                 {
-                    StoragePtr storage = context->executeTableFunction(input_function, insert_query->select->as<ASTSelectQuery>());
+                    const ASTSelectQuery * select_query_hint = insert_query->select->as<ASTSelectQuery>();
+                    if (!select_query_hint)
+                    {
+                        if (const auto * union_query = insert_query->select->as<ASTSelectWithUnionQuery>();
+                            union_query && union_query->list_of_selects->children.size() == 1)
+                            select_query_hint = union_query->list_of_selects->children.front()->as<ASTSelectQuery>();
+                    }
+                    StoragePtr storage = context->executeTableFunction(input_function, select_query_hint);
                     auto & input_storage = dynamic_cast<StorageInput &>(*storage);
                     auto input_metadata_snapshot = input_storage.getInMemoryMetadataPtr();
 

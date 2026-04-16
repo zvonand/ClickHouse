@@ -102,6 +102,20 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
     const DB::ObjectStoragePtr & base_storage,
     SecondaryStorages & secondary_storages,
     const DB::ContextPtr & context);
+
+namespace Iceberg { class IcebergPathResolver; }
+
+/// Same as above, but when the result maps to base_storage, uses path_resolver
+/// to compute the correct storage key. This is needed because the metadata
+/// table_location may differ from the actual storage path (table_root),
+/// e.g. when the table was created by Spark with a different URI scheme.
+std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
+    const std::string & table_location,
+    const std::string & path,
+    const DB::ObjectStoragePtr & base_storage,
+    SecondaryStorages & secondary_storages,
+    const DB::ContextPtr & context,
+    const Iceberg::IcebergPathResolver & path_resolver);
 #endif
 
 }

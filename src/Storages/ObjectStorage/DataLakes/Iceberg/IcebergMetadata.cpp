@@ -1088,7 +1088,7 @@ void IcebergMetadata::addDeleteTransformers(
     {
         builder.addSimpleTransform(
             [&](const SharedHeader & header)
-            { return iceberg_object_info->getPositionDeleteTransformer(object_storage, header, format_settings, parser_shared_resources, local_context, persistent_components.table_location, secondary_storages); });
+            { return iceberg_object_info->getPositionDeleteTransformer(object_storage, header, format_settings, parser_shared_resources, local_context, persistent_components.path_resolver, secondary_storages); });
     }
     const auto & delete_files = iceberg_object_info->info.equality_deletes_objects;
     LOG_DEBUG(log, "Constructing filter transform for equality delete, there are {} delete files", delete_files.size());
@@ -1100,7 +1100,8 @@ void IcebergMetadata::addDeleteTransformers(
             Block delete_file_header;
 
             auto [delete_storage_to_use, resolved_delete_key] = resolveObjectStorageForPath(
-                persistent_components.table_location, delete_file.file_path, object_storage, *secondary_storages, local_context);
+                persistent_components.table_location, delete_file.file_path, object_storage, *secondary_storages, local_context,
+                persistent_components.path_resolver);
 
             RelativePathWithMetadata delete_file_object(resolved_delete_key);
             {

@@ -183,7 +183,8 @@ Plan getPlan(
                 const auto & raw_metadata_path = data_file->parsed_entry->file_path_key.serialize();
                 auto [resolved_storage, resolved_key] = resolveObjectStorageForPath(
                     persistent_table_components.table_location,
-                    raw_metadata_path, object_storage, secondary_storages, context);
+                    raw_metadata_path, object_storage, secondary_storages, context,
+                    persistent_table_components.path_resolver);
 
                 IcebergDataObjectInfoPtr data_object_info = std::make_shared<IcebergDataObjectInfo>(
                     data_file, raw_metadata_path, 0, resolved_storage, resolved_key);
@@ -236,7 +237,6 @@ static void writeDataFiles(
     ContextPtr context,
     const String & write_format,
     CompressionMethod write_compression_method,
-    const String & table_location,
     std::shared_ptr<SecondaryStorages> secondary_storages)
 {
     for (auto & [_, data_file] : initial_plan.path_to_data_file)
@@ -249,7 +249,7 @@ static void writeDataFiles(
             // todo make compaction using same FormatParserSharedResources
             std::make_shared<FormatParserSharedResources>(context->getSettingsRef(), 1),
             context,
-            table_location,
+            path_resolver,
             secondary_storages);
 
         ObjectStoragePtr storage_to_use = data_file->data_object_info->getResolvedStorage();
@@ -568,7 +568,6 @@ void compactIcebergTable(
             context_,
             write_format,
             persistent_table_components.metadata_compression_method,
-            persistent_table_components.path_resolver.getTableLocation(),
             secondary_storages_);
         writeMetadataFiles(plan, persistent_table_components.path_resolver, object_storage_, context_, sample_block_, write_format, persistent_table_components.table_path);
         clearOldFiles(object_storage_, old_files);

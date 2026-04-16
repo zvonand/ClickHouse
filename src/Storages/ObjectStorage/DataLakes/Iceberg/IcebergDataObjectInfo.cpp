@@ -69,14 +69,14 @@ std::shared_ptr<ISimpleTransform> IcebergDataObjectInfo::getPositionDeleteTransf
     const std::optional<FormatSettings> & format_settings,
     FormatParserSharedResourcesPtr parser_shared_resources,
     ContextPtr context_,
-    const String & table_location,
+    const Iceberg::IcebergPathResolver & path_resolver,
     std::shared_ptr<SecondaryStorages> secondary_storages)
 {
     IcebergDataObjectInfoPtr self = shared_from_this();
     if (!context_->getSettingsRef()[Setting::use_roaring_bitmap_iceberg_positional_deletes].value)
-        return std::make_shared<IcebergStreamingPositionDeleteTransform>(header, self, object_storage, format_settings, parser_shared_resources, context_, table_location, secondary_storages);
+        return std::make_shared<IcebergStreamingPositionDeleteTransform>(header, self, object_storage, format_settings, parser_shared_resources, context_, path_resolver, secondary_storages);
     else
-        return std::make_shared<IcebergBitmapPositionDeleteTransform>(header, self, object_storage, format_settings, parser_shared_resources, context_, table_location, secondary_storages);
+        return std::make_shared<IcebergBitmapPositionDeleteTransform>(header, self, object_storage, format_settings, parser_shared_resources, context_, path_resolver, secondary_storages);
 }
 
 void IcebergDataObjectInfo::addPositionDeleteObject(Iceberg::ProcessedManifestFileEntryPtr position_delete_object, const String & resolved_storage_path)

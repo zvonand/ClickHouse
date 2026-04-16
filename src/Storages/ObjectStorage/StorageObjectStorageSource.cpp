@@ -1349,14 +1349,17 @@ StorageObjectStorageSource::ReadTaskIterator::ReadTaskIterator(
             /// For Iceberg objects, resolve the storage from the absolute path
             if (auto iceberg_info = std::dynamic_pointer_cast<IcebergDataObjectInfo>(object))
             {
-                if (auto abs_path = iceberg_info->getAbsolutePath())
+                if (!iceberg_info->getResolvedStorage())
                 {
-                    auto [storage_to_use, key] = resolveObjectStorageForPath(
-                        table_location, *abs_path, object_storage, secondary_storages, getContext());
-                    if (!key.empty())
+                    if (auto abs_path = iceberg_info->getAbsolutePath())
                     {
-                        iceberg_info->setResolvedStorage(storage_to_use);
-                        iceberg_info->relative_path_with_metadata.relative_path = key;
+                        auto [storage_to_use, key] = resolveObjectStorageForPath(
+                            table_location, *abs_path, object_storage, secondary_storages, getContext());
+                        if (!key.empty())
+                        {
+                            iceberg_info->setResolvedStorage(storage_to_use);
+                            iceberg_info->relative_path_with_metadata.relative_path = key;
+                        }
                     }
                 }
             }
@@ -1383,14 +1386,17 @@ ObjectInfoPtr StorageObjectStorageSource::ReadTaskIterator::next(size_t)
         /// For Iceberg objects, resolve the storage from the absolute path
         if (auto iceberg_info = std::dynamic_pointer_cast<IcebergDataObjectInfo>(object_info))
         {
-            if (auto abs_path = iceberg_info->getAbsolutePath())
+            if (!iceberg_info->getResolvedStorage())
             {
-                auto [storage_to_use, key] = resolveObjectStorageForPath(
-                    table_location, *abs_path, object_storage, secondary_storages, getContext());
-                if (!key.empty())
+                if (auto abs_path = iceberg_info->getAbsolutePath())
                 {
-                    iceberg_info->setResolvedStorage(storage_to_use);
-                    iceberg_info->relative_path_with_metadata.relative_path = key;
+                    auto [storage_to_use, key] = resolveObjectStorageForPath(
+                        table_location, *abs_path, object_storage, secondary_storages, getContext());
+                    if (!key.empty())
+                    {
+                        iceberg_info->setResolvedStorage(storage_to_use);
+                        iceberg_info->relative_path_with_metadata.relative_path = key;
+                    }
                 }
             }
         }

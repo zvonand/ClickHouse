@@ -22,6 +22,9 @@
 #if USE_AWS_S3
 #include <Disks/DiskObjectStorage/ObjectStorages/S3/S3ObjectStorage.h>
 #endif
+#if USE_AVRO
+#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergPath.h>
+#endif
 #if USE_AZURE_BLOB_STORAGE
 #include <Disks/DiskObjectStorage/ObjectStorages/AzureBlobStorage/AzureObjectStorage.h>
 #endif
@@ -829,6 +832,20 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
                 cfg.setString(config_prefix + ".endpoint", endpoint);
             }
         });
+}
+
+std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
+    const std::string & table_location,
+    const std::string & path,
+    const DB::ObjectStoragePtr & base_storage,
+    SecondaryStorages & secondary_storages,
+    const DB::ContextPtr & context,
+    const Iceberg::IcebergPathResolver & path_resolver)
+{
+    auto [storage, key] = resolveObjectStorageForPath(table_location, path, base_storage, secondary_storages, context);
+    if (storage == base_storage)
+        key = path_resolver.resolve(Iceberg::IcebergPathFromMetadata::deserialize(path));
+    return {storage, key};
 }
 
 #endif

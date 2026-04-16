@@ -8,6 +8,7 @@
 #include <AggregateFunctions/AggregateFunctionGroupBitmapData.h>
 #include <Processors/ISimpleTransform.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergDataObjectInfo.h>
+#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergPath.h>
 
 namespace DB::Iceberg
 {
@@ -29,7 +30,7 @@ public:
         const std::optional<FormatSettings> & format_settings_,
         FormatParserSharedResourcesPtr parser_shared_resources_,
         ContextPtr context_,
-        const String & table_location_,
+        const IcebergPathResolver & path_resolver_,
         std::shared_ptr<SecondaryStorages> secondary_storages_)
         : ISimpleTransform(header_, header_, false)
         , header(header_)
@@ -38,7 +39,7 @@ public:
         , format_settings(format_settings_)
         , context(context_)
         , parser_shared_resources(parser_shared_resources_)
-        , table_location(table_location_)
+        , path_resolver(path_resolver_)
         , secondary_storages(std::move(secondary_storages_))
     {
         initializeDeleteSources();
@@ -60,7 +61,7 @@ protected:
     ContextPtr context;
     FormatParserSharedResourcesPtr parser_shared_resources;
 
-    const String table_location;
+    const IcebergPathResolver path_resolver;
     std::shared_ptr<SecondaryStorages> secondary_storages;
 
     /// We need to keep the read buffers alive since the delete_sources depends on them.
@@ -80,9 +81,9 @@ public:
         const std::optional<FormatSettings> & format_settings_,
         FormatParserSharedResourcesPtr parser_shared_resources_,
         ContextPtr context_,
-        const String & table_location_,
+        const IcebergPathResolver & path_resolver_,
         std::shared_ptr<SecondaryStorages> secondary_storages_)
-        : IcebergPositionDeleteTransform(header_, iceberg_object_info_, object_storage_, format_settings_, parser_shared_resources_, context_, table_location_, std::move(secondary_storages_))
+        : IcebergPositionDeleteTransform(header_, iceberg_object_info_, object_storage_, format_settings_, parser_shared_resources_, context_, path_resolver_, std::move(secondary_storages_))
     {
         initialize();
     }
@@ -108,9 +109,9 @@ public:
         const std::optional<FormatSettings> & format_settings_,
         FormatParserSharedResourcesPtr parser_shared_resources_,
         ContextPtr context_,
-        const String & table_location_,
+        const IcebergPathResolver & path_resolver_,
         std::shared_ptr<SecondaryStorages> secondary_storages_)
-        : IcebergPositionDeleteTransform(header_, iceberg_object_info_, object_storage_, format_settings_, parser_shared_resources_, context_, table_location_, std::move(secondary_storages_))
+        : IcebergPositionDeleteTransform(header_, iceberg_object_info_, object_storage_, format_settings_, parser_shared_resources_, context_, path_resolver_, std::move(secondary_storages_))
     {
         initialize();
     }

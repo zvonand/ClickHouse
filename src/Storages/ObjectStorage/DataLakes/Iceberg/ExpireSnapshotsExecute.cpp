@@ -646,7 +646,8 @@ void deleteExpiredFiles(
         try
         {
             auto [storage_to_use, key_in_storage] = resolveObjectStorageForPath(
-                path_resolver.getTableLocation(), file_path.serialize(), object_storage, secondary_storages, context);
+                path_resolver.getTableLocation(), file_path.serialize(), object_storage, secondary_storages, context,
+                path_resolver);
             storage_to_use->removeObjectIfExists(StoredObject(key_in_storage));
             LOG_DEBUG(log, "Deleted expired file {}", file_path);
         }

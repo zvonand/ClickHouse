@@ -81,7 +81,8 @@ Iceberg::ManifestFileCacheableInfo getManifestFile(
     auto create_fn = [&, use_iceberg_metadata_cache]()
     {
         auto [storage_to_use, resolved_key_in_storage] = resolveObjectStorageForPath(
-            persistent_table_components.table_location, filename.serialize(), object_storage, secondary_storages, local_context);
+            persistent_table_components.table_location, filename.serialize(), object_storage, secondary_storages, local_context,
+            persistent_table_components.path_resolver);
 
         RelativePathWithMetadata manifest_object_info(resolved_key_in_storage);
 
@@ -159,7 +160,8 @@ ManifestFileCacheKeys getManifestList(
     auto create_fn = [&, use_iceberg_metadata_cache]()
     {
         auto [storage_to_use, key_in_storage] = resolveObjectStorageForPath(
-            persistent_table_components.table_location, filename.serialize(), object_storage, secondary_storages, local_context);
+            persistent_table_components.table_location, filename.serialize(), object_storage, secondary_storages, local_context,
+            persistent_table_components.path_resolver);
 
         RelativePathWithMetadata object_info(key_in_storage);
 

@@ -340,7 +340,8 @@ ObjectInfoPtr IcebergIterator::next(size_t)
         const auto & raw_metadata_path = manifest_file_entry->parsed_entry->file_path_key.serialize();
         auto [storage_to_use, resolved_key] = resolveObjectStorageForPath(
             persistent_components.table_location, raw_metadata_path,
-            object_storage, *secondary_storages, local_context);
+            object_storage, *secondary_storages, local_context,
+            persistent_components.path_resolver);
 
         IcebergDataObjectInfoPtr object_info = std::make_shared<IcebergDataObjectInfo>(
             manifest_file_entry, raw_metadata_path, table_state_snapshot->schema_id, storage_to_use, resolved_key);
@@ -416,7 +417,8 @@ ObjectInfoPtr IcebergIterator::next(size_t)
             for (const auto & pos_del : object_info->info.position_deletes_objects)
             {
                 auto [del_storage, del_key] = resolveObjectStorageForPath(
-                    persistent_components.table_location, pos_del.file_path, object_storage, *secondary_storages, local_context);
+                    persistent_components.table_location, pos_del.file_path, object_storage, *secondary_storages, local_context,
+                    persistent_components.path_resolver);
                 if (del_storage != object_storage)
                 {
                     object_info->info.requires_external_storage = true;
@@ -429,7 +431,8 @@ ObjectInfoPtr IcebergIterator::next(size_t)
             for (const auto & eq_del : object_info->info.equality_deletes_objects)
             {
                 auto [del_storage, del_key] = resolveObjectStorageForPath(
-                    persistent_components.table_location, eq_del.file_path, object_storage, *secondary_storages, local_context);
+                    persistent_components.table_location, eq_del.file_path, object_storage, *secondary_storages, local_context,
+                    persistent_components.path_resolver);
                 if (del_storage != object_storage)
                 {
                     object_info->info.requires_external_storage = true;

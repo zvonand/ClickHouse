@@ -1536,7 +1536,7 @@ static BlockIO executeQueryImpl(
                 context->setInsertionTable(
                     insert_query->table_id,
                     insert_column_names,
-                    std::make_shared<ColumnsDescription>(storage->getInMemoryMetadataPtr()->columns));
+                    std::make_shared<ColumnsDescription>(storage->getInMemoryMetadataPtr(context, false)->columns));
             }
         }
 

@@ -148,6 +148,9 @@ std::string TableMetadata::getLocation() const
     if (!with_location)
         throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Data location was not requested");
 
+    if (!endpoint.empty())
+        return constructLocation(endpoint, DB::S3UriStyle::AUTO);
+
     return std::filesystem::path(location_without_path) / path;
 }
 

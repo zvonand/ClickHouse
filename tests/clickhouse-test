@@ -690,6 +690,8 @@ def kill_process_group(pgid, fatal_log):
                 print(f"Got {e.strerror} while sending SIGKILL to {pgid}. Ignoring.")
             else:
                 raise
+        for p in pgrep(pgid=pgid):
+            os.waitpid(p[0], 0)
     except OSError as e:
         if e.errno == ESRCH:
             print(f"Got ESRCH while killing {pgid}. Ignoring.")

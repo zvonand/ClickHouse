@@ -98,7 +98,8 @@ size_t countPartitions(const RangesInDataParts & parts_with_ranges)
     return countPartitions(parts_with_ranges, get_partition_id);
 }
 
-/// check if a DAG node only depends on sorting key columns (ActionsDAG version of isExpressionOverSortingKey)
+/// check if a DAG node only depends on sorting key columns and is deterministic
+/// (ActionsDAG version of isExpressionOverSortingKey)
 bool isNodeOverSortingKey(const ActionsDAG::Node * node, const NameSet & sorting_key_set)
 {
     if (sorting_key_set.contains(node->result_name))
@@ -107,6 +108,9 @@ bool isNodeOverSortingKey(const ActionsDAG::Node * node, const NameSet & sorting
         return true; // constants are fine
     if (node->type == ActionsDAG::ActionType::INPUT || node->type == ActionsDAG::ActionType::PLACEHOLDER)
         return false; // already checked result_name
+    if (node->type == ActionsDAG::ActionType::FUNCTION
+        && node->function_base && !node->function_base->isDeterministic())
+        return false; // non-deterministic functions can affect which row wins during FINAL deduplication
     for (const auto * child : node->children)
         if (!isNodeOverSortingKey(child, sorting_key_set))
             return false;

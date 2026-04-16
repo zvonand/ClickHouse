@@ -584,15 +584,18 @@ def main():
                 f" remaining: {global_time_limit}s)"
             )
 
-            run_tests(
-                batch_num=0,
-                batch_total=0,
-                tests=list(tests) if tests else tests,
-                extra_args=f"{runner_options} --max-failures {max_failures}",
-                random_order=True,
-                rerun_count=rerun_count,
-                global_time_limit=global_time_limit,
-            )
+            if global_time_limit <= 0:
+                print("Targeted-check time budget exhausted during setup, skipping tests")
+            else:
+                run_tests(
+                    batch_num=0,
+                    batch_total=0,
+                    tests=list(tests) if tests else tests,
+                    extra_args=f"{runner_options} --max-failures {max_failures}",
+                    random_order=True,
+                    rerun_count=rerun_count,
+                    global_time_limit=global_time_limit,
+                )
 
         else:
             run_tests(

@@ -88,6 +88,11 @@ FunctionBaseAI::ResolvedConfig FunctionBaseAI::resolveConfig(const ColumnsWithTy
     config.max_tokens = named_collection->getOrDefault<UInt64>("max_tokens", DEFAULT_AI_MAX_TOKENS);
     config.temperature = defaultTemperature();
 
+    /// Poco JSON does not support UInt64, so providers cast max_tokens to Int64 for serialization.
+    if (config.max_tokens > static_cast<UInt64>(std::numeric_limits<Int64>::max()))
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "AI named collection '{}': max_tokens exceeds maximum ({})",
+            collection_name, std::numeric_limits<Int64>::max());
+
     if (config.provider.empty())
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "AI named collection '{}' must have 'provider'", collection_name);
     if (config.endpoint.empty())

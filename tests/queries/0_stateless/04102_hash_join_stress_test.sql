@@ -161,7 +161,7 @@ SELECT '--- FULL JOIN: nullable key ---';
 SELECT l.id, l.val, r.id, r.val FROM t_left_nullable l FULL JOIN t_right_nullable r ON l.id = r.id ORDER BY coalesce(l.id, r.id, 999), l.val, r.val;
 
 SELECT '--- FULL JOIN: multi key ---';
-SELECT l.k1, l.k2, l.val, r.k1, r.k2, r.val FROM t_left_multi l FULL JOIN t_right_multi r ON l.k1 = r.k1 AND l.k2 = r.k2 ORDER BY coalesce(l.k1, r.k1), coalesce(l.k2, r.k2);
+SELECT l.k1, l.k2, l.val, r.k1, r.k2, r.val FROM t_left_multi l FULL JOIN t_right_multi r ON l.k1 = r.k1 AND l.k2 = r.k2 ORDER BY coalesce(l.k1, r.k1), coalesce(l.k2, r.k2), r.k1, r.k2;
 
 SELECT '--- FULL JOIN: with ON condition (join_mask AllFalse) ---';
 SELECT l.id, l.val, r.id, r.val FROM t_left l FULL JOIN t_right r ON l.id = r.id AND 1 = 0 ORDER BY coalesce(l.id, r.id + 100), l.id, r.id;

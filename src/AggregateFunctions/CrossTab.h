@@ -5,6 +5,7 @@
 #include <DataTypes/DataTypesNumber.h>
 #include <Common/HashTable/HashMap.h>
 #include <Common/VectorWithMemoryTracking.h>
+#include <Common/Exception.h>
 #include <Common/assert_cast.h>
 
 #include <type_traits>
@@ -21,6 +22,11 @@
   */
 namespace DB
 {
+
+namespace ErrorCodes
+{
+    extern const int INCORRECT_DATA;
+}
 
 enum class CrossTabImplementationVariant : UInt8
 {
@@ -321,6 +327,7 @@ struct CrossTabPhiSquaredWindowData
         }
         else
         {
+            chassert(ab_edges.size() < INVALID_EDGE_IDX);
             edge_idx = static_cast<UInt32>(ab_edges.size());
             ab_edges.push_back(Edge{a_idx, b_idx, 1});
             ab_edge_index_by_pair[pair_key] = edge_idx;
@@ -391,6 +398,7 @@ struct CrossTabPhiSquaredWindowData
             }
             else
             {
+                chassert(ab_edges.size() < INVALID_EDGE_IDX);
                 const UInt32 new_edge_idx = static_cast<UInt32>(ab_edges.size());
                 ab_edges.push_back(Edge{a_idx, b_idx, edge.count});
                 ab_edge_index_by_pair[pair_key] = new_edge_idx;
@@ -445,6 +453,7 @@ struct CrossTabPhiSquaredWindowData
             }
             else
             {
+                chassert(ab_edges.size() < INVALID_EDGE_IDX);
                 const UInt32 edge_idx = static_cast<UInt32>(ab_edges.size());
                 ab_edges.push_back(Edge{a_idx, b_idx, cnt_ab});
                 ab_edge_index_by_pair[pair_key] = edge_idx;
@@ -502,6 +511,7 @@ struct CrossTabPhiSquaredWindowData
 
         for (const auto & [hash, cnt] : count_a)
         {
+            chassert(a_hash_by_index.size() < INVALID_EDGE_IDX);
             const UInt32 idx = static_cast<UInt32>(a_hash_by_index.size());
             a_index_by_hash[hash] = idx;
             a_hash_by_index.push_back(hash);
@@ -519,6 +529,7 @@ struct CrossTabPhiSquaredWindowData
 
         for (const auto & [hash, cnt] : count_b)
         {
+            chassert(b_hash_by_index.size() < INVALID_EDGE_IDX);
             const UInt32 idx = static_cast<UInt32>(b_hash_by_index.size());
             b_index_by_hash[hash] = idx;
             b_hash_by_index.push_back(hash);
@@ -538,6 +549,7 @@ struct CrossTabPhiSquaredWindowData
             const UInt32 a_idx = a_index_by_hash.at(hash_a);
             const UInt32 b_idx = b_index_by_hash.at(hash_b);
 
+            chassert(ab_edges.size() < INVALID_EDGE_IDX);
             const UInt32 edge_idx = static_cast<UInt32>(ab_edges.size());
             ab_edges.push_back(Edge{a_idx, b_idx, cnt_ab});
 
@@ -547,6 +559,11 @@ struct CrossTabPhiSquaredWindowData
 
             const Float64 a = static_cast<Float64>(a_marginal_count[a_idx]);
             const Float64 b = static_cast<Float64>(b_marginal_count[b_idx]);
+
+            if (unlikely(a <= 0 || b <= 0))
+                throw Exception(ErrorCodes::INCORRECT_DATA,
+                    "Corrupted aggregate state: marginal counts must be positive in CrossTab deserialization");
+
             phi_term_sum += phiTerm(cnt_ab, a, b);
         }
     }
@@ -684,6 +701,7 @@ private:
         if (it != a_index_by_hash.end())
             return it->getMapped();
 
+        chassert(a_hash_by_index.size() < INVALID_EDGE_IDX);
         const UInt32 idx = static_cast<UInt32>(a_hash_by_index.size());
         a_index_by_hash[hash] = idx;
         a_hash_by_index.push_back(hash);
@@ -700,6 +718,7 @@ private:
         if (it != b_index_by_hash.end())
             return it->getMapped();
 
+        chassert(b_hash_by_index.size() < INVALID_EDGE_IDX);
         const UInt32 idx = static_cast<UInt32>(b_hash_by_index.size());
         b_index_by_hash[hash] = idx;
         b_hash_by_index.push_back(hash);

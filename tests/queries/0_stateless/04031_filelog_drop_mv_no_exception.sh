@@ -56,7 +56,7 @@ for iteration in {1..5}; do
     done
 
     if [[ "${count}" -lt 10 ]]; then
-        echo "Warm-up failed: only ${count} rows consumed after 120 attempts" >&2
+        echo "Warm-up failed: only ${count} rows consumed after 300 attempts" >&2
         exit 1
     fi
 

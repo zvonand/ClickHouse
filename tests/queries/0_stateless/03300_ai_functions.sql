@@ -234,7 +234,124 @@ WHERE name IN (
 ORDER BY name;
 
 -- =============================================================================
--- 14. Re-disable the setting mid-session
+-- 14. aiClassify
+-- =============================================================================
+
+SELECT '-- aiClassify: registered';
+SELECT name FROM system.functions WHERE name = 'aiClassify';
+
+SELECT '-- aiClassify: too few arguments';
+SELECT aiClassify('ai_test'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+SELECT aiClassify('ai_test', 'hello'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+
+SELECT '-- aiClassify: too many arguments';
+SELECT aiClassify('ai_test', 'x', ['a', 'b'], 0.0, 'extra'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+
+SELECT '-- aiClassify: non-constant categories';
+SELECT aiClassify('ai_test', x, [x]) FROM _03300_input; -- { serverError ILLEGAL_COLUMN }
+
+SELECT '-- aiClassify: wrong type for categories (not array)';
+SELECT aiClassify('ai_test', x, 'positive,negative') FROM _03300_input; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+
+SELECT '-- aiClassify: return type';
+DROP TABLE IF EXISTS _03300_ret_classify;
+CREATE TABLE _03300_ret_classify ENGINE = Memory AS
+    SELECT aiClassify('ai_test', x, ['a', 'b', 'c']) AS result FROM _03300_input;
+SELECT name, type FROM system.columns
+    WHERE database = currentDatabase() AND table = '_03300_ret_classify';
+DROP TABLE IF EXISTS _03300_ret_classify;
+
+SELECT '-- aiClassify: empty input executes';
+SELECT count() FROM (SELECT aiClassify('ai_test', x, ['a', 'b']) AS result FROM _03300_input);
+
+SELECT '-- aiClassify: with temperature';
+SELECT count() FROM (SELECT aiClassify('ai_test', x, ['a', 'b'], 0.0) AS result FROM _03300_input);
+
+-- =============================================================================
+-- 15. aiExtract
+-- =============================================================================
+
+SELECT '-- aiExtract: registered';
+SELECT name FROM system.functions WHERE name = 'aiExtract';
+
+SELECT '-- aiExtract: too few arguments';
+SELECT aiExtract('ai_test'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+SELECT aiExtract('ai_test', 'hello'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+
+SELECT '-- aiExtract: too many arguments';
+SELECT aiExtract('ai_test', 'x', 'instr', 0.0, 'extra'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+
+SELECT '-- aiExtract: non-constant instruction';
+SELECT aiExtract('ai_test', x, x) FROM _03300_input; -- { serverError ILLEGAL_COLUMN }
+
+SELECT '-- aiExtract: return type';
+DROP TABLE IF EXISTS _03300_ret_extract;
+CREATE TABLE _03300_ret_extract ENGINE = Memory AS
+    SELECT aiExtract('ai_test', x, 'main topic') AS result FROM _03300_input;
+SELECT name, type FROM system.columns
+    WHERE database = currentDatabase() AND table = '_03300_ret_extract';
+DROP TABLE IF EXISTS _03300_ret_extract;
+
+SELECT '-- aiExtract: JSON schema mode accepted';
+SELECT count() FROM (SELECT aiExtract('ai_test', x, '{"topic":"main topic","sentiment":"pos/neg"}') AS result FROM _03300_input);
+
+SELECT '-- aiExtract: with temperature';
+SELECT count() FROM (SELECT aiExtract('ai_test', x, 'main topic', 0.0) AS result FROM _03300_input);
+
+-- =============================================================================
+-- 16. aiTranslate
+-- =============================================================================
+
+SELECT '-- aiTranslate: registered';
+SELECT name FROM system.functions WHERE name = 'aiTranslate';
+
+SELECT '-- aiTranslate: too few arguments';
+SELECT aiTranslate('ai_test'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+SELECT aiTranslate('ai_test', 'hello'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+
+SELECT '-- aiTranslate: too many arguments';
+SELECT aiTranslate('ai_test', 'x', 'French', 'instr', 0.3, 'extra'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+
+SELECT '-- aiTranslate: non-constant target language';
+SELECT aiTranslate('ai_test', x, x) FROM _03300_input; -- { serverError ILLEGAL_COLUMN }
+
+SELECT '-- aiTranslate: return type';
+DROP TABLE IF EXISTS _03300_ret_translate;
+CREATE TABLE _03300_ret_translate ENGINE = Memory AS
+    SELECT aiTranslate('ai_test', x, 'French') AS result FROM _03300_input;
+SELECT name, type FROM system.columns
+    WHERE database = currentDatabase() AND table = '_03300_ret_translate';
+DROP TABLE IF EXISTS _03300_ret_translate;
+
+SELECT '-- aiTranslate: with instructions and temperature';
+SELECT count() FROM (SELECT aiTranslate('ai_test', x, 'French', 'keep proper nouns', 0.3) AS result FROM _03300_input);
+
+-- =============================================================================
+-- 17. aiGenerateSQL
+-- =============================================================================
+
+SELECT '-- aiGenerateSQL: registered';
+SELECT name FROM system.functions WHERE name = 'aiGenerateSQL';
+
+SELECT '-- aiGenerateSQL: too few arguments';
+SELECT aiGenerateSQL('ai_test'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+
+SELECT '-- aiGenerateSQL: too many arguments';
+SELECT aiGenerateSQL('ai_test', 'q', 0.1, 'extra'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+
+SELECT '-- aiGenerateSQL: return type';
+DROP TABLE IF EXISTS _03300_ret_sql;
+CREATE TABLE _03300_ret_sql ENGINE = Memory AS
+    SELECT aiGenerateSQL('ai_test', x) AS result FROM _03300_input;
+SELECT name, type FROM system.columns
+    WHERE database = currentDatabase() AND table = '_03300_ret_sql';
+DROP TABLE IF EXISTS _03300_ret_sql;
+
+SELECT '-- aiGenerateSQL: with temperature';
+SELECT count() FROM (SELECT aiGenerateSQL('ai_test', x, 0.1) AS result FROM _03300_input);
+
+-- =============================================================================
+-- 18. Re-disable the setting mid-session
 -- =============================================================================
 
 SET allow_experimental_ai_functions = 0;

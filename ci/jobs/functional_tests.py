@@ -238,7 +238,7 @@ def main():
 
     if is_flaky_check or is_targeted_check:
         # Stop after 10 total failures across all parallel workers (fast feedback on broken PRs).
-        runner_options += " --max-failures 10"
+        runner_options += " --max-failures 5"
 
     if is_excluded_from_llvm:
         # Run only tests that are normally disabled under LLVM coverage
@@ -269,7 +269,7 @@ def main():
     elif is_flaky_check:
         # Large repeat count so the 45-min global_time_limit is the effective stopping
         # condition, not the repeat count.  Tests run in parallel (--jobs N) with fresh
-        # random settings per TestCase; --max-failures 10 stops early on broken PRs.
+        # random settings per TestCase; --max-failures 5 stops early on broken PRs.
         rerun_count = 50
     elif is_targeted_check:
         rerun_count = 50

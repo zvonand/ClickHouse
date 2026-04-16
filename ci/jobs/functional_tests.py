@@ -576,7 +576,7 @@ def main():
         elif is_targeted_check:
             TARGETED_CHECK_TIME_LIMIT = 50 * 60  # 50 min
             global_time_limit = max(
-                TARGETED_CHECK_TIME_LIMIT - int(stop_watch.duration), 0
+                TARGETED_CHECK_TIME_LIMIT - int(stop_watch.duration), 60
             )
             print(
                 f"Targeted-check time limit: {TARGETED_CHECK_TIME_LIMIT}s"

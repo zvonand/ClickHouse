@@ -95,7 +95,9 @@ TEST(HTTPFixedLengthStreamBuf, WriteOverLengthThrows)
     Poco::Net::HTTPFixedLengthOutputStream stream(session, 5);
 
     /// The data goes into the 8KB buffer first. On flush, flushBuffer calls
-    /// writeToDevice which checks _count + length > _length and throws.
+    /// writeToDevice which clamps to Content-Length (writes 5 bytes), then the
+    /// loop calls writeToDevice again with the remaining 5 bytes, which throws
+    /// MessageException because _count >= _length.
     stream.write("0123456789", 10);
 
     bool got_exception = false;

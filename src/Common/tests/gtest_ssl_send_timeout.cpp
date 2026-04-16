@@ -122,14 +122,12 @@ TEST(SSLSocketTimeout, SendBytesThrowsTimeoutOnBlockingSocket)
             auto accepted = server_socket.acceptConnection();
             /// Handshake happens on first I/O. Do a small read to trigger it.
             char buf[1];
-            try { accepted.receiveBytes(buf, 1); } catch (...) {}
+            try { accepted.receiveBytes(buf, 1); } catch (...) {} /// NOLINT(bugprone-empty-catch)
             /// Keep the connection open until the test completes.
             while (!server_done.load())
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
-        catch (...)
-        {
-        }
+        catch (...) {} /// Ok: server thread cleanup, test checks client-side behavior. NOLINT(bugprone-empty-catch)
     });
 
     try

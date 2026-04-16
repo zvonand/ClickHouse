@@ -228,7 +228,7 @@ def format_event_text(event, pr_status, indent=""):
     has_failures = False
     if hasattr(event, "result") and event.result and event.result.get("results"):
         has_failures = any(
-            r.get("status") in ["failure", "error"]
+            (r.get("status") or "").lower() in ["failure", "error", "fail"]
             for r in event.result.get("results", [])
         )
 
@@ -293,20 +293,20 @@ def format_event_text(event, pr_status, indent=""):
         total_cnt = 0
 
         for r in event.result.get("results", []):
-            status = r.get("status", "")
+            status = (r.get("status") or "").lower()
             total_cnt += 1
 
-            if status == "failure":
+            if status in ("failure", "fail"):
                 fail_cnt += 1
             elif status == "error":
                 error_cnt += 1
             elif status == "dropped":
                 dropped_cnt += 1
-            elif status == "success":
+            elif status in ("success", "ok"):
                 success_cnt += 1
             elif status == "skipped":
                 skipped_cnt += 1
-            elif status in ["pending", "running"]:
+            elif status in ("pending", "running"):
                 running_cnt += 1
 
         # Build compact one-line summary
@@ -355,7 +355,7 @@ def _format_notification_text(event, notify_type: str) -> str:
         if not isinstance(r, dict):
             continue
         status = (r.get("status") or "").lower()
-        if status not in ("failure", "error"):
+        if status not in ("failure", "error", "fail"):
             continue
         name = r.get("name") or ""
         if name:
@@ -953,7 +953,7 @@ def lambda_handler(event, context):
                 and newest_event.result.get("results")
             ):
                 newest_has_failures = any(
-                    r.get("status") in ["failure", "error"]
+                    (r.get("status") or "").lower() in ["failure", "error", "fail"]
                     for r in newest_event.result.get("results", [])
                 )
 

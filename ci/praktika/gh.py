@@ -623,21 +623,7 @@ class GH:
 
     @classmethod
     def convert_to_gh_status(cls, status):
-        if status in (
-            Result.Status.PENDING,
-            Result.Status.SUCCESS,
-            Result.Status.FAILED,
-            Result.Status.ERROR,
-        ):
-            return status
-        if status in Result.Status.RUNNING:
-            return Result.Status.PENDING
-        elif status in Result.Status.DROPPED:
-            return Result.Status.ERROR
-        else:
-            assert (
-                False
-            ), f"Invalid status [{status}] to be set as GH commit status.state"
+        return Result.convert_to_gh_status(status)
 
     @classmethod
     def print_log_in_group(cls, group_name: str, lines: Union[str, List[str]]):
@@ -713,7 +699,7 @@ class GH:
             # Filter and sort failed/error subresults by priority
             # Priority: FAILED (0) > ERROR (1) > others (2)
             def get_status_priority(r):
-                if r.status == Result.Status.FAILED:
+                if r.status == Result.Status.FAIL:
                     return 0
                 elif r.status == Result.Status.ERROR:
                     return 1
@@ -770,9 +756,9 @@ class GH:
                 """Escape pipe characters for markdown tables"""
                 return str(text).replace("|", "\\|")
 
-            if self.status == Result.Status.SUCCESS:
+            if self.status == Result.Status.OK:
                 symbol = "✅"  # Green check mark
-            elif self.status == Result.Status.FAILED:
+            elif self.status == Result.Status.FAIL:
                 symbol = "❌"  # Red cross mark
             else:
                 symbol = "⏳"  # Hourglass (in progress)

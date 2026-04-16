@@ -49,6 +49,10 @@ class CIDB:
         test_duration_ms: Optional[int]
         test_context_raw: str
 
+        def __post_init__(self):
+            # Transparently convert Result.Status values to legacy CIDB strings
+            self.check_status = Result.convert_to_cidb_status(self.check_status)
+
     def __init__(self, url, user, passwd):
         self.url = url
         self.auth = {
@@ -304,7 +308,7 @@ ORDER BY day DESC
             commit_sha=info.sha,
             commit_url=info.commit_url,
             check_name="Usage Storage",
-            check_status=Result.Status.SUCCESS,
+            check_status=Result.Status.OK,
             check_duration_ms=storage_usage.uploaded,
             check_start_time=Utils.timestamp_to_str(Utils.timestamp()),
             report_url=info.get_report_url(),
@@ -344,7 +348,7 @@ ORDER BY day DESC
                 commit_sha=info.sha,
                 commit_url=info.commit_url,
                 check_name="Usage Compute",
-                check_status=Result.Status.SUCCESS,
+                check_status=Result.Status.OK,
                 check_duration_ms=int(usage * 1000),
                 check_start_time=Utils.timestamp_to_str(Utils.timestamp()),
                 report_url=info.get_report_url(),

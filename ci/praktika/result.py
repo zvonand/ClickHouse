@@ -654,13 +654,18 @@ class Result(MetaClasses.Serializable):
                 command,
             ],
         )
-        is_error = not result.is_ok()
+        binary_failed = not result.is_ok()
         status, results, info = ResultTranslator.from_gtest()
         result.set_status(status).set_results(results).set_info(info)
-        if is_error and result.is_ok():
-            # test cases can be OK but gtest binary run failed, for instance due to sanitizer error
+        if binary_failed and result.is_ok():
+            # gtest cases are OK but binary run failed — e.g. sanitizer assertion
+            # after all tests passed. This is a test failure, not an infrastructure error.
             result.set_info("gtest binary run has non-zero exit code - see logs")
-            result.set_status(Result.Status.ERROR)
+            result.set_status(Result.Status.FAILED)
+        if binary_failed and result.is_error():
+            # Binary ran but was killed (e.g. by a sanitizer or signal) before gtest
+            # wrote the result json. This is a test failure, not an infrastructure error.
+            result.set_status(Result.Status.FAILED)
         return result
 
     @classmethod

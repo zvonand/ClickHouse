@@ -309,7 +309,6 @@ void AggregatingInOrderTransform::generate()
         variants.invalidate();
     }
 
-    Block chunk_header;
     bool group_by_key_needs_empty_block = is_consume_finished && !cur_block_size;
     if (!group_by_key || group_by_key_needs_empty_block)
     {
@@ -321,7 +320,6 @@ void AggregatingInOrderTransform::generate()
         for (size_t i = 0; i < res_aggregate_columns.size(); ++i)
             res.getByPosition(i + res_key_columns.size()).column = std::move(res_aggregate_columns[i]);
 
-        chunk_header = res_header;
         to_push_chunk = convertToChunk(res);
     }
     else
@@ -329,7 +327,6 @@ void AggregatingInOrderTransform::generate()
         /// Sorting is required after aggregation, for proper merging, via
         /// FinishAggregatingInOrderTransform/MergingAggregatedBucketTransform
         auto block = params->getHeader();
-        chunk_header = block;
         block.setColumns(group_by_chunk.detachColumns());
         sortBlock(block, sort_description);
         to_push_chunk = convertToChunk(block);
@@ -342,8 +339,10 @@ void AggregatingInOrderTransform::generate()
     {
         dataflow_cache_updater->recordAggregationKeySizes(
             to_push_chunk, params->aggregator.getKeysPositions(), params->aggregator.getKeyTypes());
+        /// res_header uses final_=false which matches the non-finalized output of AggregatingInOrderTransform.
+        /// params->getHeader() may be finalized, causing type mismatches.
         dataflow_cache_updater->recordAggregationStateColumnSizes(
-            to_push_chunk, params->aggregator.getKeysPositions(), chunk_header);
+            to_push_chunk, params->aggregator.getKeysPositions(), res_header);
     }
 
     /// Clear arenas to allow to free them, when chunk will reach the end of pipeline.

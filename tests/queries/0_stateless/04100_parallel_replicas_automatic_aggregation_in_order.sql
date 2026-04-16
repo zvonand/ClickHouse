@@ -22,7 +22,7 @@ CREATE TABLE t_agg_in_order(key UInt64, value UInt64, s String)
 ENGINE=MergeTree ORDER BY key
 SETTINGS index_granularity=8192, auto_statistics_types='';
 
-INSERT INTO t_agg_in_order SELECT number, number, toString(number) FROM numbers(2e7);
+INSERT INTO t_agg_in_order SELECT number, number, toString(number) FROM numbers(2e6);
 
 -- Single-stream in-order aggregation (AggregatingInOrderTransform path)
 SELECT key, sum(value) FROM t_agg_in_order GROUP BY key FORMAT Null
@@ -39,6 +39,12 @@ SELECT key, sum(value) FROM t_agg_in_order WHERE key < 1000000 GROUP BY key FORM
 -- In-order aggregation with multiple aggregate functions
 SELECT key, sum(value), min(s), count() FROM t_agg_in_order GROUP BY key FORMAT Null
     SETTINGS log_comment='agg_in_order_multi_agg', max_threads=1;
+
+-- group_by_key path: GROUP BY has more columns than the table's ORDER BY prefix.
+-- This triggers a different code path in AggregatingInOrderTransform where the sort prefix
+-- is shorter than the full GROUP BY, and the output is produced via prepareChunkAndFillSingleLevel.
+SELECT key, sum(value) FROM t_agg_in_order WHERE key % 10000 < 1000 GROUP BY key, value FORMAT Null
+    SETTINGS log_comment='agg_in_order_group_by_key', max_threads=4;
 
 SET enable_parallel_replicas=0, automatic_parallel_replicas_mode=0;
 
@@ -68,10 +74,11 @@ FROM (
         log_comment,
         ProfileEvents['RuntimeDataflowStatisticsOutputBytes'] AS statistics_output_bytes,
         multiIf(
-            log_comment = 'agg_in_order_single', 203505910,
-            log_comment = 'agg_in_order_multi', 203268420,
-            log_comment = 'agg_in_order_filter', 14824438,
-            log_comment = 'agg_in_order_multi_agg', 354244102,
+            log_comment = 'agg_in_order_single', 25519057,
+            log_comment = 'agg_in_order_multi', 25515684,
+            log_comment = 'agg_in_order_filter', 10096176,
+            log_comment = 'agg_in_order_multi_agg', 33649632,
+            log_comment = 'agg_in_order_group_by_key', 2532395,
             0) AS expected,
         greatest(expected, statistics_output_bytes) / least(expected, statistics_output_bytes) AS ratio
     FROM system.query_log

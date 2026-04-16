@@ -1,4 +1,4 @@
--- Tags: no-random-merge-tree-settings
+-- Tags: no-random-merge-tree-settings, long
 -- no-random-merge-tree-settings: to stabilize the test
 
 SET use_uncompressed_cache=0;

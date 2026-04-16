@@ -2180,16 +2180,29 @@ void ReadFromMergeTree::deferFiltersAfterFinalIfNeeded()
     bool defer_row_policy = settings[Setting::apply_row_policy_after_final] && query_info.row_level_filter;
     bool defer_prewhere = settings[Setting::apply_prewhere_after_final] && query_info.prewhere_info;
 
-    /// If row policy touches non-sorting-key columns, prewhere must be deferred too
-    if (defer_row_policy && query_info.prewhere_info)
+    if (defer_row_policy)
     {
         const auto & sorting_key_columns = storage_snapshot->metadata->getSortingKeyColumns();
         NameSet sorting_key_set(sorting_key_columns.begin(), sorting_key_columns.end());
 
         const auto * filter_output = &query_info.row_level_filter->actions.findInOutputs(
             query_info.row_level_filter->column_name);
-        if (!isNodeOverSortingKey(filter_output, sorting_key_set))
-            defer_prewhere = true;
+        bool row_policy_over_sk = isNodeOverSortingKey(filter_output, sorting_key_set);
+
+        /// if row policy only depends on sorting key columns, it is safe to apply before FINAL
+        /// it can only eliminate entire dedup groups, not individual rows within a group
+        if (row_policy_over_sk)
+            defer_row_policy = false;
+
+        /// If row policy touches non-sorting-key columns and there is a PREWHERE,
+        /// prewhere must also be deferred — unless it only depends on sorting key columns
+        if (!row_policy_over_sk && query_info.prewhere_info)
+        {
+            const auto * prewhere_output = &query_info.prewhere_info->prewhere_actions.findInOutputs(
+                query_info.prewhere_info->prewhere_column_name);
+            if (!isNodeOverSortingKey(prewhere_output, sorting_key_set))
+                defer_prewhere = true;
+        }
     }
 
     if (defer_row_policy)

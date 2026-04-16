@@ -212,7 +212,7 @@ INSERT INTO tab_todate_policy VALUES ('2024-01-01 11:00:00', 'ccc', 2), ('2024-0
 CREATE ROW POLICY pol_todate ON tab_todate_policy USING toDate(time) = '2024-01-01' TO ALL;
 
 SET apply_row_policy_after_final = 1;
--- rp is over sorting key toDate(time), so only row policy itself should be deferred, not prewhere
+-- rp is over sorting key toDate(time), so neither row policy nor prewhere should be deferred
 SELECT '--- toDate(time) row policy: only row filter deferred, not prewhere';
 SELECT explain FROM (EXPLAIN actions=1 SELECT * FROM tab_todate_policy FINAL PREWHERE y != 'ddd' ORDER BY time) WHERE explain LIKE '%Deferred%' SETTINGS enable_analyzer=1;
 
@@ -321,3 +321,34 @@ SELECT explain FROM (EXPLAIN actions=1 SELECT * FROM tab_nested_and_pw FINAL PRE
 
 SET apply_prewhere_after_final = 0;
 DROP TABLE tab_nested_and_pw;
+
+SELECT '';
+SELECT '= row policy on non-SK column + PREWHERE on SK column: only row policy should be deferred =';
+
+DROP TABLE IF EXISTS tab_sk_prewhere;
+DROP ROW POLICY IF EXISTS pol_sk_pw ON tab_sk_prewhere;
+
+CREATE TABLE tab_sk_prewhere (x UInt32, y String, deleted Int8, version UInt32)
+ENGINE = ReplacingMergeTree(version) ORDER BY x;
+
+INSERT INTO tab_sk_prewhere VALUES (1, 'aaa', 0, 1), (2, 'bbb', 0, 1), (3, 'ccc', 1, 1);
+INSERT INTO tab_sk_prewhere VALUES (1, 'ddd', 1, 2), (2, 'eee', 0, 2);
+
+-- row policy on deleted (non-SK) must be deferred
+-- PREWHERE on x (SK column) should NOT be deferred
+CREATE ROW POLICY pol_sk_pw ON tab_sk_prewhere USING deleted = 0 TO ALL;
+
+SET apply_row_policy_after_final = 1;
+
+SELECT '--- data correctness: PREWHERE x = 2 with row policy deleted = 0';
+-- PREWHERE x=2 keeps only x=2 rows (applied before FINAL, safe because SK-only)
+-- FINAL on x=2: (2,'bbb',0,1) vs (2,'eee',0,2) -> winner (2,'eee',0,2)
+-- Row policy deleted=0: (2,'eee',0,2) passes
+SELECT * FROM tab_sk_prewhere FINAL PREWHERE x = 2 ORDER BY x;
+
+SELECT '--- EXPLAIN: only row policy deferred, not prewhere';
+SELECT explain FROM (EXPLAIN actions=1 SELECT * FROM tab_sk_prewhere FINAL PREWHERE x = 2 ORDER BY x) WHERE explain LIKE '%Deferred%' SETTINGS enable_analyzer=1;
+
+DROP ROW POLICY pol_sk_pw ON tab_sk_prewhere;
+SET apply_row_policy_after_final = 0;
+DROP TABLE tab_sk_prewhere;

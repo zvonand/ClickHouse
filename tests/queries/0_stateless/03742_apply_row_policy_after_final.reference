@@ -57,7 +57,7 @@
 2	bbb	1
 
 = row policy on toDate(time) with ORDER BY toDate(time) — prewhere should NOT be deferred =
---- toDate(time) row policy: only row filter deferred, not prewhere
+-- toDate(time) row policy: neither row policy nor prewhere deferred
 = compound row policy: sorting-key atom should be used for index analysis =
 --- FINAL: x>1 atom should still participate in primary key analysis
 2	eee	2

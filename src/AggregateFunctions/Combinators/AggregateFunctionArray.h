@@ -41,7 +41,8 @@ public:
             /// parameter set. If this fires, it means some code path in
             /// AggregateFunctionFactory or a combinator wrapper lost/modified parameters.
             /// The diagnostic info below will identify the exact mismatch.
-            String outer_params_str, nested_params_str;
+            String outer_params_str;
+            String nested_params_str;
             for (const auto & p : parameters)
             {
                 if (!outer_params_str.empty()) outer_params_str += ", ";

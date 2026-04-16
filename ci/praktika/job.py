@@ -1,8 +1,10 @@
 import copy
 import fnmatch
+import hashlib
 import json
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Iterable, List, Optional
 
 from . import Artifact
@@ -41,12 +43,18 @@ class Job:
         # Job Run Command
         command: str
 
-        # What job requires
-        #   May be phony or physical names
+        # Hard dependencies: Artifact.Config.name or Job.Config.name.
+        # Artifacts are downloaded; for job names the artifact report is
+        # downloaded. Dependencies affect job digest and filtering.
         requires: List[str] = field(default_factory=list)
 
+        # Ordering-only dependencies (job names). The listed jobs will run
+        # before this one, but nothing is downloaded and they do not affect
+        # the job digest or cache key.
+        run_after: List[str] = field(default_factory=list)
+
         # What job provides
-        #   May be phony or physical names
+        #   May be only `Artifact.Config.name`
         provides: List[str] = field(default_factory=list)
 
         job_requirements: Optional["Job.Requirements"] = None
@@ -65,12 +73,23 @@ class Job:
 
         enable_commit_status: bool = False
 
+        enable_gh_auth: bool = False
+
         # If a job Result contains multiple sub-results, and only a specific sub-result should be sent to CIDB, set its name here.
         result_name_for_cidb: str = ""
 
         parameter: Any = None
 
-        # List of commands to call upon job completion
+        # Per-job secrets (exported only for this job, not all jobs in the workflow)
+        secrets: list = field(default_factory=list)
+
+        # If True, runner.py restores the submodule cache from S3 before the job starts
+        needs_submodules: bool = False
+
+        # List of commands to call before job starts
+        pre_hooks: List[str] = field(default_factory=list)
+
+        # List of commands to call after job completes
         post_hooks: List[str] = field(default_factory=list)
 
         def parametrize(self, *param_sets: "Job.ParamSet"):
@@ -137,7 +156,7 @@ class Job:
             res.name = name
             return res
 
-        def set_dependency(self, job, reset=False):
+        def set_requires(self, job, reset=False):
             res = copy.deepcopy(self)
             if not (isinstance(job, list) or isinstance(job, tuple)):
                 job = [job]
@@ -148,6 +167,21 @@ class Job:
                     res.requires.append(job_)
                 elif isinstance(job_, Job.Config):
                     res.requires.append(job_.name)
+                else:
+                    Utils.raise_with_error(f"Invalid dependency type [{job_}]")
+            return res
+
+        def set_run_after(self, job, reset=False):
+            res = copy.deepcopy(self)
+            if not (isinstance(job, list) or isinstance(job, tuple)):
+                job = [job]
+            if reset:
+                res.run_after = []
+            for job_ in job:
+                if isinstance(job_, str):
+                    res.run_after.append(job_)
+                elif isinstance(job_, Job.Config):
+                    res.run_after.append(job_.name)
                 else:
                     Utils.raise_with_error(f"Invalid dependency type [{job_}]")
             return res
@@ -195,7 +229,7 @@ class Job:
             res.provides = provides_res
             return res
 
-        def set_allow_merge_on_failure(self, value):
+        def set_allow_merge_on_failure(self, value=True):
             res = copy.deepcopy(self)
             res.allow_merge_on_failure = value
             return res
@@ -203,6 +237,11 @@ class Job:
         def set_post_hooks(self, post_hooks):
             res = copy.deepcopy(self)
             res.post_hooks = post_hooks
+            return res
+
+        def set_timeout(self, timeout):
+            res = copy.deepcopy(self)
+            res.timeout = timeout
             return res
 
         @staticmethod
@@ -243,11 +282,15 @@ class Job:
             # Optionally check for submodule changes
             if self.digest_config.with_git_submodules:
                 try:
-                    submodule_paths_str = Shell.get_output(
-                        command="git config --file .gitmodules --get-regexp path | awk '{print $2}'",
-                        verbose=True,
-                    )
-                    if any(file in submodule_paths_str for file in normalized_files):
+                    if not hasattr(Job.Config, "_submodule_paths_cache"):
+                        Job.Config._submodule_paths_cache = Shell.get_output(
+                            command="git config --file .gitmodules --get-regexp path | awk '{print $2}'",
+                            verbose=True,
+                        )
+                    if any(
+                        file in Job.Config._submodule_paths_cache
+                        for file in normalized_files
+                    ):
                         return True
                 except Exception as e:
                     print(f"Warning: failed to check git submodules: {e}")
@@ -258,5 +301,10 @@ class Job:
             if self.timeout_shell_cleanup:
                 return
             if self.run_in_docker:
-                # the container name is always the same (praktika) for every image
-                self.timeout_shell_cleanup = "docker rm -f praktika"
+                container_name = (
+                    "praktika_"
+                    + hashlib.sha1(
+                        (Path(os.getcwd()).resolve().as_posix() + ":" + self.name).encode()
+                    ).hexdigest()[:12]
+                )
+                self.timeout_shell_cleanup = f"docker rm -f {container_name}"

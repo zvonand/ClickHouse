@@ -627,10 +627,10 @@ class Result(MetaClasses.Serializable):
                 has_pending = True
             if result_.status in (
                 self.Status.ERROR,
-                self.Status.FAILED,
                 self.Status.DROPPED,
                 self.Status.FAIL,
                 self.Status.UNKNOWN,
+                self.Status.XPASS,
             ):
                 has_failed = True
         if has_running:
@@ -638,9 +638,9 @@ class Result(MetaClasses.Serializable):
         elif has_pending:
             self.status = self.Status.PENDING
         elif has_failed:
-            self.status = self.Status.FAILED
+            self.status = self.Status.FAIL
         else:
-            self.status = self.Status.SUCCESS
+            self.status = self.Status.OK
         if (was_pending or was_running) and self.status not in (
             self.Status.PENDING,
             self.Status.RUNNING,

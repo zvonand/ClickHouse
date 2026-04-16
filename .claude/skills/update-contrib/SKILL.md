@@ -102,7 +102,7 @@ Report the patches found. These will need to be cherry-picked into the new `Clic
 ### 4. Create a branch for the update
 
 ```bash
-git checkout -b "bump-${LIB}"
+git checkout -b "bump-${LIB}-${VERSION}"
 ```
 
 ### 5. Update the fork (if applicable)
@@ -196,7 +196,8 @@ If the library is integrated through Rust instead of `contrib/<lib>-cmake/`:
 Important for Rust-based contrib updates:
 - `rust/vendor.sh` re-vendors dependencies for the whole Rust workspace, not just the target library
 - this can produce hundreds of file changes under `contrib/rust_vendor/`
-- do not forget to include both `rust/workspace/Cargo.lock` and `contrib/rust_vendor/` in the final commit
+- `contrib/rust_vendor` is itself a submodule pointing at `github.com/ClickHouse/rust_vendor`. Changes under it must be committed inside that submodule on a branch named `bump-${LIB}-${VERSION}`, then the submodule pointer in ClickHouse must be bumped to the new commit. Only push the `rust_vendor` branch after the user explicitly confirms.
+- do not forget to include both `rust/workspace/Cargo.lock` and the updated `contrib/rust_vendor` submodule pointer in the final commit in ClickHouse
 
 ### 9. Fix ClickHouse source code
 
@@ -218,20 +219,20 @@ Common adaptation patterns:
 - Changed header paths
 - Missing or mismatched feature guards in copied public headers
 
-Build the project to find compilation errors. Redirect ninja output to a log file in the build directory and use a subagent to analyze the results:
+Build the project to find compilation errors. Redirect `ninja` output to a log file in the build directory and use a subagent to analyze the results. If a build directory does not exist yet, configure one first (see `docs/en/development/build.md` — typically `cmake -S . -B build`, or use an existing `build_*` directory):
 
 ```bash
-cmake --build build 2>&1 | tee build/build_bump_${LIB}.log
+ninja -C build > build/build_bump_${LIB}.log 2>&1
 ```
 
 Fix errors iteratively, committing each logical fix separately.
 
 ### 10. Verify the build
 
-After all fixes, verify the build succeeds. If a build directory exists:
+After all fixes, verify the build succeeds:
 
 ```bash
-ninja -C build 2>&1 > build/build_bump_${LIB}.log
+ninja -C build > build/build_bump_${LIB}.log 2>&1
 ```
 
 Use a Task subagent to analyze the build log and return a concise summary.
@@ -280,6 +281,8 @@ Before committing, make sure you stage all affected integration artifacts, not j
 git add "contrib/$LIB" rust/workspace/Cargo.lock contrib/rust_vendor
 ```
 
+Here `contrib/rust_vendor` stages the bumped submodule pointer after its own branch (`bump-${LIB}-${VERSION}` in the `rust_vendor` repo) has been committed — the individual vendored files are not tracked in the ClickHouse repo directly.
+
 If there were build integration or source fixes, stage those too.
 
 Commit message guidelines:
@@ -296,47 +299,21 @@ Examples of good commit messages from past PRs:
 
 ### 13. Open a draft PR
 
-Before creating the PR, ensure any required branches have been pushed and that the user has already confirmed pushing is ok.
+Before creating the PR, ensure any required branches have been pushed and that the user has already confirmed pushing is ok. This includes both the ClickHouse feature branch, any `ClickHouse/<version>` branch in a contrib fork, and any `bump-${LIB}-${VERSION}` branch in `rust_vendor`.
 
-Use the PR template from `.github/PULL_REQUEST_TEMPLATE.md`. The body should contain:
-- Short description of what was updated and why
-- Changelog category — typically one of:
-  - `Not for changelog` — routine maintenance bumps
-  - `Bug Fix` — security CVE fixes
-  - `Build/Testing/Packaging Improvement` — build-related improvements
-  - `Improvement` — if the bump enables new features
-- Changelog entry
-- Documentation checkbox
+Use the PR template at `.github/PULL_REQUEST_TEMPLATE.md` — do not inline a custom structure. Fill in:
+- a short description of what was updated and why
+- the Changelog category (pick one from the template); typical choices for contrib bumps are `Not for changelog`, `Bug Fix` (for CVE fixes), `Build/Testing/Packaging Improvement`, or `Improvement`
+- the Changelog entry
+- the Documentation checkbox
+
+Create the PR with:
 
 ```bash
-gh pr create --draft --title "<title>" --body "$(cat <<'EOF'
-<description>
-
-### Changelog category (leave one):
-- Not for changelog (changelog entry is not required)
-
-### Changelog entry (a]user-readable short description of the changes that goes to CHANGELOG.md):
-...
-
-### Documentation entry for user-facing changes
-- [ ] Documentation is written (mandatory for new features)
-EOF
-)"
+gh pr create --draft --title "<title>" --body-file .github/PULL_REQUEST_TEMPLATE.md
 ```
 
-## Complexity Tiers
-
-From analyzing ~310 recent contrib update PRs, updates fall into predictable tiers:
-
-| Tier | Description | Typical Changes | Example |
-|------|-------------|-----------------|---------|
-| **Trivial** | Submodule pointer only | 1 file, +1/-1 | curl patch release, OpenSSL patch |
-| **Simple** | Pointer + minor CMake | 2-3 files, <20 lines | simdjson, libuv, libarchive |
-| **Medium** | CMake overhaul needed | 3-5 files, new source files | arrow minor version, rocksdb |
-| **Complex** | Source adaptation required | 5-20 files across `contrib/` and `src/` | grpc major version, AWS SDK |
-| **Major** | Behavioral changes, test updates | 10+ files, weeks of iteration | librdkafka with API changes |
-
-Assess which tier the update falls into early (step 7) and communicate the expected scope to the user.
+Then edit the body to fill in the description, chosen changelog category, and changelog entry.
 
 ## Libraries with known dependency chains
 

@@ -6,12 +6,11 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
-timer=3
+sleep_sql="SELECT sleep(3);"
 
-$CLICKHOUSE_CLIENT --query="SELECT sleep($timer)" &
-$CLICKHOUSE_CLIENT --query="SELECT sleep($timer)" &
-$CLICKHOUSE_CLIENT --query="SELECT sleep($timer)" &
-$CLICKHOUSE_CLIENT --query="SELECT sleep($timer)" &
-$CLICKHOUSE_CLIENT --query="SELECT sleep($timer)" &
-$CLICKHOUSE_CLIENT --query="SELECT 1" &
+$CLICKHOUSE_CLIENT --query="$sleep_sql $sleep_sql $sleep_sql $sleep_sql;" &
+$CLICKHOUSE_CLIENT --query="$sleep_sql $sleep_sql $sleep_sql $sleep_sql;" &
+$CLICKHOUSE_CLIENT --query="$sleep_sql $sleep_sql $sleep_sql $sleep_sql;" &
+$CLICKHOUSE_CLIENT --query="$sleep_sql $sleep_sql $sleep_sql $sleep_sql;" &
+$CLICKHOUSE_CLIENT --query="$sleep_sql $sleep_sql $sleep_sql $sleep_sql;" &
 wait

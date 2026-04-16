@@ -8,12 +8,10 @@
 #include <Poco/Net/SecureStreamSocket.h>
 #include <Poco/Net/Context.h>
 #include <Poco/Net/SSLException.h>
-#include <Poco/Net/RejectCertificateHandler.h>
-#include <Poco/Net/AcceptCertificateHandler.h>
 #include <Poco/Net/SSLManager.h>
 #include <Poco/SharedPtr.h>
 #include <Poco/Timespan.h>
-#include <Poco/TimeoutException.h>
+#include <Poco/Exception.h>
 
 #include <openssl/evp.h>
 #include <openssl/pem.h>
@@ -37,10 +35,15 @@ struct EphemeralCert
     EphemeralCert()
     {
         EVP_PKEY * pkey = EVP_RSA_gen(2048);
-        ASSERT_TRUE(pkey != nullptr);
+        if (!pkey)
+            throw std::runtime_error("EVP_RSA_gen failed");
 
         X509 * x509 = X509_new();
-        ASSERT_TRUE(x509 != nullptr);
+        if (!x509)
+        {
+            EVP_PKEY_free(pkey);
+            throw std::runtime_error("X509_new failed");
+        }
 
         ASN1_INTEGER_set(X509_get_serialNumber(x509), 1);
         X509_gmtime_adj(X509_getm_notBefore(x509), 0);
@@ -63,8 +66,8 @@ struct EphemeralCert
 
     ~EphemeralCert()
     {
-        unlink(cert_path.c_str());
-        unlink(key_path.c_str());
+        (void)unlink(cert_path.c_str());
+        (void)unlink(key_path.c_str());
     }
 
 private:
@@ -74,7 +77,8 @@ private:
         char path[256];
         snprintf(path, sizeof(path), "/tmp/gtest_ssl_%s_XXXXXX", suffix);
         int fd = mkstemp(path);
-        EXPECT_GE(fd, 0);
+        if (fd < 0)
+            throw std::runtime_error("mkstemp failed");
 
         BIO * bio = BIO_new_fd(fd, BIO_CLOSE);
         writer(bio);

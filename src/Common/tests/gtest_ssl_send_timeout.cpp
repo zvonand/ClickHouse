@@ -165,6 +165,10 @@ TEST(SSLSocketTimeout, SendBytesThrowsTimeoutOnBlockingSocket)
     catch (const Poco::Exception & e)
     {
         /// Connection setup can fail on some systems; skip gracefully.
+        /// Clean up the server thread before GTEST_SKIP returns from the function.
+        server_done.store(true);
+        server_socket.close();
+        server_thread.join();
         GTEST_SKIP() << "SSL setup failed: " << e.displayText();
     }
 

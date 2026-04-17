@@ -28,8 +28,8 @@ _timeout() {
     ) &
     local pid=$!
     sleep 0.15
-    kill $pid
-    sleep 0.15
+    kill $pid 2>/dev/null
+    wait $pid 2>/dev/null
     kill -- -$pid 2>/dev/null ||:
 }
 

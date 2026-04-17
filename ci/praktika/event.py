@@ -81,7 +81,7 @@ class EventFeed:
         running_cutoff_timestamp = int(time.time()) - (12 * 60 * 60)
 
         def sanitize_event(e: Event) -> None:
-            if e.timestamp < running_cutoff_timestamp and e.ci_status.upper() in (
+            if e.timestamp < running_cutoff_timestamp and (e.ci_status or "").upper() in (
                 "RUNNING",
                 "PENDING",
             ):

@@ -263,7 +263,7 @@ Test output:
             max_info_lines_cnt=50,
             max_line_length=200,
         )
-        res += f"\n - flags: {', '.join(result.get_labels()) or 'not flaged'}"
+        res += f"\n - flags: {', '.join(result.get_labels()) or 'not flagged'}"
         res += f"\n - cidb: {result.get_label_link(Result.Label.CIDB) or 'not found'}"
         return res
 

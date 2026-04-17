@@ -181,7 +181,7 @@ class Result(MetaClasses.Serializable):
             for result in results:
                 if result.info:
                     infos.append(f"{result.name}: {result.info}")
-        return Result(
+        result = Result(
             name=name,
             status=result_status,
             start_time=start_time,
@@ -191,7 +191,10 @@ class Result(MetaClasses.Serializable):
             assets=assets or [],
             files=files or [],
             links=links or [],
-        ).set_label(labels or [])
+        )
+        for label in labels or []:
+            result.set_label(label)
+        return result
 
     @staticmethod
     def get():
@@ -385,19 +388,10 @@ class Result(MetaClasses.Serializable):
         - hint: optional tooltip text shown on hover. If omitted on a new label,
           falls back to Result.LABEL_HINTS[label] when registered. On an existing
           label, omitting link/hint preserves the current value.
-
-        ``label`` may also be a list whose items are strings, dicts, or
-        (name, link) / (name, link, hint) tuples — each is added in turn.
         """
-        if isinstance(label, list):
-            for item in label:
-                if isinstance(item, dict):
-                    self.set_label(**item)
-                elif isinstance(item, (list, tuple)):
-                    self.set_label(*item)
-                else:
-                    self.set_label(item)
-            return self
+        assert isinstance(label, str), (
+            f"label must be a string, got {type(label).__name__}"
+        )
 
         labels = self.ext.setdefault("labels", [])
         for i, existing in enumerate(labels):

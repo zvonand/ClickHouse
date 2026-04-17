@@ -49,7 +49,7 @@ Any OpenAI-compatible API (e.g. vLLM, Ollama, LiteLLM) can be used by setting `p
 
 ### Query-level settings {#query-level-settings}
 
-All AI-related settings are listed in [Settings](/operations/settings/settings) under the `ai_` prefix.
+All AI-related settings are listed in [Settings](/operations/settings/settings) under the `ai_function_` prefix.
 
 ## Supported providers {#supported-providers}
 

@@ -788,10 +788,12 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
 
         /// Parse additional_table_filters early so that later decisions (trivial-count,
         /// trivial-limit) can see `additional_filter_ast` before the actual filter DAG
-        /// is built further down. Parsing is side-effect free; the DAG build still
-        /// happens at its original call sites.
-        parseAdditionalFilterAstIfNeeded(
-            storage, table_expression->getOriginalAlias(), table_expression_query_info, query_context);
+        /// is built further down
+        ///
+        /// Skip under `only_analyze`, since we may not have the database in case of Distributed.
+        if (!select_query_options.only_analyze)
+            parseAdditionalFilterAstIfNeeded(
+                storage, table_expression->getOriginalAlias(), table_expression_query_info, query_context);
 
         size_t max_streams = settings[Setting::max_threads];
         size_t max_threads_execute_query = settings[Setting::max_threads];

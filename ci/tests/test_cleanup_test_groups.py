@@ -8,12 +8,11 @@ from ``tests/clickhouse-test`` so it uses ``ps -eo pid,ppid,pgid,command``
 Scenario
 --------
 1. ``clickhouse-test`` starts a subprocess (the "test process") in its own
-   process group and records the PGID in the group pid file — exactly as
-   ``_track_pgid`` does on test launch.  In the multi-process variant the test
-   is ``00058_select_sleep_3.sh``, which spawns 5 child ``clickhouse-client``
-   processes running ``SELECT sleep(3)``.
+   process group and writes the PGID to a file via ``write_text_atomic``
+   right after ``Popen()``.  The test is ``01_parallel_sleep.sh``, which
+   spawns 5 child ``sleep`` processes.
 2. ``clickhouse-test`` is killed with ``SIGKILL``, leaving the test process
-   (and its children) orphaned because ``_untrack_pgid`` never ran.
+   (and its children) orphaned because the PGID file is never deleted.
 3. We assert the test process and its 5 child processes are still alive: they
    live in their own process group, so the parent's ``SIGKILL`` cannot reach
    them.
@@ -42,8 +41,8 @@ pgrep = _ct["pgrep"]
 _GROUP_PID_PATH = _ct["_GROUP_PID_PATH"]
 _GROUP_PID_NAME = _ct["_GROUP_PID_NAME"]
 
-# clickhouse-test defaults args.tmp to args.queries when running from the repo,
-# so per-test stdout files end up under tests/queries/0_stateless/.
+# clickhouse-test uses --queries ci/tests, so per-test stdout files end up
+# under ci/tests/0_stateless/ (args.tmp defaults to args.queries).
 _STDOUT = _REPO_ROOT / "ci" / "tests" / "0_stateless" / "test.stdout"
 
 
@@ -81,17 +80,17 @@ def test_cleanup_kills_orphaned_test_process():
                 assert False, f"{_STDOUT} is empty"
 
             # The PGID file is written by clickhouse-test synchronously right after
-            # Popen(), before the bash script starts.  By the time SELECT 1 has
-            # completed and the stdout file has content, the file is likely to exist.
+            # Popen(), before the bash script starts.  By the time the test script
+            # writes its output and the stdout file has content, the file is likely to exist.
             p = list(_GROUP_PID_PATH.glob(f"{_GROUP_PID_NAME}.*"))[0]
             pgid = int(p.read_text())
 
             def got_procs(procs) -> str:
                 return ", got\n" + '\n'.join(f"{p[0]} {p[3]}" for p in procs)
 
-            # Poll until we see exactly 7 processes.  The SELECT 1 client writes
-            # to stdout (triggering our file-size check above) and then exits,
-            # but may still be visible to pgrep for a brief moment.
+            # Poll until we see exactly 7 processes: two bash processes (the test
+            # runner wrapper and the test script itself) plus 5 sleep subprocesses
+            # spawned by the test script.
             deadline_procs = time.monotonic() + 5
             while time.monotonic() < deadline_procs:
                 procs = pgrep(pgid=pgid)

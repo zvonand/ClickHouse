@@ -1,4 +1,5 @@
 import argparse
+import shlex
 
 from ci.jobs.integration_test_job import start_docker_in_docker
 from ci.jobs.scripts.clickhouse_service import ClickHouseService
@@ -24,7 +25,7 @@ if __name__ == "__main__":
     args = parse_args()
     pytest_command = "ci/tests/"
     if args.test:
-        pytest_command += " -k " + " or ".join(args.test)
+        pytest_command += " -k " + shlex.quote(" or ".join(args.test))
 
     start_docker_in_docker()
     with ClickHouseService() as service:

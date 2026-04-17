@@ -169,6 +169,9 @@ TEST(SSLSocketTimeout, SendBytesThrowsTimeoutOnBlockingSocket)
     }
 
     server_done.store(true);
+    /// Close the listening socket to unblock acceptConnection if the client
+    /// failed before connecting (e.g. SSL context error).
+    server_socket.close();
     server_thread.join();
 }
 

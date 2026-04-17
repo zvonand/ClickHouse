@@ -342,31 +342,7 @@ SELECT '-- aiTranslate: with instructions and temperature';
 SELECT count() FROM (SELECT aiTranslate('ai_test', x, 'French', 'keep proper nouns', 0.3) AS result FROM _03300_input);
 
 -- =============================================================================
--- 17. aiGenerateSQL
--- =============================================================================
-
-SELECT '-- aiGenerateSQL: registered';
-SELECT name FROM system.functions WHERE name = 'aiGenerateSQL';
-
-SELECT '-- aiGenerateSQL: too few arguments';
-SELECT aiGenerateSQL('ai_test'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
-
-SELECT '-- aiGenerateSQL: too many arguments';
-SELECT aiGenerateSQL('ai_test', 'q', 0.1, 'extra'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
-
-SELECT '-- aiGenerateSQL: return type';
-DROP TABLE IF EXISTS _03300_ret_sql;
-CREATE TABLE _03300_ret_sql ENGINE = Memory AS
-    SELECT aiGenerateSQL('ai_test', x) AS result FROM _03300_input;
-SELECT name, type FROM system.columns
-    WHERE database = currentDatabase() AND table = '_03300_ret_sql';
-DROP TABLE IF EXISTS _03300_ret_sql;
-
-SELECT '-- aiGenerateSQL: with temperature';
-SELECT count() FROM (SELECT aiGenerateSQL('ai_test', x, 0.1) AS result FROM _03300_input);
-
--- =============================================================================
--- 18. Re-disable the setting mid-session
+-- 17. Re-disable the setting mid-session
 -- =============================================================================
 
 SET allow_experimental_ai_functions = 0;

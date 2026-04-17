@@ -1,8 +1,6 @@
 #include <Functions/FunctionBaseAI.h>
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionHelpers.h>
-#include <Columns/ColumnString.h>
-#include <Columns/ColumnConst.h>
 #include <DataTypes/DataTypeString.h>
 #include <Interpreters/DatabaseCatalog.h>
 #include <Databases/IDatabase.h>
@@ -145,28 +143,30 @@ private:
     {
         String result = raw;
 
-        auto strip_leading_fence = [&](const String & fence)
+        auto strip_leading_fence = [&](std::string_view fence)
         {
             size_t pos = result.find(fence);
-            if (pos != String::npos)
-                result = result.substr(pos + fence.size());
+            if (pos == String::npos)
+                return false;
+            result.erase(0, pos + fence.size());
+            return true;
         };
 
-        if (result.find("```sql") != String::npos)
-            strip_leading_fence("```sql");
-        else if (result.find("```SQL") != String::npos)
-            strip_leading_fence("```SQL");
-        else if (result.find("```") != String::npos)
-            strip_leading_fence("```");
+        strip_leading_fence("```sql") || strip_leading_fence("```SQL") || strip_leading_fence("```");
 
         size_t end_fence = result.rfind("```");
         if (end_fence != String::npos)
-            result = result.substr(0, end_fence);
+            result.resize(end_fence);
 
-        while (!result.empty() && (result.front() == '\n' || result.front() == '\r' || result.front() == ' '))
-            result.erase(result.begin());
-        while (!result.empty() && (result.back() == '\n' || result.back() == '\r' || result.back() == ' ' || result.back() == ';'))
-            result.pop_back();
+        static constexpr std::string_view leading_trim = " \t\n\r";
+        static constexpr std::string_view trailing_trim = " \t\n\r;";
+
+        size_t first = result.find_first_not_of(leading_trim);
+        if (first == String::npos)
+            return {};
+        size_t last = result.find_last_not_of(trailing_trim);
+        result.erase(last + 1);
+        result.erase(0, first);
 
         return result;
     }

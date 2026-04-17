@@ -1,8 +1,6 @@
 #include <Functions/FunctionBaseAI.h>
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionHelpers.h>
-#include <Columns/ColumnString.h>
-#include <Columns/ColumnConst.h>
 #include <DataTypes/DataTypeString.h>
 #include <Common/Exception.h>
 
@@ -12,6 +10,11 @@
 
 namespace DB
 {
+
+namespace ErrorCodes
+{
+    extern const int BAD_ARGUMENTS;
+}
 
 namespace
 {
@@ -127,24 +130,35 @@ private:
 
         if (isJSONSchema(instruction))
         {
-            Poco::JSON::Parser parser;
-            auto parsed = parser.parse(instruction);
-            auto user_obj = parsed.extract<Poco::JSON::Object::Ptr>();
-
-            std::vector<String> keys;
-            user_obj->getNames(keys);
-            for (const auto & key : keys)
+            try
             {
-                Poco::JSON::Array::Ptr type_arr = new Poco::JSON::Array;
-                type_arr->add("string");
-                type_arr->add("null");
+                Poco::JSON::Parser parser;
+                auto user_obj = parser.parse(instruction).extract<Poco::JSON::Object::Ptr>();
+                if (!user_obj)
+                    throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                        "aiExtract: 'instruction_or_schema' must be a JSON object mapping field names to descriptions");
 
-                Poco::JSON::Object::Ptr prop = new Poco::JSON::Object;
-                prop->set("type", type_arr);
-                prop->set("description", user_obj->getValue<String>(key));
+                std::vector<String> keys;
+                user_obj->getNames(keys);
+                for (const auto & key : keys)
+                {
+                    Poco::JSON::Array::Ptr type_arr = new Poco::JSON::Array;
+                    type_arr->add("string");
+                    type_arr->add("null");
 
-                properties->set(key, prop);
-                required->add(key);
+                    Poco::JSON::Object::Ptr prop = new Poco::JSON::Object;
+                    prop->set("type", type_arr);
+                    prop->set("description", user_obj->getValue<String>(key));
+
+                    properties->set(key, prop);
+                    required->add(key);
+                }
+            }
+            catch (const Poco::Exception & e)
+            {
+                throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                    "aiExtract: failed to parse 'instruction_or_schema' as a JSON object of field names to string descriptions: {}",
+                    e.displayText());
             }
         }
         else
@@ -179,6 +193,7 @@ private:
 
     /// Unwrap a single-key `{"result": "..."}` response; in free-text mode the model is constrained to this shape
     /// and we return just the string value. If the object has multiple fields (schema mode), return the raw JSON.
+    /// Parse errors are swallowed on purpose — the user will see the output anyway.
     String postProcessResponse(const String & raw) const override
     {
         if (raw.empty() || raw.front() != '{')
@@ -198,10 +213,8 @@ private:
                     return {};
             }
         }
-        catch (...)
-        {
-            tryLogCurrentException(__PRETTY_FUNCTION__);
-        }
+        catch (...) {} // NOLINT(bugprone-empty-catch) Ok: best-effort unwrap, see comment above.
+
         return raw;
     }
 };

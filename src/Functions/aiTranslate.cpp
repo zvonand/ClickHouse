@@ -1,8 +1,6 @@
 #include <Functions/FunctionBaseAI.h>
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionHelpers.h>
-#include <Columns/ColumnString.h>
-#include <Columns/ColumnConst.h>
 #include <DataTypes/DataTypeString.h>
 #include <Common/Exception.h>
 

@@ -46,6 +46,7 @@ public:
 private:
     static constexpr float default_temp = 0.7f;
     static constexpr size_t prompt_arg_index = 1;
+    static constexpr size_t system_prompt_arg_idx = 2;
     static constexpr size_t temp_arg_idx = 3;
 
     String functionName() const override { return name; }
@@ -56,9 +57,9 @@ private:
 
     String buildSystemPrompt(const ColumnsWithTypeAndName & arguments) const override
     {
-        if (arguments.size() > 2 && isString(arguments[2].type))
+        if (arguments.size() > system_prompt_arg_idx && isString(arguments[system_prompt_arg_idx].type))
         {
-            String system_prompt(arguments[2].column->getDataAt(0));
+            String system_prompt(arguments[system_prompt_arg_idx].column->getDataAt(0));
             if (!system_prompt.empty())
                 return system_prompt;
         }

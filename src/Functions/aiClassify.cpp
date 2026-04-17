@@ -1,7 +1,6 @@
 #include <Functions/FunctionBaseAI.h>
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionHelpers.h>
-#include <Columns/ColumnString.h>
 #include <Columns/ColumnConst.h>
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypeArray.h>
@@ -148,9 +147,12 @@ private:
         return root;
     }
 
+    /// The provider is instructed to return `{"category": "<label>"}` via the JSON-schema response format, so in
+    /// practice the response parses as an object with a `category` key. Anything else (model ignored the schema,
+    /// returned a bare label, or returned truncated/invalid JSON) falls through to `raw_response`. Parse errors are
+    /// swallowed on purpose — the user will see the output anyway.
     String postProcessResponse(const String & raw_response) const override
     {
-        /// If response is empty or not JSON, we just return it as-is
         if (raw_response.empty() || raw_response.front() != '{')
             return raw_response;
 
@@ -160,14 +162,10 @@ private:
             auto parsed = parser.parse(raw_response);
             auto obj = parsed.extract<Poco::JSON::Object::Ptr>();
             if (obj && obj->has("category"))
-                return obj->getValue<String>("category"); /// Successful parse
+                return obj->getValue<String>("category");
         }
-        catch (...)
-        {
-            tryLogCurrentException(__PRETTY_FUNCTION__);
-        }
+        catch (...) {} // NOLINT(bugprone-empty-catch) Ok: best-effort unwrap, see comment above.
 
-        /// Fallback
         return raw_response;
     }
 };

@@ -84,6 +84,20 @@ class Result(MetaClasses.Serializable):
         BLOCKER = "blocker"
         ISSUE = "issue"
         INFRA = "infra"
+        XFAIL = "xfail"
+        CIDB = "cidb"
+
+    # Default hints rendered as a hover tooltip in json.html.
+    # Looked up automatically when set_label is called without an explicit hint.
+    LABEL_HINTS = {
+        Label.OK_ON_RETRY: "Test failed initially but passed on retry",
+        Label.FAILED_ON_RETRY: "Test failed both on the first run and on retry",
+        Label.BLOCKER: "Blocks the merge regardless if a known issue is matched (sanitizer/fatal in server logs, etc.)",
+        Label.ISSUE: "A known open GitHub issue matches this failure",
+        Label.INFRA: "Infrastructure error",
+        Label.XFAIL: "Expected to fail (bugfix validation inverts the status)",
+        Label.CIDB: "Failure history for this test in the CI database",
+    }
 
     name: str
     status: str
@@ -167,7 +181,7 @@ class Result(MetaClasses.Serializable):
             for result in results:
                 if result.info:
                     infos.append(f"{result.name}: {result.info}")
-        return Result(
+        result = Result(
             name=name,
             status=result_status,
             start_time=start_time,
@@ -177,7 +191,12 @@ class Result(MetaClasses.Serializable):
             assets=assets or [],
             files=files or [],
             links=links or [],
-        ).set_label(labels or [])
+        )
+        if isinstance(labels, str):
+            labels = [labels]
+        for label in labels or []:
+            result.set_label(label)
+        return result
 
     @staticmethod
     def get():
@@ -356,52 +375,97 @@ class Result(MetaClasses.Serializable):
         self.duration = stopwatch.duration
         return self
 
-    def set_label(self, label):
-        if not self.ext.get("labels", None):
-            self.ext["labels"] = []
-        if isinstance(label, list):
-            self.ext["labels"].extend(label)
-        else:
-            self.ext["labels"].append(label)
+    @staticmethod
+    def _label_name(entry):
+        """Return the name of a label entry (handles legacy string entries)."""
+        return entry if isinstance(entry, str) else entry.get("name")
+
+    _UNSET = object()
+
+    def set_label(self, label, link=_UNSET, hint=_UNSET):
+        """Add or update a label.
+
+        Each label is stored as a dict {"name": str, "link"?: str, "hint"?: str}.
+        - link: optional URL — clicking the label opens it in a new tab.
+        - hint: optional tooltip text shown on hover. If omitted on a new label,
+          falls back to Result.LABEL_HINTS[label] when registered. On an existing
+          label, omitting link/hint preserves the current value.
+        """
+        assert isinstance(label, str), (
+            f"label must be a string, got {type(label).__name__}"
+        )
+
+        labels = self.ext.setdefault("labels", [])
+        for i, existing in enumerate(labels):
+            if self._label_name(existing) == label:
+                merged = {"name": label}
+                if isinstance(existing, dict):
+                    for k in ("link", "hint"):
+                        if k in existing:
+                            merged[k] = existing[k]
+                else:
+                    # Legacy string entry — backfill default hint when migrating to dict.
+                    default = self.LABEL_HINTS.get(label)
+                    if default:
+                        merged["hint"] = default
+                if link is not self._UNSET:
+                    if link:
+                        merged["link"] = link
+                    else:
+                        merged.pop("link", None)
+                if hint is not self._UNSET:
+                    if hint:
+                        merged["hint"] = hint
+                    else:
+                        merged.pop("hint", None)
+                labels[i] = merged
+                return self
+
+        entry = {"name": label}
+        if link is not self._UNSET and link:
+            entry["link"] = link
+        resolved_hint = hint if hint is not self._UNSET else self.LABEL_HINTS.get(label)
+        if resolved_hint:
+            entry["hint"] = resolved_hint
+        labels.append(entry)
         return self
 
     def remove_label(self, label):
         if not self.ext.get("labels", None):
-            return
-        self.ext["labels"] = [l for l in self.ext["labels"] if l != label]
+            return self
+        self.ext["labels"] = [
+            l for l in self.ext["labels"] if self._label_name(l) != label
+        ]
         return self
 
     def get_labels(self):
-        return self.ext.get("labels", [])
+        """Return list of label names."""
+        return [self._label_name(l) for l in self.ext.get("labels", [])]
 
     def has_label(self, label):
-        return label in self.ext.get("labels", []) or label in [
-            x[0] for x in self.ext.get("hlabels", [])
-        ]
+        if label in self.get_labels():
+            return True
+        # Legacy fallback for results stored before the label/hlabel unification.
+        return label in [x[0] for x in self.ext.get("hlabels", []) if x]
+
+    def get_label_link(self, label):
+        for l in self.ext.get("labels", []):
+            if isinstance(l, dict) and l.get("name") == label:
+                return l.get("link")
+        # Legacy fallback for results stored before the label/hlabel unification.
+        for h in self.ext.get("hlabels", []):
+            if isinstance(h, (list, tuple)) and len(h) >= 2 and h[0] == label:
+                return h[1]
+        return None
+
+    def get_label_hint(self, label):
+        for l in self.ext.get("labels", []):
+            if isinstance(l, dict) and l.get("name") == label:
+                return l.get("hint")
+        return None
 
     def set_comment(self, comment):
         self.ext["comment"] = comment
-
-    def set_clickable_label(self, label, link):
-        if not self.ext.get("hlabels", None):
-            self.ext["hlabels"] = []
-        for i, (existing_label, existing_link) in enumerate(self.ext["hlabels"]):
-            if existing_label == label:
-                if existing_link != link:
-                    print(
-                        f"WARNING: Updating hlabel '{label}' from '{existing_link}' to '{link}'"
-                    )
-                    self.ext["hlabels"][i] = (label, link)
-                return
-        self.ext["hlabels"].append((label, link))
-
-    def get_hlabel_link(self, label):
-        if not self.ext.get("hlabels", None):
-            return None
-        for hlabel in self.ext["hlabels"]:
-            if hlabel[0] == label:
-                return hlabel[1]
-        return None
 
     @classmethod
     def from_pytest_run(

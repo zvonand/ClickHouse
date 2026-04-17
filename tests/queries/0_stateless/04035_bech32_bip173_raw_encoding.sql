@@ -1,3 +1,5 @@
+-- Tags: no-fasttest
+-- Reason: `bech32Encode` / `bech32Decode` are gated behind `USE_BECH32`, which is not enabled in the Fast test build.
 -- Verify BIP173 (original bech32) support via string encoding variant.
 -- When 'bech32' or 'bech32m' is passed as the 3rd argument, no witness
 -- version byte is prepended, enabling Cosmos SDK and other non-SegWit use cases.

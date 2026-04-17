@@ -42,7 +42,8 @@ Field evaluateFunction(const String & name, const std::vector<String> & argument
         arguments.emplace_back(ColumnWithTypeAndName{std::move(column), std::make_shared<DataTypeString>(), ""});
     }
 
-    auto result = function->execute(arguments, std::make_shared<DataTypeUInt16>(), arguments.size(), false);
+    chassert(!arguments.empty());
+    auto result = function->execute(arguments, std::make_shared<DataTypeUInt16>(), arguments[0].column->size(), false);
     return (*result)[0];
 }
 

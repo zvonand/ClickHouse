@@ -19,6 +19,7 @@
 #include <Parsers/ASTIdentifier_fwd.h>
 #include <Parsers/ASTInsertQuery.h>
 #include <Parsers/ASTQueryWithOutput.h>
+#include <Parsers/Lexer.h>
 #include <Processors/Executors/CompletedPipelineExecutor.h>
 #include <Processors/Executors/PullingPipelineExecutor.h>
 #include <Processors/Formats/Impl/CHColumnToArrowColumn.h>
@@ -31,6 +32,7 @@
 
 #include <arrow/array/builder_binary.h>
 #include <arrow/flight/sql/protocol_internal.h>
+#include <arrow/ipc/writer.h>
 
 
 namespace DB
@@ -80,6 +82,36 @@ namespace
         String buf;
         Poco::StreamCopier::copyToString(ifs, buf);
         return buf;
+    }
+
+    /// Replaces '?' placeholders in a SQL query with NULL using the ClickHouse Lexer,
+    /// so the resulting query can be parsed for syntax validation and schema inference.
+    /// Returns the substituted query and the number of '?' placeholders found.
+    std::pair<String, size_t> replaceQuestionMarksWithNULL(const String & query)
+    {
+        Lexer lexer(query.data(), query.data() + query.size());
+        String result;
+        result.reserve(query.size());
+        size_t num_params = 0;
+        const char * prev_end = query.data();
+
+        while (true)
+        {
+            Token token = lexer.nextToken();
+            if (token.isEnd())
+                break;
+
+            if (token.type == TokenType::QuestionMark)
+            {
+                result.append(prev_end, token.begin);
+                result.append("NULL");
+                prev_end = token.end;
+                ++num_params;
+            }
+        }
+
+        result.append(prev_end, query.data() + query.size());
+        return {result, num_params};
     }
 
     arrow::flight::Location addressToArrowLocation(const Poco::Net::SocketAddress & address_to_listen, bool use_tls)
@@ -1223,10 +1255,86 @@ arrow::Status ArrowFlightServer::DoAction(
             if (!request.ParseFromArray(action.body->data(), static_cast<int>(action.body->size())))
                 return arrow::Status::Invalid("Could not deserialize ActionCreatePreparedStatementRequest.");
 
-            LOG_DEBUG(log, "CreatePreparedStatement request: query={}", request.query());
+            const auto & query = request.query();
+            LOG_DEBUG(log, "CreatePreparedStatement request: query={}", query);
 
-            /// TODO: implement prepared statement creation
-            return arrow::Status::NotImplemented("CreatePreparedStatement is not yet implemented");
+            if (query.empty())
+                return arrow::Status::Invalid("CreatePreparedStatement: query must not be empty");
+
+            /// Replace '?' placeholders with NULL so the query can be parsed and validated.
+            auto [substituted_query, num_params] = replaceQuestionMarksWithNULL(query);
+
+            /// Validate syntax and infer result schema by executing the substituted query up to schema stage.
+            ArrowFlight::PreparedStatementInfo info;
+            info.query = query;
+            info.num_params = num_params;
+
+            auto query_context = session->makeQueryContext();
+            query_context->setCurrentQueryId("");
+            QueryScope query_scope = QueryScope::create(query_context);
+
+            auto [ast, block_io] = executeQuery(substituted_query, query_context, QueryFlags{}, QueryProcessingStage::Complete);
+
+            bool query_finished = false;
+            bool handling_exception = false;
+            SCOPE_EXIT({
+                if (query_finished)
+                    block_io.onFinish();
+                else if (!handling_exception)
+                    block_io.onCancelOrConnectionLoss();
+            });
+
+            try
+            {
+                ARROW_RETURN_NOT_OK(checkNoCustomFormat(ast));
+
+                if (block_io.pipeline.pulling())
+                {
+                    PullingPipelineExecutor executor{block_io.pipeline};
+                    info.dataset_schema = CHColumnToArrowColumn::calculateArrowSchema(
+                        executor.getHeader().getColumnsWithTypeAndName(),
+                        "Arrow",
+                        nullptr,
+                        {.output_string_as_string = true, .output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]});
+                }
+
+                /// Parameter schema: empty since '?' carries no type info.
+                info.parameter_schema = arrow::schema({});
+
+                query_finished = true;
+            }
+            catch (...)
+            {
+                handling_exception = true;
+                block_io.onException();
+                throw;
+            }
+
+            auto handle = calls_data->createPreparedStatement(std::move(info));
+
+            /// Build the protobuf result.
+            arrow::flight::protocol::sql::ActionCreatePreparedStatementResult result;
+            result.set_prepared_statement_handle(handle);
+
+            if (auto ps_res = calls_data->getPreparedStatement(handle); ps_res.ok())
+            {
+                const auto & ps_info = ps_res.ValueUnsafe();
+                if (ps_info->dataset_schema)
+                {
+                    auto serialized_schema = arrow::ipc::SerializeSchema(*ps_info->dataset_schema, arrow::default_memory_pool());
+                    if (serialized_schema.ok())
+                        result.set_dataset_schema(serialized_schema.ValueUnsafe()->data(), serialized_schema.ValueUnsafe()->size());
+                }
+                if (ps_info->parameter_schema)
+                {
+                    auto serialized_schema = arrow::ipc::SerializeSchema(*ps_info->parameter_schema, arrow::default_memory_pool());
+                    if (serialized_schema.ok())
+                        result.set_parameter_schema(serialized_schema.ValueUnsafe()->data(), serialized_schema.ValueUnsafe()->size());
+                }
+            }
+
+            ARROW_ASSIGN_OR_RAISE(auto packed_result, arrow::Result<arrow::flight::Result>{arrow::flight::Result{arrow::Buffer::FromString(result.SerializeAsString())}})
+            results.push_back(std::move(packed_result));
         }
         else if (action.type == "ClosePreparedStatement")
         {
@@ -1237,10 +1345,12 @@ arrow::Status ArrowFlightServer::DoAction(
             if (!request.ParseFromArray(action.body->data(), static_cast<int>(action.body->size())))
                 return arrow::Status::Invalid("Could not deserialize ActionClosePreparedStatementRequest.");
 
-            LOG_DEBUG(log, "ClosePreparedStatement request: handle size={}", request.prepared_statement_handle().size());
+            const auto & handle = request.prepared_statement_handle();
+            LOG_DEBUG(log, "ClosePreparedStatement request: handle={}", handle);
 
-            /// TODO: implement prepared statement closing
-            return arrow::Status::NotImplemented("ClosePreparedStatement is not yet implemented");
+            calls_data->closePreparedStatement(handle);
+
+            /// ClosePreparedStatement has no response body per the spec.
         }
         else
             return arrow::Status::NotImplemented(action.type, " is not supported");

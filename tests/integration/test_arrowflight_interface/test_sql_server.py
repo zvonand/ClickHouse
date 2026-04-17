@@ -869,3 +869,57 @@ def test_statement_ingest_temporary_not_supported():
         batch = pa.record_batch([pa.array([1], type=pa.uint32())], schema=schema)
         writer.write_batch(batch)
         writer.close()
+
+
+def test_prepared_statement_create_and_close():
+    """CreatePreparedStatement validates SQL and returns dataset schema; ClosePreparedStatement cleans up."""
+    client = get_client()
+
+    client.execute_update("CREATE TABLE mytable (id UInt32, name String, value Float64) ENGINE = Memory")
+    client.execute_update("INSERT INTO mytable VALUES (1, 'test', 42.5), (2, 'hello', 3.14)")
+
+    stmt = client.prepare("SELECT id, name, value FROM mytable WHERE id = ?")
+
+    # Schema should reflect the three result columns
+    assert stmt.dataset_schema is not None
+    assert len(stmt.dataset_schema) == 3
+    assert stmt.dataset_schema.field(0).name == "id"
+    assert stmt.dataset_schema.field(1).name == "name"
+    assert stmt.dataset_schema.field(2).name == "value"
+
+    # Handle should be non-empty
+    assert len(stmt.handle) > 0
+
+    # Close should not raise
+    stmt.close()
+
+
+def test_prepared_statement_invalid_sql():
+    """CreatePreparedStatement with invalid SQL should return an error."""
+    client = get_client()
+
+    with pytest.raises(flight.FlightServerError):
+        client.prepare("SELEKT invalid syntax !!!")
+
+
+def test_prepared_statement_no_params():
+    """CreatePreparedStatement works for a query without placeholders."""
+    client = get_client()
+
+    client.execute_update("CREATE TABLE mytable (id UInt32) ENGINE = Memory")
+
+    stmt = client.prepare("SELECT id FROM mytable")
+
+    assert stmt.dataset_schema is not None
+    assert len(stmt.dataset_schema) == 1
+    assert stmt.dataset_schema.field(0).name == "id"
+
+    stmt.close()
+
+
+def test_prepared_statement_empty_query():
+    """CreatePreparedStatement with empty query returns an error."""
+    client = get_client()
+
+    with pytest.raises(pa.lib.ArrowInvalid, match="query must not be empty"):
+        client.prepare("")

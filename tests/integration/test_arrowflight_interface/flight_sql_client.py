@@ -125,6 +125,37 @@ CommandGetPrimaryKeys = _globals['CommandGetPrimaryKeys']
 CommandStatementIngest = _globals['CommandStatementIngest']
 
 # ---------------------------------------------------------------------------
+# Prepared-statement messages (separate proto file to avoid conflicts).
+# Defines: ActionCreatePreparedStatementRequest/Result,
+#          ActionClosePreparedStatementRequest,
+#          CommandPreparedStatementQuery.
+# ---------------------------------------------------------------------------
+_PREP_STMT_DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\x1fflightsql/flightsql_extra.proto\x12\x19arrow.flight.protocol.sql'
+    b'"e\n$ActionCreatePreparedStatementRequest\x12\r\n\x05query\x18\x01 \x01(\t'
+    b'\x12\x1b\n\x0etransaction_id\x18\x02 \x01(\x0cH\x00\x88\x01\x01'
+    b'B\x11\n\x0f_transaction_id'
+    b'"z\n#ActionCreatePreparedStatementResult'
+    b'\x12!\n\x19prepared_statement_handle\x18\x01 \x01(\x0c'
+    b'\x12\x16\n\x0edataset_schema\x18\x02 \x01(\x0c'
+    b'\x12\x18\n\x10parameter_schema\x18\x03 \x01(\x0c'
+    b'"H\n#ActionClosePreparedStatementRequest'
+    b'\x12!\n\x19prepared_statement_handle\x18\x01 \x01(\x0c'
+    b'"B\n\x1dCommandPreparedStatementQuery'
+    b'\x12!\n\x19prepared_statement_handle\x18\x01 \x01(\x0c'
+    b'b\x06proto3'
+)
+
+_builder.BuildMessageAndEnumDescriptors(_PREP_STMT_DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(
+    _PREP_STMT_DESCRIPTOR, 'flightsql.flightsql_extra_pb2', _globals)
+
+ActionCreatePreparedStatementRequest = _globals['ActionCreatePreparedStatementRequest']
+ActionCreatePreparedStatementResult = _globals['ActionCreatePreparedStatementResult']
+ActionClosePreparedStatementRequest = _globals['ActionClosePreparedStatementRequest']
+CommandPreparedStatementQuery = _globals['CommandPreparedStatementQuery']
+
+# ---------------------------------------------------------------------------
 # Flight.proto action messages (arrow.flight.protocol package)
 #
 # Defines: SessionOptionValue, SetSessionOptionsRequest/Result,
@@ -402,6 +433,35 @@ class FlightSQLClient:
         options = self._flight_call_options()
         return self.client.get_schema(flight_descriptor(cmd), options)
 
+    def prepare(self, query: str) -> "PreparedStatement":
+        """Create a prepared statement via the CreatePreparedStatement action."""
+        req = ActionCreatePreparedStatementRequest(query=query)
+        action = flight.Action("CreatePreparedStatement", req.SerializeToString())
+        results = list(self.client.do_action(action, self._flight_call_options()))
+        result = ActionCreatePreparedStatementResult()
+        result.ParseFromString(results[0].body.to_pybytes())
+
+        dataset_schema = None
+        if result.dataset_schema:
+            dataset_schema = pa.ipc.read_schema(pa.BufferReader(result.dataset_schema))
+
+        parameter_schema = None
+        if result.parameter_schema:
+            parameter_schema = pa.ipc.read_schema(pa.BufferReader(result.parameter_schema))
+
+        return PreparedStatement(
+            client=self,
+            handle=result.prepared_statement_handle,
+            dataset_schema=dataset_schema,
+            parameter_schema=parameter_schema,
+        )
+
+    def close_prepared_statement(self, handle: bytes):
+        """Close a prepared statement via the ClosePreparedStatement action."""
+        req = ActionClosePreparedStatementRequest(prepared_statement_handle=handle)
+        action = flight.Action("ClosePreparedStatement", req.SerializeToString())
+        list(self.client.do_action(action, self._flight_call_options()))
+
     def set_session_options(self, options: Dict[str, Any]) -> SetSessionOptionsResult:
         """Set session options via the SetSessionOptions action.
 
@@ -484,3 +544,19 @@ class FlightSQLClient:
         result = PollInfo()
         result.ParseFromString(raw_response)
         return PollResult(result)
+
+
+class PreparedStatement:
+    """Represents a server-side prepared statement."""
+
+    def __init__(self, client: FlightSQLClient, handle: bytes,
+                 dataset_schema: Optional[pa.Schema],
+                 parameter_schema: Optional[pa.Schema]):
+        self.client = client
+        self.handle = handle
+        self.dataset_schema = dataset_schema
+        self.parameter_schema = parameter_schema
+
+    def close(self):
+        """Close the prepared statement on the server."""
+        self.client.close_prepared_statement(self.handle)

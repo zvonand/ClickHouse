@@ -532,6 +532,36 @@ String CallsData::generatePollDescriptorName()
     return POLL_DESCRIPTOR_PREFIX + toString(UUIDHelpers::generateV4());
 }
 
+String CallsData::generatePreparedStatementHandle()
+{
+    return PREPARED_STATEMENT_HANDLE_PREFIX + toString(UUIDHelpers::generateV4());
+}
+
+String CallsData::createPreparedStatement(PreparedStatementInfo info)
+{
+    String handle = generatePreparedStatementHandle();
+    LOG_DEBUG(log, "Creating prepared statement {}", handle);
+    auto shared_info = std::make_shared<const PreparedStatementInfo>(std::move(info));
+    std::lock_guard lock{mutex};
+    prepared_statements.emplace(handle, std::move(shared_info));
+    return handle;
+}
+
+arrow::Result<std::shared_ptr<const PreparedStatementInfo>> CallsData::getPreparedStatement(const String & handle) const
+{
+    std::lock_guard lock{mutex};
+    auto it = prepared_statements.find(handle);
+    if (it == prepared_statements.end())
+        return arrow::Status::KeyError("Prepared statement handle not found");
+    return it->second;
+}
+
+void CallsData::closePreparedStatement(const String & handle)
+{
+    std::lock_guard lock{mutex};
+    prepared_statements.erase(handle);
+}
+
 std::optional<Timestamp> CallsData::calculateTicketExpirationTime(Timestamp current_time) const
 {
     if (!tickets_lifetime)

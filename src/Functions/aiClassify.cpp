@@ -19,10 +19,10 @@ namespace DB
 namespace
 {
 
-bool isArrayOfString(const IDataType & type)
+bool isArrayOfStrings(const IDataType & type)
 {
     const auto * array_type = typeid_cast<const DataTypeArray *>(&type);
-    return array_type && isString(array_type->getNestedType());
+    return (array_type && isString(array_type->getNestedType()));
 }
 
 class FunctionAiClassify final : public FunctionBaseAI
@@ -43,7 +43,7 @@ public:
         FunctionArgumentDescriptors mandatory_args{
             {"collection", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isString), &isColumnConst, "const String"},
             {"text", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isString), nullptr, "String"},
-            {"categories", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isArrayOfString), &isColumnConst, "const Array(String)"},
+            {"categories", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isArrayOfStrings), &isColumnConst, "const Array(String)"},
         };
         FunctionArgumentDescriptors optional_args{
             {"temperature", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isNumber), &isColumnConst, "const Number"},

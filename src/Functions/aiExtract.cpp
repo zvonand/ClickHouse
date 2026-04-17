@@ -61,7 +61,8 @@ private:
 
     static bool isJSONSchema(const String & instruction)
     {
-        return (!instruction.empty() && instruction.front() == '{');
+        size_t pos = instruction.find_first_not_of(" \t\n\r");
+        return (pos != String::npos && instruction[pos] == '{');
     }
 
     String getInstruction(const ColumnsWithTypeAndName & arguments) const

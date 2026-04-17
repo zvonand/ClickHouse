@@ -304,6 +304,12 @@ SELECT aiExtract('ai_test', x, '{invalid') FROM _03300_input; -- { serverError B
 SELECT '-- aiExtract: JSON schema with non-string value';
 SELECT aiExtract('ai_test', x, '{"a":null}') FROM _03300_input; -- { serverError BAD_ARGUMENTS }
 
+-- Leading whitespace before the `{` must still be routed to schema mode, otherwise a malformed
+-- JSON would be silently accepted as a free-text instruction.
+SELECT '-- aiExtract: schema mode detection ignores leading whitespace';
+SELECT aiExtract('ai_test', x, '   {invalid') FROM _03300_input; -- { serverError BAD_ARGUMENTS }
+SELECT aiExtract('ai_test', x, '\n\t {invalid') FROM _03300_input; -- { serverError BAD_ARGUMENTS }
+
 SELECT '-- aiExtract: with temperature';
 SELECT count() FROM (SELECT aiExtract('ai_test', x, 'main topic', 0.0) AS result FROM _03300_input);
 

@@ -67,6 +67,7 @@ result	String
 0
 -- aiExtract: malformed JSON schema
 -- aiExtract: JSON schema with non-string value
+-- aiExtract: schema mode detection ignores leading whitespace
 -- aiExtract: with temperature
 0
 -- aiTranslate: registered

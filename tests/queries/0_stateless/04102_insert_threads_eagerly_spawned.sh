@@ -27,7 +27,7 @@ $CLICKHOUSE_CLIENT \
     --log_queries=1 \
     -q "INSERT INTO test_insert_threads FORMAT TSV"
 
-$CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS"
+$CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS query_log"
 
 $CLICKHOUSE_CLIENT -q "
     SELECT
@@ -54,7 +54,7 @@ $CLICKHOUSE_CLIENT \
     --log_queries=1 \
     -q "INSERT INTO test_insert_threads FORMAT TSV"
 
-$CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS"
+$CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS query_log"
 
 # With MVs, peak_threads should be higher than without MVs
 $CLICKHOUSE_CLIENT -q "

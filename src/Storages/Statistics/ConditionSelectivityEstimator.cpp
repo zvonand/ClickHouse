@@ -119,7 +119,7 @@ RelationProfile ConditionSelectivityEstimator::estimateRelationProfileImpl(std::
             case RPNElement::FUNCTION_NOT:
             {
                 auto* last_element = rpn_stack.top();
-                if (last_element->finalized && last_element->function != RPNElement::FUNCTION_UNKNOWN)
+                if (last_element->finalized)
                     last_element->selectivity = 1 - last_element->selectivity;
                 else
                 {
@@ -217,7 +217,25 @@ bool ConditionSelectivityEstimator::extractAtomFromTree(const StorageMetadataPtr
         String func_name = func.getFunctionName();
         auto atom_it = atom_map.find(func_name);
         if (atom_it == atom_map.end())
+        {
+            /// LIKE/ILIKE cannot be represented as a range. Pre-set selectivity
+            /// so the estimator uses a tighter default than `default_unknown_cond_factor`.
+            if (func_name == "like" || func_name == "ilike")
+                out.selectivity = default_like_factor;
+            else if (func_name == "notLike" || func_name == "notILike")
+                out.selectivity = 1.0 - default_like_factor;
+            else if (func_name == "__applyFilter")
+            {
+                /// Runtime join filter. Selectivity 1.0 keeps it last in prewhere ordering
+                /// (after cheaper column predicates) and neutral for join reorder estimates.
+                out.selectivity = 1.0;
+            }
+            else
+                return false;
+
+            out.finalized = true;
             return false;
+        }
 
         if (num_args == 1)
         {

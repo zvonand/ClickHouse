@@ -586,7 +586,6 @@ class Runner:
     def _post_run(
         self, result, workflow, job, run_exit_code,
     ) -> bool:
-        info_errors = []
         env = _Environment.get()
         is_ok = True
 
@@ -644,9 +643,9 @@ class Runner:
                                 result.set_link(link)
                                 artifact_links.append(link)
                         except Exception as e:
-                            error = f"ERROR: Failed to upload artifact [{artifact.name}:{artifact_path}], ex [{e}]"
-                            print(error)
-                            info_errors.append(error)
+                            error = f"Failed to upload artifact [{artifact.name}:{artifact_path}], ex [{e}]"
+                            print(f"ERROR: {error}")
+                            env.add_report_message(error, kind="error")
                             result.set_status(Result.Status.ERROR)
                             is_ok = False
                 if artifact_links:
@@ -697,9 +696,9 @@ class Runner:
                 ).insert(result, result_name_for_cidb=job.result_name_for_cidb)
             except Exception as ex:
                 traceback.print_exc()
-                error = f"ERROR: Failed to insert data into CI DB, exception [{ex}]"
-                print(error)
-                info_errors.append(error)
+                error = f"Failed to insert data into CI DB, exception [{ex}]"
+                print(f"ERROR: {error}")
+                env.add_report_message(error, kind="error")
 
             try:
                 test_cases_result = result.get_sub_result_by_name(
@@ -725,11 +724,10 @@ class Runner:
                             )
                     result.dump()
             except Exception as ex:
-                if not info_errors:
-                    traceback.print_exc()
-                    error = f"ERROR: Failed to set CIDB label for test cases, exception [{ex}]"
-                    print(error)
-                    info_errors.append(error)
+                traceback.print_exc()
+                error = f"Failed to set CIDB label for test cases, exception [{ex}]"
+                print(f"ERROR: {error}")
+                env.add_report_message(error, kind="error")
 
         if env.TRACEBACKS:
             result.set_info("===\n" + "---\n".join(env.TRACEBACKS))
@@ -742,7 +740,7 @@ class Runner:
                 CacheRunnerHooks.post_run(workflow, job)
 
         if workflow.enable_open_issues_check:
-            # should be done before HtmlRunnerHooks.post_run(workflow, job, info_errors)
+            # should be done before HtmlRunnerHooks.post_run(workflow, job)
             #   to upload updated job and workflow results to S3
             try:
                 if is_final_job:
@@ -762,7 +760,7 @@ class Runner:
         # Always run report generation at the end to finalize workflow status with latest job result
         if workflow.enable_report:
             print(f"Run html report hook")
-            status_updated = HtmlRunnerHooks.post_run(workflow, job, info_errors)
+            status_updated = HtmlRunnerHooks.post_run(workflow, job)
             if status_updated:
                 print(f"Update GH commit status [{result.name}]: [{status_updated}]")
                 if _GH_Auth():

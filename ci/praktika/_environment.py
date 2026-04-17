@@ -39,7 +39,6 @@ class _Environment(MetaClasses.Serializable):
     LINKED_PR_NUMBER: int = 0
     LOCAL_RUN: bool = False
     PR_LABELS: List[str] = dataclasses.field(default_factory=list)
-    REPORT_INFO: List[str] = dataclasses.field(default_factory=list)
     REPORT_MESSAGES: List[Dict[str, str]] = dataclasses.field(default_factory=list)
     JOB_CONFIG: Optional[Job.Config] = None
     TRACEBACKS: List[str] = dataclasses.field(default_factory=list)
@@ -227,7 +226,7 @@ class _Environment(MetaClasses.Serializable):
             COMMIT_MESSAGE=COMMIT_MESSAGE,
             PR_LABELS=PR_LABELS,
             INSTANCE_LIFE_CYCLE=INSTANCE_LIFE_CYCLE,
-            REPORT_INFO=[],
+            REPORT_MESSAGES=[],
             LINKED_PR_NUMBER=LINKED_PR_NUMBER,
             # TODO: Find a better way to store and pass commit authors data through workflow
             JOB_KV_DATA={
@@ -292,10 +291,6 @@ class _Environment(MetaClasses.Serializable):
         env_dict["WORKFLOW_JOB_DATA"] = cls._load_workflow_job_data()
 
         return cls.from_dict(env_dict)
-
-    def add_info(self, info):
-        self.REPORT_INFO.append(info)
-        self.dump()
 
     def add_report_message(self, message, kind, job_name=""):
         self.REPORT_MESSAGES.append(

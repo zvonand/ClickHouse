@@ -219,7 +219,7 @@ class HtmlRunnerHooks:
         pass
 
     @classmethod
-    def post_run(cls, _workflow, _job, info_errors):
+    def post_run(cls, _workflow, _job):
         result = Result.from_fs(_job.name)
         env = _Environment.get()
         if env.WORKFLOW_JOB_DATA:
@@ -242,19 +242,6 @@ class HtmlRunnerHooks:
         _ResultS3.copy_result_to_s3(result)
 
         new_sub_results = [result]
-        new_result_info = ""
-        env_info = env.REPORT_INFO
-        if env_info:
-            print(
-                f"WARNING: some info lines are set in Environment - append to report [{env_info}]"
-            )
-            info_errors += env_info
-        if info_errors:
-            info_errors = [f"    |  {error}" for error in info_errors]
-            info_str = f"{_job.name}:\n"
-            info_str += "\n".join(info_errors)
-            print("Update workflow results with new info")
-            new_result_info = info_str
 
         if not result.is_ok() and not result.do_not_block_pipeline_on_failure():
             print(
@@ -293,7 +280,6 @@ class HtmlRunnerHooks:
                 )
 
         updated_status = _ResultS3.update_workflow_results(
-            new_info=new_result_info,
             new_sub_results=new_sub_results,
             workflow_name=_workflow.name,
             storage_usage=storage_usage,

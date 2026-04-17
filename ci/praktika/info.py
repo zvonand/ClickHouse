@@ -259,10 +259,6 @@ class Info:
         self.env.TRACEBACKS.append(traceback.format_exc())
         self.env.dump()
 
-    def add_workflow_report_message(self, message):
-        self.env.add_info(message)
-        self.env.dump()
-
     def add_warning(self, message):
         self.env.add_report_message(message, kind="warning")
 

@@ -1918,6 +1918,7 @@
                         jobsSpan.textContent = `(${item.jobs[0]})`;
                     } else {
                         jobsSpan.textContent = `(${item.jobs.length} jobs)`;
+                        jobsSpan.title = item.jobs.join('\n');
                     }
                     row.appendChild(jobsSpan);
                 }

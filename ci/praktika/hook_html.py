@@ -237,6 +237,8 @@ class HtmlRunnerHooks:
             storage_usage = StorageUsage.from_fs()
             result.ext["storage_usage"] = storage_usage
         report_messages = env.REPORT_MESSAGES or []
+        if report_messages:
+            _ResultS3._merge_report_messages(result.ext, report_messages)
         _ResultS3.copy_result_to_s3(result)
 
         new_sub_results = [result]

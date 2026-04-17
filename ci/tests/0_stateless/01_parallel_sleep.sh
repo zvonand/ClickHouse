@@ -3,10 +3,11 @@
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
+exec >"$CURDIR"/test.stdout
 sleep 12 &
 sleep 12 &
 sleep 12 &
 sleep 12 &
 sleep 12 &
-echo 1 >"$CURDIR"/test.stdout
+echo 1
 wait

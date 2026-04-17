@@ -251,13 +251,6 @@ class ClickHouseProc:
             f"Set max_server_memory_usage_to_ram_ratio to {ratio} in {file_path}"
         )
 
-    def install_light(self):
-        """
-        Public interface for `_install_light`: sets up a minimal ClickHouse config
-        in the ci/tmp directory for jobs that use `start_light`.
-        """
-        return self._install_light()
-
     def _install_light(self):
         """
         Installs ClickHouse config into ci temporary directory, this way of installation does not require mounting /etc|var/clickhouse-server into docker container.

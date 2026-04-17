@@ -143,7 +143,7 @@ class ClickHouseService:
     def _wait_ready(self, port: int = 9000, attempts: int = 30, delay: int = 2) -> None:
         # Wait for the pid file to appear, bail out early if the process exits
         pid = None
-        for _ in range(30):
+        for _ in range(attempts):
             if self._proc and self._proc.poll() is not None:
                 self._print_server_log()
                 raise RuntimeError(

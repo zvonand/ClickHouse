@@ -1,6 +1,7 @@
 -- Tags: no-fasttest, no-msan
 -- Tag no-fasttest: Depends on AWS
 -- Tag no-msan: delta-kernel is not built with msan
+-- Tag no-parallel: the cache is system-wide so concurrent queries can influence the cache
 
 
 system drop parquet metadata cache;

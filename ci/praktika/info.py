@@ -263,6 +263,15 @@ class Info:
         self.env.add_info(message)
         self.env.dump()
 
+    def add_warning(self, message):
+        self.env.add_report_message(message, kind="warning")
+
+    def add_error(self, message):
+        self.env.add_report_message(message, kind="error")
+
+    def add_note(self, message):
+        self.env.add_report_message(message, kind="note")
+
     def is_workflow_ok(self):
         """
         Experimental function

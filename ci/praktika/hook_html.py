@@ -236,6 +236,7 @@ class HtmlRunnerHooks:
             print("Storage usage data found - add to Result")
             storage_usage = StorageUsage.from_fs()
             result.ext["storage_usage"] = storage_usage
+        report_messages = env.REPORT_MESSAGES or []
         _ResultS3.copy_result_to_s3(result)
 
         new_sub_results = [result]
@@ -299,5 +300,6 @@ class HtmlRunnerHooks:
                 duration=result.duration,
                 job_name=_job.name,
             ),
+            report_messages=report_messages,
         )
         return updated_status

@@ -40,6 +40,7 @@ class _Environment(MetaClasses.Serializable):
     LOCAL_RUN: bool = False
     PR_LABELS: List[str] = dataclasses.field(default_factory=list)
     REPORT_INFO: List[str] = dataclasses.field(default_factory=list)
+    REPORT_MESSAGES: List[Dict[str, str]] = dataclasses.field(default_factory=list)
     JOB_CONFIG: Optional[Job.Config] = None
     TRACEBACKS: List[str] = dataclasses.field(default_factory=list)
     WORKFLOW_JOB_DATA: Dict[str, Any] = dataclasses.field(default_factory=dict)
@@ -294,6 +295,12 @@ class _Environment(MetaClasses.Serializable):
 
     def add_info(self, info):
         self.REPORT_INFO.append(info)
+        self.dump()
+
+    def add_report_message(self, message, kind, job_name=""):
+        self.REPORT_MESSAGES.append(
+            {"message": message, "kind": kind, "job": job_name or self.JOB_NAME}
+        )
         self.dump()
 
     @classmethod

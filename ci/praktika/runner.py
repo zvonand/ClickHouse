@@ -590,6 +590,11 @@ class Runner:
         env = _Environment.get()
         is_ok = True
 
+        # TODO: remove after testing notification panels
+        env.add_report_message("Test error message", kind="error")
+        env.add_report_message("Test warning message", kind="warning")
+        env.add_report_message("Test note message", kind="note")
+
 
         is_final_job = job.name == Settings.FINISH_WORKFLOW_JOB_NAME
         is_initial_job = job.name == Settings.CI_CONFIG_JOB_NAME
@@ -750,7 +755,9 @@ class Runner:
                 print(f"ERROR: failed to check open issues: {e}")
                 traceback.print_exc()
                 if is_final_job:
-                    env.add_info(ResultInfo.OPEN_ISSUES_CHECK_ERROR)
+                    env.add_report_message(
+                        ResultInfo.OPEN_ISSUES_CHECK_ERROR, kind="error"
+                    )
 
         # Always run report generation at the end to finalize workflow status with latest job result
         if workflow.enable_report:
@@ -816,7 +823,9 @@ class Runner:
                     description=result.info.splitlines()[0] if result.info else "",
                     url=report_url,
                 ):
-                    env.add_info("Failed to post GH commit status for the job")
+                    env.add_report_message(
+                        "Failed to post GH commit status for the job", kind="error"
+                    )
                     print(f"ERROR: Failed to post commit status for the job")
 
         if workflow.enable_report:

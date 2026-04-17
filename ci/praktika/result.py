@@ -1284,6 +1284,34 @@ class _ResultS3:
                 )
         return result
 
+    @staticmethod
+    def _merge_report_messages(ext, new_messages):
+        """
+        Merge structured report messages into Result.ext.
+
+        Each message is ``{"message": str, "kind": str, "job": str}``.
+        Messages are stored in ``ext["warnings"]``, ``ext["errors"]``, and
+        ``ext["notes"]`` as lists of ``{"message": str, "jobs": [str]}``.
+        Duplicate messages (same text) are grouped, accumulating job names.
+        """
+        kind_to_key = {"warning": "warnings", "error": "errors", "note": "notes"}
+        for msg in new_messages:
+            key = kind_to_key.get(msg.get("kind"), "notes")
+            items = ext.setdefault(key, [])
+            text = msg.get("message", "")
+            job = msg.get("job", "")
+            # find existing entry with same message text
+            existing = None
+            for item in items:
+                if item["message"] == text:
+                    existing = item
+                    break
+            if existing:
+                if job and job not in existing["jobs"]:
+                    existing["jobs"].append(job)
+            else:
+                items.append({"message": text, "jobs": [job] if job else []})
+
     @classmethod
     def update_workflow_results(
         cls,
@@ -1292,6 +1320,7 @@ class _ResultS3:
         new_sub_results=None,
         storage_usage=None,
         compute_usage=None,
+        report_messages=None,
     ):
         assert new_info or new_sub_results
 
@@ -1327,6 +1356,9 @@ class _ResultS3:
                     workflow_result.ext.get("compute_usage", {})
                 ).merge_with(compute_usage)
                 workflow_result.ext["compute_usage"] = workflow_compute_usage
+
+            if report_messages:
+                cls._merge_report_messages(workflow_result.ext, report_messages)
 
             new_status = workflow_result.status
             if cls.copy_result_to_s3_with_version(

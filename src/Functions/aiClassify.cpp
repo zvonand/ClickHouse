@@ -90,9 +90,9 @@ private:
             + ". Respond with ONLY the category label, nothing else.";
     }
 
-    String buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const override
+    std::string_view buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const override
     {
-        return String(arguments[prompt_arg_index].column->getDataAt(row));
+        return arguments[prompt_arg_index].column->getDataAt(row);
     }
 
     Poco::JSON::Object::Ptr buildResponseFormat(const ColumnsWithTypeAndName & arguments) const override

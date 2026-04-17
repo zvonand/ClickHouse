@@ -66,9 +66,9 @@ private:
         return default_system_prompt;
     }
 
-    String buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const override
+    std::string_view buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const override
     {
-        return String(arguments[prompt_arg_index].column->getDataAt(row));
+        return arguments[prompt_arg_index].column->getDataAt(row);
     }
 };
 

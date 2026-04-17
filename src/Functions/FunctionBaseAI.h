@@ -41,7 +41,7 @@ protected:
     virtual String buildSystemPrompt(const ColumnsWithTypeAndName & arguments) const = 0;
 
     /// The user prompt is appended to the system prompt, this is usually what is contained in each row.
-    virtual String buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const = 0;
+    virtual std::string_view buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const = 0;
 
     /// How the response should be formatted. Different AI providers treat this differently. OpenAI-like providers have a specific field
     /// for the response format, while Anthropic does not but it can be approximated with a tool-use pattern, see AnthropicProvider.h/cpp

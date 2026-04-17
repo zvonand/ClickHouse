@@ -135,9 +135,9 @@ private:
             + resolveSchema();
     }
 
-    String buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const override
+    std::string_view buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const override
     {
-        return String(arguments[prompt_arg_index].column->getDataAt(row));
+        return arguments[prompt_arg_index].column->getDataAt(row);
     }
 
     /// Strip markdown code fences and trailing whitespace/semicolon that some models add despite being asked not to.

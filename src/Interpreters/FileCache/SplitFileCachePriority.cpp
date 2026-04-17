@@ -78,8 +78,8 @@ size_t SplitFileCachePriority::getSizeApprox() const
 
 size_t SplitFileCachePriority::getElementsCountApprox() const
 {
-    return getPriority(SegmentType::Data).getSizeApprox()
-        + getPriority(SegmentType::System).getSizeApprox();
+    return getPriority(SegmentType::Data).getElementsCountApprox()
+        + getPriority(SegmentType::System).getElementsCountApprox();
 }
 
 std::string SplitFileCachePriority::getStateInfoForLog(const CacheStateGuard::Lock & lock) const

@@ -26,6 +26,29 @@ from .utils import Utils
 
 
 class CIDB:
+    _STATUS_TO_CIDB = {
+        Result.Status.OK: "success",
+        Result.Status.FAIL: "failure",
+        Result.Status.ERROR: "error",
+        Result.Status.SKIPPED: "skipped",
+        Result.Status.PENDING: "pending",
+        Result.Status.RUNNING: "running",
+        Result.Status.DROPPED: "dropped",
+        Result.Status.UNKNOWN: "failure",
+        Result.Status.XFAIL: "success",
+        Result.Status.XPASS: "failure",
+    }
+
+    @classmethod
+    def convert_status(cls, status: str) -> str:
+        """Map Result.Status value to legacy CIDB check_status string."""
+        legacy = cls._STATUS_TO_CIDB.get(status)
+        if legacy is not None:
+            return legacy
+        # Already a legacy string — pass through for idempotency
+        assert status in cls._STATUS_TO_CIDB.values(), f"Invalid status [{status}] for CIDB check_status"
+        return status
+
     @dataclasses.dataclass
     class TableRecord:
         pull_request_number: int
@@ -51,7 +74,7 @@ class CIDB:
 
         def __post_init__(self):
             # Transparently convert Result.Status values to legacy CIDB strings
-            self.check_status = Result.convert_to_cidb_status(self.check_status)
+            self.check_status = CIDB.convert_status(self.check_status)
 
     def __init__(self, url, user, passwd):
         self.url = url

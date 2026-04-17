@@ -233,7 +233,8 @@ def format_event_text(event, pr_status, indent=""):
         )
 
     # CI status emoji based on event.ci_status
-    if event.ci_status in ["pending", "running"]:
+    ci_status_lower = (event.ci_status or "").lower()
+    if ci_status_lower in ("pending", "running"):
         ci_running_status_emoji = ":job_running:"
     else:
         if not is_cancelled:
@@ -241,9 +242,9 @@ def format_event_text(event, pr_status, indent=""):
         else:
             ci_running_status_emoji = ":job_cancelled:"
 
-    if event.ci_status == "success":
+    if ci_status_lower in ("success", "ok"):
         ci_status_emoji = ":success_sign:"
-    elif event.ci_status in ["pending", "running"]:
+    elif ci_status_lower in ("pending", "running"):
         ci_status_emoji = ":failure_sign:" if has_failures else ":job_running:"
     else:
         ci_status_emoji = ":failure_sign:"

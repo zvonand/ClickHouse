@@ -621,9 +621,29 @@ class GH:
                 os.unlink(temp_file_path)
         return None
 
+    _STATUS_TO_GH = {
+        Result.Status.OK: Result.GHStatus.SUCCESS,
+        Result.Status.FAIL: Result.GHStatus.FAILURE,
+        Result.Status.ERROR: Result.GHStatus.ERROR,
+        Result.Status.SKIPPED: Result.GHStatus.SUCCESS,
+        Result.Status.PENDING: Result.GHStatus.PENDING,
+        Result.Status.RUNNING: Result.GHStatus.PENDING,
+        Result.Status.DROPPED: Result.GHStatus.ERROR,
+        Result.Status.UNKNOWN: Result.GHStatus.FAILURE,
+        Result.Status.XFAIL: Result.GHStatus.SUCCESS,
+        Result.Status.XPASS: Result.GHStatus.FAILURE,
+    }
+
     @classmethod
     def convert_to_gh_status(cls, status):
-        return Result.convert_to_gh_status(status)
+        """Map Result.Status value to GitHub commit status API string."""
+        gh = cls._STATUS_TO_GH.get(status)
+        if gh is not None:
+            return gh
+        # Already a GH status string — pass through for idempotency
+        _GH_VALUES = set(cls._STATUS_TO_GH.values())
+        assert status in _GH_VALUES, f"Invalid status [{status}] for GH commit status"
+        return status
 
     @classmethod
     def print_log_in_group(cls, group_name: str, lines: Union[str, List[str]]):
@@ -697,7 +717,7 @@ class GH:
             )
 
             # Filter and sort failed/error subresults by priority
-            # Priority: FAILED (0) > ERROR (1) > others (2)
+            # Priority: FAIL (0) > ERROR (1) > others (2)
             def get_status_priority(r):
                 if r.status == Result.Status.FAIL:
                     return 0

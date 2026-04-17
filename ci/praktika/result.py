@@ -254,56 +254,6 @@ class Result(MetaClasses.Serializable):
     def set_error(self) -> "Result":
         return self.set_status(Result.Status.ERROR)
 
-    def to_gh_status(self) -> str:
-        """Map Result status to GitHub commit status API string."""
-        return Result.convert_to_gh_status(self.status)
-
-    @staticmethod
-    def convert_to_gh_status(status: str) -> str:
-        """Map any Result.Status value to a GitHub commit status API string."""
-        _MAP = {
-            Result.Status.OK: Result.GHStatus.SUCCESS,
-            Result.Status.FAIL: Result.GHStatus.FAILURE,
-            Result.Status.ERROR: Result.GHStatus.ERROR,
-            Result.Status.SKIPPED: Result.GHStatus.SUCCESS,
-            Result.Status.PENDING: Result.GHStatus.PENDING,
-            Result.Status.RUNNING: Result.GHStatus.PENDING,
-            Result.Status.DROPPED: Result.GHStatus.ERROR,
-            Result.Status.UNKNOWN: Result.GHStatus.FAILURE,
-            Result.Status.XFAIL: Result.GHStatus.SUCCESS,
-            Result.Status.XPASS: Result.GHStatus.FAILURE,
-        }
-        gh = _MAP.get(status)
-        if gh is not None:
-            return gh
-        # Already a GH status string — pass through for idempotency
-        _GH_VALUES = {Result.GHStatus.PENDING, Result.GHStatus.SUCCESS, Result.GHStatus.FAILURE, Result.GHStatus.ERROR}
-        assert status in _GH_VALUES, f"Invalid status [{status}] for GH commit status"
-        return status
-
-    @staticmethod
-    def convert_to_cidb_status(status: str) -> str:
-        """Map any Result.Status value to the legacy CIDB check_status string."""
-        _MAP = {
-            Result.Status.OK: "success",
-            Result.Status.FAIL: "failure",
-            Result.Status.ERROR: "error",
-            Result.Status.SKIPPED: "skipped",
-            Result.Status.PENDING: "pending",
-            Result.Status.RUNNING: "running",
-            Result.Status.DROPPED: "dropped",
-            Result.Status.UNKNOWN: "failure",
-            Result.Status.XFAIL: "success",
-            Result.Status.XPASS: "failure",
-        }
-        legacy = _MAP.get(status)
-        if legacy is not None:
-            return legacy
-        # Already a legacy string — pass through for idempotency
-        _LEGACY_VALUES = set(_MAP.values())
-        assert status in _LEGACY_VALUES, f"Invalid status [{status}] for CIDB check_status"
-        return status
-
     def set_results(self, results: List["Result"]) -> "Result":
         self.results = results
         self._dump_if_persisted()
@@ -1066,7 +1016,7 @@ class Result(MetaClasses.Serializable):
             type=Event.Type.COMPLETED if self.is_completed() else Event.Type.RUNNING,
             timestamp=int(time.time()),
             sha=info.sha,
-            ci_status=Result.convert_to_cidb_status(self.status),
+            ci_status=self.status,
             result=result_dict,
             ext={
                 "pr_number": info.pr_number,

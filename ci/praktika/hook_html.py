@@ -270,16 +270,16 @@ class HtmlRunnerHooks:
                 print(
                     f"NOTE: Set job [{dependee}] status to [{Result.Status.DROPPED}] due to current failure"
                 )
-                new_sub_results.append(
-                    Result(
-                        name=dependee,
-                        status=Result.Status.DROPPED,
-                        info=ResultInfo.DROPPED_DUE_TO_PREVIOUS_FAILURE
-                        + f" [{_job.name}]",
-                        start_time=Utils.timestamp(),
-                        duration=0,
-                    )
+                dropped_result = Result(
+                    name=dependee,
+                    status=Result.Status.DROPPED,
+                    start_time=Utils.timestamp(),
+                    duration=0,
                 )
+                dropped_result.add_note(
+                    ResultInfo.DROPPED_DUE_TO_PREVIOUS_FAILURE + f" [{_job.name}]"
+                )
+                new_sub_results.append(dropped_result)
 
         updated_status = _ResultS3.update_workflow_results(
             new_sub_results=new_sub_results,

@@ -653,22 +653,30 @@ class Result(MetaClasses.Serializable):
                 f"chmod +x {unit_tests_path}",
                 command,
             ],
+            with_log=True,
         )
         binary_failed = not result.is_ok()
-        captured_info = result.info  # sanitizer output captured by from_commands_run
         status, results, info = ResultTranslator.from_gtest()
         result.set_status(status).set_results(results).set_info(info)
         if binary_failed and result.is_ok():
-            # gtest cases are OK but binary run failed — e.g. sanitizer assertion
-            # after all tests passed. This is a test failure, not an infrastructure error.
+            # gtest cases all passed but binary run exited non-zero — e.g. sanitizer
+            # assertion triggered after the test body returned. This is a test failure,
+            # not an infrastructure error.
             result.set_info("gtest binary run has non-zero exit code - see logs")
             result.set_status(Result.Status.FAILED)
-        if binary_failed and result.is_error():
-            # Binary ran but was killed (e.g. by a sanitizer or signal) before gtest
-            # wrote the result json. This is a test failure, not an infrastructure error.
-            # Replace "No test result file" with the captured binary output, which
-            # contains the sanitizer message and is actually actionable.
-            result.info = captured_info
+        if result.is_error():
+            # gtest.json is missing — the binary was killed before it could write results
+            # (e.g. by a sanitizer or OOM). Note: gdb returns 0 even when the inferior
+            # exits with a non-zero code, so we can't rely on binary_failed here.
+            # Extract the sanitizer SUMMARY line from the log file if available.
+            sanitizer_info = ""
+            if result.files:
+                log_content = Shell.get_output(f"cat {result.files[0]}", verbose=False)
+                for line in log_content.splitlines():
+                    if line.startswith("SUMMARY:"):
+                        sanitizer_info = line
+                        break
+            result.info = sanitizer_info or info
             result.set_status(Result.Status.FAILED)
         return result
 

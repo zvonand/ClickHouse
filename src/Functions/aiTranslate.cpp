@@ -57,7 +57,7 @@ private:
         String target_language(arguments[target_language_arg_index].column->getDataAt(0));
         String prompt = "Translate the following text into " + target_language + ". Return only the translation, nothing else.";
 
-        if (arguments.size() > instructions_arg_index && isString(arguments[instructions_arg_index].type))
+        if (arguments.size() > instructions_arg_index)
         {
             String instructions(arguments[instructions_arg_index].column->getDataAt(0));
             if (!instructions.empty())

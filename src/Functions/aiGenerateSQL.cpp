@@ -2,6 +2,7 @@
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionHelpers.h>
 #include <DataTypes/DataTypeString.h>
+#include <Access/ContextAccess.h>
 #include <Interpreters/DatabaseCatalog.h>
 #include <Databases/IDatabase.h>
 #include <Storages/IStorage.h>
@@ -53,7 +54,15 @@ private:
     size_t promptArgumentIndex() const override { return prompt_arg_index; }
     size_t temperatureArgumentIndex() const override { return temp_arg_idx; }
 
-    String resolveSchemaForDatabase(const String & db_name, const ContextPtr & context) const
+    /// Only tables/columns visible to the current user via `SHOW TABLES` / `SHOW COLUMNS` grants are included.
+    /// This matches the filtering performed by `system.tables` and `system.columns` — see StorageSystemTables.cpp
+    /// and StorageSystemColumns.cpp. The generated schema is sent to a third-party LLM endpoint, so skipping this
+    /// check would leak schemas of tables the user is not permitted to see.
+    String resolveSchemaForDatabase(
+        const String & db_name,
+        const ContextPtr & context,
+        const std::shared_ptr<const ContextAccessWrapper> & access,
+        bool need_to_check_access_for_tables_in_db) const
     {
         auto database = DatabaseCatalog::instance().getDatabase(db_name, context);
         String schema;
@@ -68,6 +77,13 @@ private:
                 continue;
             }
 
+            if (need_to_check_access_for_tables_in_db
+                && !access->isGranted(AccessType::SHOW_TABLES, db_name, table_name))
+            {
+                iter->next();
+                continue;
+            }
+
             auto metadata = storage->getInMemoryMetadataPtr(context, /*bypass_metadata_cache=*/false);
             if (!metadata)
             {
@@ -75,11 +91,27 @@ private:
                 continue;
             }
 
-            schema += "Table: " + db_name + "." + table_name + "\nColumns:\n";
+            bool need_to_check_access_for_columns = need_to_check_access_for_tables_in_db
+                && !access->isGranted(AccessType::SHOW_COLUMNS, db_name, table_name);
 
-            const auto & columns_desc = metadata->getColumns();
-            for (const auto & col : columns_desc.getAll())
-                schema += "  " + col.name + " " + col.type->getName() + "\n";
+            String columns_section;
+            for (const auto & col : metadata->getColumns().getAll())
+            {
+                if (need_to_check_access_for_columns
+                    && !access->isGranted(AccessType::SHOW_COLUMNS, db_name, table_name, col.name))
+                    continue;
+                columns_section += "  " + col.name + " " + col.type->getName() + "\n";
+            }
+
+            /// If every column was filtered out, don't emit the table at all — an empty table definition is noise.
+            if (columns_section.empty())
+            {
+                iter->next();
+                continue;
+            }
+
+            schema += "Table: " + db_name + "." + table_name + "\nColumns:\n";
+            schema += columns_section;
 
             auto primary_key = metadata->getPrimaryKey();
             if (!primary_key.column_names.empty())
@@ -102,20 +134,33 @@ private:
     String resolveSchema() const
     {
         auto context = getContext();
+        auto access = context->getAccess();
+
+        /// Short-circuit: if the user has SHOW_TABLES / SHOW_COLUMNS granted globally, no per-object check is needed.
+        bool need_to_check_access_for_databases = !access->isGranted(AccessType::SHOW_TABLES);
+
+        auto build_for_db = [&](const String & db_name) -> String
+        {
+            bool need_to_check_access_for_tables_in_db
+                = need_to_check_access_for_databases
+                && !access->isGranted(AccessType::SHOW_TABLES, db_name);
+            return resolveSchemaForDatabase(db_name, context, access, need_to_check_access_for_tables_in_db);
+        };
+
         String schema;
         auto databases = DatabaseCatalog::instance().getDatabases({});
         for (const auto & [db_name, db] : databases)
         {
             if (db_name == "system" || db_name == "INFORMATION_SCHEMA" || db_name == "information_schema" || db_name == "default")
                 continue;
-            schema += resolveSchemaForDatabase(db_name, context);
+            schema += build_for_db(db_name);
         }
 
         String current_db = context->getCurrentDatabase();
         if (!current_db.empty() && current_db != "system" && current_db != "INFORMATION_SCHEMA" && current_db != "information_schema"
             && schema.find("Table: " + current_db + ".") == String::npos)
         {
-            schema += resolveSchemaForDatabase(current_db, context);
+            schema += build_for_db(current_db);
         }
 
         return schema;

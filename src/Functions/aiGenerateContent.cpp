@@ -57,7 +57,7 @@ private:
 
     String buildSystemPrompt(const ColumnsWithTypeAndName & arguments) const override
     {
-        if (arguments.size() > system_prompt_arg_idx && isString(arguments[system_prompt_arg_idx].type))
+        if (arguments.size() > system_prompt_arg_idx)
         {
             String system_prompt(arguments[system_prompt_arg_idx].column->getDataAt(0));
             if (!system_prompt.empty())

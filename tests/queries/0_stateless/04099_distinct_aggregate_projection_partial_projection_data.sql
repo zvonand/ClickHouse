@@ -4,8 +4,10 @@
 
 -- { echo }
 
+SET enable_analyzer = 1;
 SET optimize_use_projections = 1;
 SET optimize_move_to_prewhere = 1;
+SET query_plan_optimize_prewhere = 1;
 
 DROP TABLE IF EXISTS test_distinct_proj_partial_projection;
 

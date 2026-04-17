@@ -49,6 +49,7 @@ aiClassify
 -- aiClassify: too many arguments
 -- aiClassify: non-constant categories
 -- aiClassify: wrong type for categories (not array)
+-- aiClassify: wrong type for categories (Array of non-String)
 -- aiClassify: return type
 result	String
 -- aiClassify: empty input executes
@@ -64,6 +65,8 @@ aiExtract
 result	String
 -- aiExtract: JSON schema mode accepted
 0
+-- aiExtract: malformed JSON schema
+-- aiExtract: JSON schema with non-string value
 -- aiExtract: with temperature
 0
 -- aiTranslate: registered

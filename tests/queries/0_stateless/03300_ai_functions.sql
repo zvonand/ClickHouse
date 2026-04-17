@@ -253,6 +253,9 @@ SELECT aiClassify('ai_test', x, [x]) FROM _03300_input; -- { serverError ILLEGAL
 SELECT '-- aiClassify: wrong type for categories (not array)';
 SELECT aiClassify('ai_test', x, 'positive,negative') FROM _03300_input; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
+SELECT '-- aiClassify: wrong type for categories (Array of non-String)';
+SELECT aiClassify('ai_test', x, [1, 2, 3]) FROM _03300_input; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+
 SELECT '-- aiClassify: return type';
 DROP TABLE IF EXISTS _03300_ret_classify;
 CREATE TABLE _03300_ret_classify ENGINE = Memory AS
@@ -294,6 +297,12 @@ DROP TABLE IF EXISTS _03300_ret_extract;
 
 SELECT '-- aiExtract: JSON schema mode accepted';
 SELECT count() FROM (SELECT aiExtract('ai_test', x, '{"topic":"main topic","sentiment":"pos/neg"}') AS result FROM _03300_input);
+
+SELECT '-- aiExtract: malformed JSON schema';
+SELECT aiExtract('ai_test', x, '{invalid') FROM _03300_input; -- { serverError BAD_ARGUMENTS }
+
+SELECT '-- aiExtract: JSON schema with non-string value';
+SELECT aiExtract('ai_test', x, '{"a":null}') FROM _03300_input; -- { serverError BAD_ARGUMENTS }
 
 SELECT '-- aiExtract: with temperature';
 SELECT count() FROM (SELECT aiExtract('ai_test', x, 'main topic', 0.0) AS result FROM _03300_input);

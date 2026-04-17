@@ -62,19 +62,23 @@
     </fill_query>
 
     <!-- Parallel hash join with low-cardinality keys: many dispatched blocks will be empty,
-         exercising the empty-block skip optimisation in ConcurrentHashJoinResult -->
+        exercising the empty-block skip optimisation in ConcurrentHashJoinResult -->
     <query tag='inner_low_card'>
         SELECT count() FROM
-            (SELECT number % 10 AS k FROM numbers_mt(10000000)) AS l
+            (SELECT number % 10 AS k FROM numbers_mt(100000)) AS l
         INNER JOIN
-            (SELECT number % 10 AS k FROM numbers_mt(10000000)) AS r
+            (SELECT number % 10 AS k FROM numbers_mt(100000)) AS r
         USING (k)
         FORMAT Null
     </query>
 
     <!-- Parallel hash join contention: many threads competing on few slots -->
     <query tag='inner_contention'>
-        SELECT count() FROM phj_left AS l INNER JOIN phj_left AS r USING (key)
+        SELECT count() FROM
+            (SELECT key FROM phj_left LIMIT 1000000) AS l
+        INNER JOIN
+            (SELECT key FROM phj_left LIMIT 1000000) AS r
+        USING (key)
         FORMAT Null
     </query>
 

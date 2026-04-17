@@ -746,6 +746,11 @@ bool HashJoin::addBlockToJoin(const Block & block, ScatteredBlock::Selector sele
 
         bool flag_per_row = needUsedFlagsForPerRightTableRow(table_join);
         const auto & onexprs = table_join->getClauses();
+
+        /// NullMapHolder stores a raw pointer to stored_columns. If any clause stores a nullmap
+        /// referencing this block we must not pop the block later
+        bool nullmap_stored_for_block = false;
+
         for (size_t onexpr_idx = 0; onexpr_idx < onexprs.size(); ++onexpr_idx)
         {
             ColumnRawPtrs key_columns;
@@ -825,9 +830,6 @@ bool HashJoin::addBlockToJoin(const Block & block, ScatteredBlock::Selector sele
                     });
             }
 
-            /// NullMapHolder stores a raw pointer to stored_columns, don't pop the block if a nullmap references it
-            bool nullmap_stored_for_block = false;
-
             if (!flag_per_row && save_nullmap && is_inserted)
             {
                 auto & h = data->nullmaps.emplace_back(stored_columns, null_map_holder);
@@ -843,21 +845,21 @@ bool HashJoin::addBlockToJoin(const Block & block, ScatteredBlock::Selector sele
             }
 
             if (!flag_per_row && !is_inserted && !nullmap_stored_for_block)
-            {
-                doDebugAsserts();
-                LOG_TRACE(log, "Skipping inserting block with {} rows", rows);
-                data->allocated_size -= data_allocated_bytes;
-                data->rows_to_join -= rows;
-                data->columns.pop_back();
-                doDebugAsserts();
-            }
+        {
+            doDebugAsserts();
+            LOG_TRACE(log, "Skipping inserting block with {} rows", rows);
+            data->allocated_size -= data_allocated_bytes;
+            data->rows_to_join -= rows;
+            data->columns.pop_back();
+            doDebugAsserts();
+        }
 
-            if (!check_limits)
-                return true;
+        if (!check_limits)
+            return true;
 
             /// TODO: Do not calculate them every time
-            total_rows = getTotalRowCount();
-            total_bytes = getTotalByteCount();
+        total_rows = getTotalRowCount();
+        total_bytes = getTotalByteCount();
         }
     }
     data->keys_to_join = total_rows;

@@ -570,9 +570,8 @@ class Runner:
             ).dump()
 
         if not result.is_completed():
-            info = f"ERROR: {ResultInfo.KILLED}"
-            print(info)
-            result.set_info(info).set_status(Result.Status.ERROR).dump()
+            print(f"ERROR: {ResultInfo.KILLED}")
+            result.add_error(ResultInfo.KILLED).set_status(Result.Status.ERROR).dump()
 
         if result.is_error() and result.get_on_error_hook():
             print(f"--- Run on_error_hook [{result.get_on_error_hook()}]")
@@ -588,11 +587,6 @@ class Runner:
     ) -> bool:
         env = _Environment.get()
         is_ok = True
-
-        # TODO: remove after testing notification panels
-        env.add_report_message("Test error message", kind="error")
-        env.add_report_message("Test warning message", kind="warning")
-        env.add_report_message("Test note message", kind="note")
 
 
         is_final_job = job.name == Settings.FINISH_WORKFLOW_JOB_NAME

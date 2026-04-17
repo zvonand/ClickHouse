@@ -329,6 +329,21 @@ class Result(MetaClasses.Serializable):
         self._dump_if_persisted()
         return self
 
+    def add_warning(self, message: str) -> "Result":
+        self.ext.setdefault("warnings", []).append(message)
+        self._dump_if_persisted()
+        return self
+
+    def add_error(self, message: str) -> "Result":
+        self.ext.setdefault("errors", []).append(message)
+        self._dump_if_persisted()
+        return self
+
+    def add_note(self, message: str) -> "Result":
+        self.ext.setdefault("notes", []).append(message)
+        self._dump_if_persisted()
+        return self
+
     def set_link(self, link) -> "Result":
         self.links.append(link)
         self._dump_if_persisted()

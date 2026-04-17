@@ -655,6 +655,7 @@ class Result(MetaClasses.Serializable):
             ],
         )
         binary_failed = not result.is_ok()
+        captured_info = result.info  # sanitizer output captured by from_commands_run
         status, results, info = ResultTranslator.from_gtest()
         result.set_status(status).set_results(results).set_info(info)
         if binary_failed and result.is_ok():
@@ -665,6 +666,9 @@ class Result(MetaClasses.Serializable):
         if binary_failed and result.is_error():
             # Binary ran but was killed (e.g. by a sanitizer or signal) before gtest
             # wrote the result json. This is a test failure, not an infrastructure error.
+            # Replace "No test result file" with the captured binary output, which
+            # contains the sanitizer message and is actually actionable.
+            result.info = captured_info
             result.set_status(Result.Status.FAILED)
         return result
 

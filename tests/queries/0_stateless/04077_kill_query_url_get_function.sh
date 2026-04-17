@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Tags: no-fasttest, no-sanitizers-lsan, long
-# Test that KILL QUERY cancels HTTP requests in url() function early.
+# Test that KILL QUERY cancels HTTP GET requests in url() function early.
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
-query_id="kill_query_url_${CLICKHOUSE_DATABASE}_$RANDOM"
+query_id="kill_query_url_get_${CLICKHOUSE_DATABASE}_$RANDOM"
 log_file=$(mktemp "./04077.XXXXXX.log")
 
 # Get free port
@@ -18,17 +18,26 @@ print(s.getsockname()[1])
 s.close()
 ")
 
-# Start slow HTTP server - sleeps 30 seconds before responding (simulates slow network)
+# Start HTTP server - GET is slow (30s), HEAD is fast
 python3 -c "
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import time
 
 class Handler(BaseHTTPRequestHandler):
+    def do_HEAD(self):
+        # Fast HEAD - returns immediately
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/plain')
+        self.end_headers()
+    
     def do_GET(self):
+        # Slow GET - takes 30 seconds (tests cancellation during GET retries)
         time.sleep(30)
         self.send_response(200)
+        self.send_header('Content-Type', 'text/plain')
         self.end_headers()
         self.wfile.write(b'1\n')
+    
     def log_message(self, *args):
         pass
 
@@ -43,8 +52,8 @@ for _ in $(seq 1 50); do
     sleep 0.1
 done
 
-# Run query - server will take 30 seconds to respond
-# Without fix: waits for retries
+# Run query - GET will take 30 seconds to respond
+# Without fix: waits for all retries
 # With fix: cancels quickly after KILL QUERY
 $CLICKHOUSE_CLIENT \
     --http_max_tries=15 \

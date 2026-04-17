@@ -385,13 +385,16 @@ StorageURLSource::StorageURLSource(
         while (getContext()->getSettingsRef()[Setting::engine_url_skip_empty_files] && uri_and_buf.second->eof());
 
         curr_uri = uri_and_buf.first;
-        auto last_mod_time = uri_and_buf.second->tryGetLastModificationTime();
-        read_buf = std::move(uri_and_buf.second);
 
-        if (auto * http_buf = dynamic_cast<ReadWriteBufferFromHTTP *>(read_buf.get()))
+        // Set cancellation check BEFORE tryGetLastModificationTime() - this ensures
+        // HEAD requests (which happen inside tryGetLastModificationTime) respect cancellation
+        if (auto * http_buf = dynamic_cast<ReadWriteBufferFromHTTP *>(uri_and_buf.second.get()))
         {
             http_buf->setCancellationCheck([this]() { return isCancelled(); });
         }
+
+        auto last_mod_time = uri_and_buf.second->tryGetLastModificationTime();
+        read_buf = std::move(uri_and_buf.second);
 
         current_file_size = tryGetFileSizeFromReadBuffer(*read_buf);
 

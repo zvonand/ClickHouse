@@ -184,7 +184,8 @@ void ReadWriteBufferFromHTTP::getHeadResponse(Poco::Net::HTTPResponse & response
             callWithRedirects(response, Poco::Net::HTTPRequest::HTTP_HEAD, {});
         },
         /*on_retry=*/ nullptr,
-        /*mute_logging=*/ true);
+        /*mute_logging=*/ true,
+        cancellation_check);
 }
 
 ReadWriteBufferFromHTTP::ReadWriteBufferFromHTTP(

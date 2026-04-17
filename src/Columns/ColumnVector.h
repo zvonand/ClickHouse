@@ -320,7 +320,7 @@ public:
 
     bool isDefaultAt(size_t n) const override
     {
-        if constexpr (std::is_floating_point_v<T> || std::is_same_v<T, BFloat16>)
+        if constexpr (is_floating_point<T>)
         {
             /// For floating-point types, use bit_cast to compare raw bit patterns instead of
             /// arithmetic equality. IEEE 754 defines -0.0 == +0.0, so the arithmetic check

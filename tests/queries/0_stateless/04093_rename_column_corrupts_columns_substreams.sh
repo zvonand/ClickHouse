@@ -20,7 +20,7 @@ ${CLICKHOUSE_CLIENT} --query "
     ORDER BY id
     SETTINGS min_rows_for_wide_part = 1, min_bytes_for_wide_part = 1,
              enable_block_number_column = 0, enable_block_offset_column = 0,
-             replace_long_file_name_to_hash = 0
+             replace_long_file_name_to_hash = 0, ratio_of_defaults_for_sparse_serialization = 1;
 "
 
 ${CLICKHOUSE_CLIENT} --query "INSERT INTO test_rename_substreams SELECT number, [number, number + 1] FROM numbers(10)"
@@ -53,7 +53,7 @@ ${CLICKHOUSE_CLIENT} --query "
     ORDER BY id
     SETTINGS min_rows_for_wide_part = 1, min_bytes_for_wide_part = 1,
              enable_block_number_column = 0, enable_block_offset_column = 0,
-             replace_long_file_name_to_hash = 0
+             replace_long_file_name_to_hash = 0, ratio_of_defaults_for_sparse_serialization = 1;
 "
 
 ${CLICKHOUSE_CLIENT} --query "INSERT INTO test_rename_nested_substreams SELECT number, [number], [number + 1] FROM numbers(10)"

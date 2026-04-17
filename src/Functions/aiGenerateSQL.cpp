@@ -58,11 +58,16 @@ private:
     /// This matches the filtering performed by `system.tables` and `system.columns` — see StorageSystemTables.cpp
     /// and StorageSystemColumns.cpp. The generated schema is sent to a third-party LLM endpoint, so skipping this
     /// check would leak schemas of tables the user is not permitted to see.
+    ///
+    /// `SHOW_TABLES` and `SHOW_COLUMNS` are tracked independently because a user can have one without the other
+    /// (e.g. `GRANT SHOW TABLES ON *.*` without `SHOW COLUMNS`). The `check_tables_in_db` / `check_columns_in_db`
+    /// flags are pre-computed once per database so the hot loop skips grants checks it can prove are redundant.
     String resolveSchemaForDatabase(
         const String & db_name,
         const ContextPtr & context,
         const std::shared_ptr<const ContextAccessWrapper> & access,
-        bool need_to_check_access_for_tables_in_db) const
+        bool check_tables_in_db,
+        bool check_columns_in_db) const
     {
         auto database = DatabaseCatalog::instance().getDatabase(db_name, context);
         String schema;
@@ -77,8 +82,7 @@ private:
                 continue;
             }
 
-            if (need_to_check_access_for_tables_in_db
-                && !access->isGranted(AccessType::SHOW_TABLES, db_name, table_name))
+            if (check_tables_in_db && !access->isGranted(AccessType::SHOW_TABLES, db_name, table_name))
             {
                 iter->next();
                 continue;
@@ -91,13 +95,13 @@ private:
                 continue;
             }
 
-            bool need_to_check_access_for_columns = need_to_check_access_for_tables_in_db
+            bool check_columns_in_table = check_columns_in_db
                 && !access->isGranted(AccessType::SHOW_COLUMNS, db_name, table_name);
 
             String columns_section;
             for (const auto & col : metadata->getColumns().getAll())
             {
-                if (need_to_check_access_for_columns
+                if (check_columns_in_table
                     && !access->isGranted(AccessType::SHOW_COLUMNS, db_name, table_name, col.name))
                     continue;
                 columns_section += "  " + col.name + " " + col.type->getName() + "\n";
@@ -136,15 +140,15 @@ private:
         auto context = getContext();
         auto access = context->getAccess();
 
-        /// Short-circuit: if the user has SHOW_TABLES / SHOW_COLUMNS granted globally, no per-object check is needed.
-        bool need_to_check_access_for_databases = !access->isGranted(AccessType::SHOW_TABLES);
+        /// Short-circuit: if the user has a grant globally, no per-object check is needed.
+        bool check_tables = !access->isGranted(AccessType::SHOW_TABLES);
+        bool check_columns = !access->isGranted(AccessType::SHOW_COLUMNS);
 
         auto build_for_db = [&](const String & db_name) -> String
         {
-            bool need_to_check_access_for_tables_in_db
-                = need_to_check_access_for_databases
-                && !access->isGranted(AccessType::SHOW_TABLES, db_name);
-            return resolveSchemaForDatabase(db_name, context, access, need_to_check_access_for_tables_in_db);
+            bool check_tables_in_db = check_tables && !access->isGranted(AccessType::SHOW_TABLES, db_name);
+            bool check_columns_in_db = check_columns && !access->isGranted(AccessType::SHOW_COLUMNS, db_name);
+            return resolveSchemaForDatabase(db_name, context, access, check_tables_in_db, check_columns_in_db);
         };
 
         String schema;

@@ -2,7 +2,7 @@
 #include <Interpreters/Cache/IFileCachePriority.h>
 #include <Interpreters/Cache/UserCacheUsage.h>
 #include <Interpreters/Cache/FileCacheOriginInfo.h>
-#include <deque>
+#include <absl/container/flat_hash_map.h>
 
 namespace DB
 {
@@ -48,7 +48,7 @@ using EvictionInfoPtr = std::unique_ptr<EvictionInfo>;
 /// Aggregated eviction info:
 /// - contains QueueEvictionInfo per queue_id
 /// - aggregates all methods among all QueueEvictionInfo's.
-class EvictionInfo : public std::map<QueueID, QueueEvictionInfoPtr>, private boost::noncopyable
+class EvictionInfo : public absl::flat_hash_map<QueueID, QueueEvictionInfoPtr>, private boost::noncopyable
 {
 public:
     EvictionInfo() = default;
@@ -153,8 +153,7 @@ public:
     FailedCandidates getFailedCandidates() const { return failed_candidates; }
 
 private:
-
-    std::unordered_map<FileCacheKey, KeyCandidates> candidates;
+    absl::flat_hash_map<FileCacheKey, KeyCandidates, std::hash<FileCacheKey>> candidates;
     size_t candidates_size = 0;
     size_t candidates_bytes = 0;
     FailedCandidates failed_candidates;

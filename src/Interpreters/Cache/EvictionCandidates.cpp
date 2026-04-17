@@ -71,11 +71,13 @@ EvictionInfo::EvictionInfo(QueueID queue_id, QueueEvictionInfoPtr info)
 std::string EvictionInfo::toString() const
 {
     WriteBufferFromOwnString wb;
-    for (auto it = begin(); it != end(); ++it)
+    bool first = true;
+    for (const auto & [queue_id, info] : *this)
     {
-        if (it != begin())
+        if (!first)
             wb << ", ";
-        wb << "[queue id " << it->first << ", " << it->second->toString() << "]";
+        first = false;
+        wb << "[queue id " << queue_id << ", " << info->toString() << "]";
     }
     return wb.str();
 }

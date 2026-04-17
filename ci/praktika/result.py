@@ -192,6 +192,8 @@ class Result(MetaClasses.Serializable):
             files=files or [],
             links=links or [],
         )
+        if isinstance(labels, str):
+            labels = [labels]
         for label in labels or []:
             result.set_label(label)
         return result

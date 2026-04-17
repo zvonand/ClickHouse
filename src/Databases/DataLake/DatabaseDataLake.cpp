@@ -802,20 +802,21 @@ void DatabaseDataLake::createTable(
             order_by = create.storage->order_by->clone();
     }
 
-    String location;
     auto storage_endpoint = settings[DatabaseDataLakeSetting::storage_endpoint].value;
-    if (!storage_endpoint.empty())
-    {
-        const auto location_scheme = getLocationSchemeForTableCreation(catalog);
-        Poco::URI uri(storage_endpoint);
-        auto path = uri.getPath();
-        while (path.starts_with('/'))
-            path = path.substr(1);
-        while (path.ends_with('/'))
-            path = path.substr(0, path.size() - 1);
+    if (storage_endpoint.empty())
+        throw Exception(
+            ErrorCodes::BAD_ARGUMENTS,
+            "CREATE TABLE in DataLakeCatalog requires `storage_endpoint` to be set on the database.");
 
-        location = fmt::format("{}://{}/{}/{}", location_scheme, path, namespace_name, table_name);
-    }
+    const auto location_scheme = getLocationSchemeForTableCreation(catalog);
+    Poco::URI uri(storage_endpoint);
+    auto path = uri.getPath();
+    while (path.starts_with('/'))
+        path = path.substr(1);
+    while (path.ends_with('/'))
+        path = path.substr(0, path.size() - 1);
+
+    const String location = fmt::format("{}://{}/{}/{}", location_scheme, path, namespace_name, table_name);
 
     auto [metadata_content, metadata_str] = Iceberg::createEmptyMetadataFile(
         location,

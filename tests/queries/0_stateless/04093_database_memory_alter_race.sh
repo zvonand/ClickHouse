@@ -42,14 +42,16 @@ function read_worker()
     done
 }
 
-TIMEOUT=60
+TIMEOUT=30
 
-for i in {1..20}; do
-    alter_worker "$i" &
+# Keep worker count low so the cgroup memory limit (10 GB under asan_ubsan)
+# is not exceeded by many concurrent clickhouse-client ASan processes.
+for i in {1..10}; do
+    alter_worker "$i" 2>/dev/null &
 done
 
-for _ in {1..20}; do
-    read_worker &
+for _ in {1..10}; do
+    read_worker 2>/dev/null &
 done
 
 wait

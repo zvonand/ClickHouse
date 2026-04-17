@@ -7,6 +7,11 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+    extern const int BAD_ARGUMENTS;
+}
+
 namespace
 {
 
@@ -35,6 +40,10 @@ public:
             {"temperature", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isNumber), &isColumnConst, "const Number"},
         };
         validateFunctionArguments(*this, arguments, mandatory_args, optional_args);
+
+        std::string_view target_language = arguments[target_language_arg_index].column->getDataAt(0);
+        if (target_language.find_first_not_of(" \t\n\r") == std::string_view::npos)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "aiTranslate: 'target_language' must not be empty");
 
         return std::make_shared<DataTypeString>();
     }

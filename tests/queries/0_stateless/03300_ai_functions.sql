@@ -256,6 +256,9 @@ SELECT aiClassify('ai_test', x, 'positive,negative') FROM _03300_input; -- { ser
 SELECT '-- aiClassify: wrong type for categories (Array of non-String)';
 SELECT aiClassify('ai_test', x, [1, 2, 3]) FROM _03300_input; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
+SELECT '-- aiClassify: empty categories array';
+SELECT aiClassify('ai_test', x, CAST([], 'Array(String)')) FROM _03300_input; -- { serverError BAD_ARGUMENTS }
+
 SELECT '-- aiClassify: return type';
 DROP TABLE IF EXISTS _03300_ret_classify;
 CREATE TABLE _03300_ret_classify ENGINE = Memory AS
@@ -329,6 +332,10 @@ SELECT aiTranslate('ai_test', 'x', 'French', 'instr', 0.3, 'extra'); -- { server
 
 SELECT '-- aiTranslate: non-constant target language';
 SELECT aiTranslate('ai_test', x, x) FROM _03300_input; -- { serverError ILLEGAL_COLUMN }
+
+SELECT '-- aiTranslate: empty target language';
+SELECT aiTranslate('ai_test', x, '') FROM _03300_input; -- { serverError BAD_ARGUMENTS }
+SELECT aiTranslate('ai_test', x, '   ') FROM _03300_input; -- { serverError BAD_ARGUMENTS }
 
 SELECT '-- aiTranslate: return type';
 DROP TABLE IF EXISTS _03300_ret_translate;

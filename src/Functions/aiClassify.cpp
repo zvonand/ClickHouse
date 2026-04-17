@@ -15,6 +15,11 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+    extern const int BAD_ARGUMENTS;
+}
+
 namespace
 {
 
@@ -48,6 +53,11 @@ public:
             {"temperature", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isNumber), &isColumnConst, "const Number"},
         };
         validateFunctionArguments(*this, arguments, mandatory_args, optional_args);
+
+        /// An empty category list would produce `"enum": []` in the response-format schema, which no provider can
+        /// satisfy. Fail early with a deterministic local exception instead of waiting for a provider-side error.
+        if (getCategories(arguments).empty())
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "aiClassify: 'categories' must contain at least one label");
 
         return std::make_shared<DataTypeString>();
     }

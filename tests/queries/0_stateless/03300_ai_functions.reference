@@ -50,6 +50,7 @@ aiClassify
 -- aiClassify: non-constant categories
 -- aiClassify: wrong type for categories (not array)
 -- aiClassify: wrong type for categories (Array of non-String)
+-- aiClassify: empty categories array
 -- aiClassify: return type
 result	String
 -- aiClassify: empty input executes
@@ -75,6 +76,7 @@ aiTranslate
 -- aiTranslate: too few arguments
 -- aiTranslate: too many arguments
 -- aiTranslate: non-constant target language
+-- aiTranslate: empty target language
 -- aiTranslate: return type
 result	String
 -- aiTranslate: with instructions and temperature

@@ -246,7 +246,7 @@ The first argument is a named collection that specifies the provider, model, end
         .returned_value = {"Either a single extracted value (instruction mode) or a JSON object string (schema mode). Returns the default value for the column type (empty string) if the request failed and `ai_function_throw_on_error` is disabled.", {"String"}},
         .examples = {
             {"Free-form instruction", "SELECT aiExtract('ai_credentials', 'The package arrived late and was damaged.', 'the main complaint')", "late and damaged package"},
-            {"Schema extraction", "SELECT aiExtract('ai_credentials', review, '{\"sentiment\": \"positive, negative or neutral\", \"topic\": \"main topic of the review\"}') FROM reviews LIMIT 5", ""},
+            {"Schema extraction", R"(SELECT aiExtract('ai_credentials', review, '{"sentiment": "positive, negative or neutral", "topic": "main topic of the review"}') FROM reviews LIMIT 5)", ""},
         },
         .introduced_in = {26, 4},
         .category = FunctionDocumentation::Category::AI});

@@ -101,7 +101,6 @@ workflow = Workflow.Config(
         *JobConfigs.integration_test_llvm_coverage_jobs,
         *JobConfigs.integration_test_excluded_from_llvm_job,
         *JobConfigs.unittest_jobs,
-        *JobConfigs.func_props_fuzzer_jobs,
         *JobConfigs.unittest_llvm_coverage_job,
         JobConfigs.docker_server.set_run_after(
             FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES

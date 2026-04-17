@@ -24,6 +24,7 @@ $CLICKHOUSE_CLIENT \
     --query_id="$QUERY_ID1" \
     --max_threads=16 \
     --max_insert_threads=1 \
+    --input_format_parallel_parsing=0 \
     --log_queries=1 \
     -q "INSERT INTO test_insert_threads FORMAT TSV"
 
@@ -38,6 +39,7 @@ $CLICKHOUSE_CLIENT -q "
         AND current_database = currentDatabase()
         AND type = 'QueryFinish'
         AND query_id = '$QUERY_ID1'
+    SETTINGS optimize_if_transform_strings_to_enum = 0
 "
 
 # Test 2: INSERT with a materialized view — should use more threads.
@@ -51,6 +53,7 @@ $CLICKHOUSE_CLIENT \
     --query_id="$QUERY_ID2" \
     --max_threads=16 \
     --max_insert_threads=1 \
+    --input_format_parallel_parsing=0 \
     --log_queries=1 \
     -q "INSERT INTO test_insert_threads FORMAT TSV"
 
@@ -66,6 +69,7 @@ $CLICKHOUSE_CLIENT -q "
         AND current_database = currentDatabase()
         AND type = 'QueryFinish'
         AND query_id = '$QUERY_ID2'
+    SETTINGS optimize_if_transform_strings_to_enum = 0
 "
 
 $CLICKHOUSE_CLIENT -q "DROP TABLE test_insert_threads_mv"

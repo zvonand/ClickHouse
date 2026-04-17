@@ -867,8 +867,8 @@ def _finish_workflow(workflow, job_name):
                 env.add_report_message(
                     ResultInfo.NOT_FINALIZED, kind="error", job_name=result.name
                 )
-                # add error info to job info as well
-                result.set_info(ResultInfo.NOT_FINALIZED)
+                # add error to job result as well
+                result.add_error(ResultInfo.NOT_FINALIZED)
                 update_final_report = True
         job = workflow.get_job(result.name)
         if not job or not job.allow_merge_on_failure:

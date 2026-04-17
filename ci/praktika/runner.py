@@ -489,18 +489,19 @@ class Runner:
                         print(
                             f"WARNING: Job timed out: [{job.name}], timeout [{job.timeout}], exit code [{exit_code}]"
                         )
-                        info = ResultInfo.TIMEOUT
+                        result.add_error(ResultInfo.TIMEOUT)
                     elif result.is_running():
-                        info = f"ERROR: Job killed, exit code [{exit_code}]  - set status to [{Result.Status.ERROR}]."
-                        print(info)
+                        info = f"Job killed, exit code [{exit_code}]"
+                        print(f"ERROR: {info}")
+                        result.add_error(info)
                     else:
-                        info = f"ERROR: Invalid status [{result.status}] for exit code [{exit_code}]  - switch to [{Result.Status.ERROR}]"
-                        print(info)
+                        info = f"Invalid status [{result.status}] for exit code [{exit_code}]"
+                        print(f"ERROR: {info}")
+                        result.add_error(info)
                     result.set_status(Result.Status.ERROR)
-                    result.set_info(info)
-                    result.set_info("---").set_info(
+                    result.set_info(
                         process.get_latest_log(max_lines=20)
-                    ).set_info("---")
+                    )
             result.dump()
 
         print("INFO: disk status after running a job:")
@@ -527,36 +528,31 @@ class Runner:
         result_exist = Result.exist(job.name)
 
         if setup_env_exit_code != 0:
-            info = f"ERROR: {ResultInfo.SETUP_ENV_JOB_FAILED}"
-            print(info)
-            # set Result with error and logs
+            print(f"ERROR: {ResultInfo.SETUP_ENV_JOB_FAILED}")
             Result(
                 name=job.name,
                 status=Result.Status.ERROR,
                 start_time=Utils.timestamp(),
                 duration=0.0,
-                info=info,
+                ext={"errors": [ResultInfo.SETUP_ENV_JOB_FAILED]},
             ).dump()
         elif prerun_exit_code != 0:
-            info = ResultInfo.PRE_JOB_FAILED
-            print(info)
-            # set Result with error and logs
+            print(f"ERROR: {ResultInfo.PRE_JOB_FAILED}")
             Result(
                 name=job.name,
                 status=Result.Status.ERROR,
                 start_time=Utils.timestamp(),
                 duration=0.0,
-                info=info,
+                ext={"errors": [ResultInfo.PRE_JOB_FAILED]},
             ).dump()
         elif not result_exist:
-            info = f"ERROR: {ResultInfo.NOT_FOUND_IMPOSSIBLE}"
-            print(info)
+            print(f"ERROR: {ResultInfo.NOT_FOUND_IMPOSSIBLE}")
             Result(
                 name=job.name,
                 start_time=Utils.timestamp(),
                 duration=None,
                 status=Result.Status.ERROR,
-                info=ResultInfo.NOT_FOUND_IMPOSSIBLE,
+                ext={"errors": [ResultInfo.NOT_FOUND_IMPOSSIBLE]},
             ).dump()
 
         try:

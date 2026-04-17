@@ -1,5 +1,7 @@
 #pragma once
+
 #include "config.h"
+
 #if USE_AVRO
 
 #include <Core/Block_fwd.h>
@@ -8,14 +10,10 @@
 #include <Formats/FormatSettings.h>
 #include <IO/WriteBuffer.h>
 #include <Processors/Formats/IRowOutputFormat.h>
-
-#include <Processors/Formats/Impl/AvroConfluentSchemaRegistry.h>
-
 #include <DataFile.hh>
 #include <Encoder.hh>
 #include <Schema.hh>
 #include <ValidSchema.hh>
-
 
 namespace DB
 {
@@ -23,7 +21,7 @@ class Block;
 class WriteBuffer;
 
 class AvroSerializerTraits;
-
+class ConfluentSchemaRegistry;
 class OutputStreamWriteBufferAdapter : public avro::OutputStream
 {
 public:

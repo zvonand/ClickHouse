@@ -1,43 +1,38 @@
 #include <Processors/Formats/Impl/AvroRowInputFormat.h>
 #if USE_AVRO
 
-#include <numeric>
-
+#include <Columns/ColumnArray.h>
+#include <Columns/ColumnLowCardinality.h>
+#include <Columns/ColumnMap.h>
+#include <Columns/ColumnNullable.h>
+#include <Columns/ColumnTuple.h>
 #include <Core/AccurateComparison.h>
 #include <Core/Field.h>
-
-#include <IO/ReadHelpers.h>
-#include <IO/ReadBufferFromString.h>
-
-#include <Formats/FormatFactory.h>
-
 #include <DataTypes/DataTypeArray.h>
-#include <DataTypes/DataTypeDateTime64.h>
 #include <DataTypes/DataTypeDate32.h>
-#include <DataTypes/DataTypesDecimal.h>
+#include <DataTypes/DataTypeDateTime64.h>
 #include <DataTypes/DataTypeEnum.h>
+#include <DataTypes/DataTypeFactory.h>
 #include <DataTypes/DataTypeFixedString.h>
 #include <DataTypes/DataTypeLowCardinality.h>
+#include <DataTypes/DataTypeMap.h>
 #include <DataTypes/DataTypeNothing.h>
 #include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypeTuple.h>
 #include <DataTypes/DataTypeUUID.h>
 #include <DataTypes/DataTypeVariant.h>
+#include <DataTypes/DataTypesDecimal.h>
 #include <DataTypes/IDataType.h>
-#include <DataTypes/DataTypeMap.h>
 #include <DataTypes/NestedUtils.h>
-#include <DataTypes/DataTypeFactory.h>
-#include <DataTypes/Serializations/SerializationTuple.h>
-#include <DataTypes/Serializations/SerializationMap.h>
 #include <DataTypes/Serializations/SerializationArray.h>
-
-#include <Columns/ColumnArray.h>
-#include <Columns/ColumnNullable.h>
-#include <Columns/ColumnLowCardinality.h>
-#include <Columns/ColumnTuple.h>
-#include <Columns/ColumnMap.h>
-
+#include <DataTypes/Serializations/SerializationMap.h>
+#include <DataTypes/Serializations/SerializationTuple.h>
+#include <Formats/FormatFactory.h>
+#include <IO/ReadBufferFromString.h>
+#include <IO/ReadHelpers.h>
+#include <Processors/Formats/Impl/AvroConfluentSchemaRegistry.h>
+#include <base/EnumReflection.h>
 #include <Compiler.hh>
 #include <DataFile.hh>
 #include <Decoder.hh>
@@ -45,8 +40,6 @@
 #include <NodeImpl.hh>
 #include <Types.hh>
 #include <ValidSchema.hh>
-
-#include <base/EnumReflection.h>
 
 namespace DB
 {

@@ -4,21 +4,17 @@
 
 #if USE_AVRO
 
-#include <unordered_map>
 #include <map>
+#include <unordered_map>
 #include <vector>
-
-#include <Formats/FormatSettings.h>
 #include <Formats/FormatSchemaInfo.h>
-#include <Processors/Formats/Impl/AvroConfluentSchemaRegistry.h>
+#include <Formats/FormatSettings.h>
 #include <Processors/Formats/IRowInputFormat.h>
 #include <Processors/Formats/ISchemaReader.h>
-
 #include <DataFile.hh>
 #include <Decoder.hh>
 #include <Schema.hh>
 #include <ValidSchema.hh>
-
 
 namespace DB
 {
@@ -30,6 +26,7 @@ namespace ErrorCodes
 
 class Block;
 
+class ConfluentSchemaRegistry;
 class AvroInputStreamReadBufferAdapter : public avro::InputStream
 {
 public:

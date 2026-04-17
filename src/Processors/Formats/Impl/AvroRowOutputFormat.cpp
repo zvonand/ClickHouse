@@ -1,43 +1,37 @@
 #include <Processors/Formats/Impl/AvroRowOutputFormat.h>
 #if USE_AVRO
 
-#include <Core/Field.h>
-#include <IO/WriteBuffer.h>
-#include <IO/WriteHelpers.h>
-
-#include <Formats/FormatFactory.h>
-
-#include <DataTypes/DataTypeArray.h>
-#include <DataTypes/DataTypeDate.h>
-#include <DataTypes/DataTypeDateTime64.h>
-#include <DataTypes/DataTypesDecimal.h>
-#include <DataTypes/DataTypeEnum.h>
-#include <DataTypes/DataTypeLowCardinality.h>
-#include <DataTypes/DataTypeNullable.h>
-#include <DataTypes/DataTypeUUID.h>
-#include <DataTypes/DataTypeTuple.h>
-#include <DataTypes/DataTypeVariant.h>
-#include <DataTypes/DataTypeMap.h>
-
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnFixedString.h>
 #include <Columns/ColumnLowCardinality.h>
+#include <Columns/ColumnMap.h>
 #include <Columns/ColumnNullable.h>
 #include <Columns/ColumnString.h>
-#include <Columns/ColumnsNumber.h>
 #include <Columns/ColumnTuple.h>
-#include <Columns/ColumnMap.h>
-
-#include <Common/re2.h>
-
+#include <Columns/ColumnsNumber.h>
+#include <Core/Field.h>
+#include <DataTypes/DataTypeArray.h>
+#include <DataTypes/DataTypeDate.h>
+#include <DataTypes/DataTypeDateTime64.h>
+#include <DataTypes/DataTypeEnum.h>
+#include <DataTypes/DataTypeLowCardinality.h>
+#include <DataTypes/DataTypeMap.h>
+#include <DataTypes/DataTypeNullable.h>
+#include <DataTypes/DataTypeTuple.h>
+#include <DataTypes/DataTypeUUID.h>
+#include <DataTypes/DataTypeVariant.h>
+#include <DataTypes/DataTypesDecimal.h>
+#include <Formats/FormatFactory.h>
+#include <IO/WriteBuffer.h>
+#include <IO/WriteHelpers.h>
+#include <Processors/Formats/Impl/AvroConfluentSchemaRegistry.h>
 #include <Processors/Port.h>
-
+#include <boost/algorithm/string.hpp>
 #include <DataFile.hh>
 #include <Encoder.hh>
 #include <Node.hh>
 #include <Schema.hh>
-
-#include <boost/algorithm/string.hpp>
+#include <Common/re2.h>
 
 namespace DB
 {

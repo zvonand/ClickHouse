@@ -666,7 +666,6 @@ def main():
                                 f"Test {test_case.name} has succeeded after rerun. Mark it as OK"
                             )
                             test_case.remove_label(Result.Status.FAIL)
-                            test_case.remove_label(Result.Status.FAIL)
                             test_case.set_status(Result.Status.OK)
                         else:
                             test_case.set_label(Result.Label.OK_ON_RETRY)

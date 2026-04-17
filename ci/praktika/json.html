@@ -283,12 +283,16 @@
         }
 
         th.name-column, td.name-column,
-        th.status-column, td.status-column,
         td.dur-column, th.dur-column {
             width: 1px;
             max-width: fit-content;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+        th.status-column, td.status-column {
+            width: 1px;
+            max-width: fit-content;
+            text-align: center;
         }
 
         td.dur-column {

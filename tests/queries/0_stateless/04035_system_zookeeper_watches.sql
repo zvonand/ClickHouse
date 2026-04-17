@@ -1,5 +1,6 @@
--- Tags: zookeeper, no-replicated-database
+-- Tags: zookeeper, no-replicated-database, no-shared-merge-tree
 -- Tag no-replicated-database: Old syntax is not allowed
+-- Tag no-shared-merge-tree: Old syntax is not allowed
 
 -- Schema check
 SELECT name FROM system.columns WHERE table = 'zookeeper_watches' AND database = 'system' ORDER BY position;

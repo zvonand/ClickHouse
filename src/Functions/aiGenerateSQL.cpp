@@ -43,7 +43,7 @@ public:
     }
 
 private:
-    static constexpr float default_temp = 0.1f;
+    static constexpr float default_temp = 0.0f;
     static constexpr size_t prompt_arg_index = 1;
     static constexpr size_t temp_arg_idx = 2;
 
@@ -193,7 +193,7 @@ The first argument is a named collection that specifies the provider, model, end
         .arguments = {
             {"collection", "Name of a named collection containing provider credentials and configuration.", {"String"}},
             {"query", "Natural-language description of the desired query.", {"String"}},
-            {"temperature", "Sampling temperature controlling randomness. Default: `0.1`.", {"Float64"}},
+            {"temperature", "Sampling temperature controlling randomness. Default: `0.0`.", {"Float64"}},
         },
         .returned_value = {"The generated SQL query as text, or the default value for the column type (empty string) if the request failed and `ai_function_throw_on_error` is disabled.", {"String"}},
         .examples = {

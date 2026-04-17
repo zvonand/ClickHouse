@@ -1,7 +1,7 @@
--- Tags: no-fasttest, no-msan
+-- Tags: no-fasttest, no-msan, no-parallel, no-parallel-replicas
 -- Tag no-fasttest: Depends on AWS
 -- Tag no-msan: delta-kernel is not built with msan
--- Tag no-parallel: the cache is system-wide so concurrent queries can influence the cache
+-- Tag no-parallel, no-parallel-replicas: the cache is system-wide so concurrent queries can influence the cache
 
 
 system drop parquet metadata cache;
@@ -24,8 +24,8 @@ system flush logs query_log;
 
 select ProfileEvents['ParquetMetadataCacheHits'], ProfileEvents['ParquetMetadataCacheMisses']
 from system.query_log
-where (log_comment = '04103-pq-cache-miss-and-load') and (type = 'QueryFinish');
+where (log_comment = '04103-pq-cache-miss-and-load') and (type = 'QueryFinish') and current_database = currentDatabase();
 
 select ProfileEvents['ParquetMetadataCacheHits'], ProfileEvents['ParquetMetadataCacheMisses']
 from system.query_log
-where (log_comment = '04103-pq-cache-hit') and (type = 'QueryFinish');
+where (log_comment = '04103-pq-cache-hit') and (type = 'QueryFinish') and current_database = currentDatabase();

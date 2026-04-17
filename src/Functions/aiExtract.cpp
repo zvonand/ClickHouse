@@ -162,8 +162,9 @@ private:
                     return {};
             }
         }
-        catch (...) // NOLINT(bugprone-empty-catch) best-effort; if it's not JSON we just return the raw text
+        catch (...)
         {
+            tryLogCurrentException(__PRETTY_FUNCTION__);
         }
         return raw;
     }

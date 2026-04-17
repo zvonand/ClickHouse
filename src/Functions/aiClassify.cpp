@@ -143,8 +143,9 @@ private:
             if (obj && obj->has("category"))
                 return obj->getValue<String>("category");
         }
-        catch (...) // NOLINT(bugprone-empty-catch) best-effort JSON extraction; fall back to raw text
+        catch (...)
         {
+            tryLogCurrentException(__PRETTY_FUNCTION__);
         }
         return raw_response;
     }

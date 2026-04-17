@@ -341,6 +341,84 @@ def test_output_subject_encoding(started_cluster):
     )
 
 
+def test_output_incompatible_schema(started_cluster):
+    # type: (ClickHouseCluster) -> None
+
+    # Pre-register a schema under a subject with a required `value` field,
+    # then try to register an incompatible schema (different required field,
+    # no default) from ClickHouse. The Schema Registry returns HTTP 409 under
+    # the default BACKWARD compatibility, and ClickHouse should surface a
+    # clear INCOMPATIBLE_SCHEMA error that includes the registry's own
+    # `message` and the hint about setting compatibility to NONE.
+
+    instance = started_cluster.instances["dummy"]  # type: ClickHouseInstance
+    schema_registry_url = "http://{}:{}".format(
+        started_cluster.schema_registry_host, started_cluster.schema_registry_port
+    )
+    local_registry_url = "http://localhost:{}".format(
+        started_cluster.schema_registry_port
+    )
+
+    subject = "test_output_incompatible_subject"
+    # Distinctive field name we can look for in the registry's error message
+    # to verify we correctly propagate the server-side details.
+    unique_field_name = "clickhouse_test_field_qwerty_12345"
+
+    # Ensure strict compatibility on the subject (BACKWARD is the global default,
+    # but we set it explicitly so the test does not depend on registry config).
+    req = urllib.request.Request(
+        local_registry_url + "/config/" + parse.quote(subject, safe=""),
+        data=b'{"compatibility": "BACKWARD"}',
+        headers={"Content-Type": "application/vnd.schemaregistry.v1+json"},
+        method="PUT",
+    )
+    urllib.request.urlopen(req).read()
+
+    # Register a prior version of the schema with a required `value` field.
+    prior_schema = {
+        "type": "record",
+        "name": "test_record_incompatible",
+        "fields": [{"name": "value", "type": "long"}],
+    }
+    req = urllib.request.Request(
+        local_registry_url + "/subjects/" + parse.quote(subject, safe="") + "/versions",
+        data=json.dumps({"schema": json.dumps(prior_schema)}).encode(),
+        headers={"Content-Type": "application/vnd.schemaregistry.v1+json"},
+        method="POST",
+    )
+    urllib.request.urlopen(req).read()
+
+    # Now try to register an incompatible schema from ClickHouse: the column
+    # has a distinctive name that does not exist in the prior schema and has
+    # no default value. Under BACKWARD compat this is rejected as
+    # READER_FIELD_MISSING_DEFAULT_VALUE, and the registry's response
+    # includes the offending field name.
+    run_query(
+        instance,
+        "create table avro_output_incompatible({0} Int64) engine = Memory()".format(
+            unique_field_name
+        ),
+    )
+    run_query(instance, "insert into avro_output_incompatible values (1),(2),(3)")
+
+    settings = {
+        "format_avro_schema_registry_url": schema_registry_url,
+        "output_format_avro_confluent_subject": subject,
+    }
+    error = instance.http_query_and_get_error(
+        "select * from avro_output_incompatible format AvroConfluent",
+        params=settings,
+    )
+
+    logging.info("ClickHouse error for incompatible schema: %s", error)
+
+    assert "INCOMPATIBLE_SCHEMA" in error
+    assert "HTTP 409 Conflict" in error
+    assert subject in error
+    # Message coming from Confluent Schema Registry itself, if flaky can be removed
+    assert "incompatible with an earlier schema" in error
+
+
 def test_select_auth_encoded_complex(started_cluster):
     # type: (ClickHouseCluster) -> None
 

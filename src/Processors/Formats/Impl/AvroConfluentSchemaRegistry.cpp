@@ -20,6 +20,7 @@
 #include <Poco/Net/HTTPCredentials.h>
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/HTTPResponse.h>
+#include <Poco/StreamCopier.h>
 #include <Poco/URI.h>
 
 
@@ -38,6 +39,7 @@ namespace ErrorCodes
 {
     extern const int BAD_ARGUMENTS;
     extern const int INCORRECT_DATA;
+    extern const int INCOMPATIBLE_SCHEMA;
 }
 
 ConfluentSchemaRegistry::ConfluentSchemaRegistry(const std::string & base_url_, size_t schema_cache_max_size)
@@ -180,10 +182,40 @@ uint32_t ConfluentSchemaRegistry::registerSchema(const std::string & subject, co
             os << body_str;
 
             Poco::Net::HTTPResponse response;
-            std::istream * response_body = receiveResponse(*session, request, response, false);
+            std::istream & response_stream = session->receiveResponse(response);
+
+            if (response.getStatus() == Poco::Net::HTTPResponse::HTTP_CONFLICT)
+            {
+                std::string response_body;
+                Poco::StreamCopier::copyToString(response_stream, response_body);
+
+                /// Confluent Schema Registry returns a JSON object with an "error_code" and a human-readable "message".
+                std::string registry_message = response_body;
+                LOG_TRACE(getLogger("ConfluentSchemaRegistry"), "Received HTTP 409 Conflict from Schema Registry for subject '{}': {}", subject, registry_message);
+                try
+                {
+                    Poco::JSON::Parser error_parser;
+                    auto error_json = error_parser.parse(response_body).extract<Poco::JSON::Object::Ptr>();
+                    if (error_json && error_json->has("message"))
+                        registry_message = error_json->getValue<std::string>("message");
+                }
+                catch (const Poco::Exception &) // NOLINT(bugprone-empty-catch)
+                {
+                    /// Fall back to the raw body if it is not JSON.
+                }
+
+                throw Exception(
+                    ErrorCodes::INCOMPATIBLE_SCHEMA,
+                    "Schema Registry returned HTTP 409 Conflict for subject '{}': {}. This typically means the schema is "
+                    "incompatible with an existing version under the subject's compatibility level. One way to resolve "
+                    "it is to set the compatibility level to NONE for this subject on the Confluent Schema Registry.",
+                    subject, registry_message);
+            }
+
+            assertResponseIsOk(request.getURI(), response, response_stream, false);
 
             Poco::JSON::Parser parser;
-            auto json_body = parser.parse(*response_body).extract<Poco::JSON::Object::Ptr>();
+            auto json_body = parser.parse(response_stream).extract<Poco::JSON::Object::Ptr>();
             uint32_t schema_id = json_body->getValue<uint32_t>("id");
             LOG_TRACE(getLogger("ConfluentSchemaRegistry"), "Successfully registered schema under subject '{}', id = {}", subject, schema_id);
             return schema_id;

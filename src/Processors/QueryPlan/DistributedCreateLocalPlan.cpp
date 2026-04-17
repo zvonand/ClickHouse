@@ -45,7 +45,6 @@ std::unique_ptr<QueryPlan> createLocalPlan(
         .ignoreASTOptimizations();
 
     select_query_options.build_logical_plan = build_logical_plan;
-    select_query_options.is_distributed_local_plan = true;
 
     if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
     {

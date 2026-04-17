@@ -594,7 +594,16 @@ void QueryAnalyzer::mergeWindowWithParentWindow(const QueryTreeNodePtr & window_
 void QueryAnalyzer::replaceNodesWithPositionalArguments(QueryTreeNodePtr & node_list, const QueryTreeNodes & projection_nodes, IdentifierResolveScope & scope)
 {
     const auto & settings = scope.context->getSettingsRef();
-    if (!settings[Setting::enable_positional_arguments])
+    const bool is_view_inner = scope.context->isViewInnerQuery();
+    /// Positional arguments are only resolved on the initiator, not on remote/local-plan nodes,
+    /// to avoid double-resolution of already-rewritten distributed queries.
+    /// Both guards are bypassed for view inner contexts: views are expanded on remote nodes
+    /// (not on the initiator), so their positional arguments can only be resolved there,
+    /// regardless of the enable_positional_arguments setting or query_kind.
+    if (!settings[Setting::enable_positional_arguments] && !is_view_inner)
+        return;
+    if (scope.context->getClientInfo().query_kind != ClientInfo::QueryKind::INITIAL_QUERY
+        && !is_view_inner)
         return;
 
     auto & node_list_typed = node_list->as<ListNode &>();

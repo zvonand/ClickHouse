@@ -567,6 +567,11 @@ protected:
     bool is_internal_query = false;
     /// A flag, used to detect sub-operations of background operations - in this case we won't need to build another background contexts
     bool is_background_operation = false;
+    /// True when this context belongs to the inner query of an expanded view.
+    /// Positional arguments inside views must be resolved even on remote/secondary nodes where
+    /// enable_positional_arguments would otherwise be skipped (views are expanded on remote nodes,
+    /// not on the initiator).
+    bool is_view_inner_query = false;
 
     inline static ContextPtr global_context_instance;
     inline static ContextPtr background_context_instance;   /// Global holder to maintain ownership of background_context
@@ -1611,6 +1616,9 @@ public:
 
     bool isInternalQuery() const { return is_internal_query; }
     void setInternalQuery(bool internal) { is_internal_query = internal; }
+
+    bool isViewInnerQuery() const { return is_view_inner_query; }
+    void setIsViewInnerQuery(bool value) { is_view_inner_query = value; }
 
     ActionLocksManagerPtr getActionLocksManager() const;
 

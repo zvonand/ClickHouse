@@ -7,6 +7,7 @@
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/IDataType.h>
 #include <Common/Exception.h>
+#include <Common/assert_cast.h>
 
 #include <Poco/JSON/Object.h>
 #include <Poco/JSON/Array.h>
@@ -15,15 +16,10 @@
 namespace DB
 {
 
-namespace ErrorCodes
-{
-    extern const int BAD_ARGUMENTS;
-}
-
 namespace
 {
 
-static bool isArrayOfString(const IDataType & type)
+bool isArrayOfString(const IDataType & type)
 {
     const auto * array_type = typeid_cast<const DataTypeArray *>(&type);
     return array_type && isString(array_type->getNestedType());
@@ -71,10 +67,8 @@ private:
 
     Array getCategories(const ColumnsWithTypeAndName & arguments) const
     {
-        const auto * col_const = checkAndGetColumn<ColumnConst>(arguments[categories_arg_index].column.get());
-        if (!col_const)
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "`categories` argument of function {} must be a constant Array(String)", name);
-        return (*col_const->getDataColumnPtr())[0].safeGet<Array>();
+        const auto & col_const = assert_cast<const ColumnConst &>(*arguments[categories_arg_index].column);
+        return (*col_const.getDataColumnPtr())[0].safeGet<Array>();
     }
 
     String buildSystemPrompt(const ColumnsWithTypeAndName & arguments) const override

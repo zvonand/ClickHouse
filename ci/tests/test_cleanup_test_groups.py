@@ -32,7 +32,7 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _CLICKHOUSE_TEST = str(_REPO_ROOT / "tests" / "clickhouse-test")
-_TEST = "00058_select_sleep_3"
+_TEST = "01_parallel_sleep"
 
 # Import helpers directly from clickhouse-test so path changes propagate
 # automatically.  runpy.run_path handles the missing .py extension and the
@@ -44,7 +44,7 @@ _GROUP_PID_NAME = _ct["_GROUP_PID_NAME"]
 
 # clickhouse-test defaults args.tmp to args.queries when running from the repo,
 # so per-test stdout files end up under tests/queries/0_stateless/.
-_SUITE_TMP = _REPO_ROOT / "tests" / "queries" / "0_stateless"
+_STDOUT = _REPO_ROOT / "ci" / "tests" / "0_stateless" / "test.stdout"
 
 
 def test_cleanup_kills_orphaned_test_process():
@@ -58,11 +58,10 @@ def test_cleanup_kills_orphaned_test_process():
 
     # Remove any leftover stdout files from a previous (possibly interrupted) run
     # so we get a clean signal when waiting for the file to appear below.
-    for _f in _SUITE_TMP.glob(f"{_TEST}*.stdout"):
-        _f.unlink(missing_ok=True)
+    _STDOUT.unlink(missing_ok=True)
 
     _ch_proc = subprocess.Popen(
-        [sys.executable, _CLICKHOUSE_TEST, _TEST],
+        [sys.executable, _CLICKHOUSE_TEST, "--queries", "ci/tests", _TEST],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -75,13 +74,11 @@ def test_cleanup_kills_orphaned_test_process():
             # rather than, e.g., still parsing options or connecting to the server.
             deadline_stdout = time.monotonic() + 15
             while time.monotonic() < deadline_stdout:
-                p = list(_SUITE_TMP.glob(f"{_TEST}*.stdout"))
-                if not p: continue
-                if p[0].stat().st_size:
+                if _STDOUT.exists() and _STDOUT.stat().st_size:
                     break
                 time.sleep(0.5)
             else:
-                assert False, f"{_SUITE_TMP}/{_TEST} has no stdout"
+                assert False, f"{_STDOUT} is empty"
 
             # The PGID file is written by clickhouse-test synchronously right after
             # Popen(), before the bash script starts.  By the time SELECT 1 has

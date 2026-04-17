@@ -2,9 +2,7 @@
 #include <Disks/DiskObjectStorage/MetadataStorages/IMetadataStorage.h>
 #include <Disks/DiskObjectStorage/DiskObjectStorageTransaction.h>
 #include <Disks/DiskObjectStorage/DiskObjectStorage.h>
-#include <Common/CurrentThread.h>
-#include <Common/Scheduler/IResourceManager.h>
-#include <Interpreters/Context.h>
+#include <Disks/DiskObjectStorage/IOSchedulingSettings.h>
 #include <Disks/DiskObjectStorage/ObjectStorages/StoredObject.h>
 #include <IO/ForkWriteBuffer.h>
 #include <IO/WriteBuffer.h>

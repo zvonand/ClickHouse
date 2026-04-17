@@ -1,4 +1,5 @@
 #include <Disks/DiskObjectStorage/DiskObjectStorage.h>
+#include <Disks/DiskObjectStorage/IOSchedulingSettings.h>
 #include <Common/CurrentThread.h>
 
 #include <IO/ReadBufferFromString.h>
@@ -11,7 +12,6 @@
 #include <Common/logger_useful.h>
 #include <Common/filesystemHelpers.h>
 #include <Common/CurrentMetrics.h>
-#include <Common/Scheduler/IResourceManager.h>
 #include <IO/CachedInMemoryReadBufferFromFile.h>
 #include <Disks/IO/ReadBufferFromRemoteFSGather.h>
 #include <Disks/IO/AsynchronousBoundedReadBuffer.h>
@@ -51,38 +51,6 @@ DiskTransactionPtr DiskObjectStorage::createTransaction()
     if (use_fake_transaction)
         return std::make_shared<FakeDiskTransaction>(*this);
     return createObjectStorageTransaction();
-}
-
-namespace
-{
-
-template <class Settings>
-Settings updateIOSchedulingSettingsImpl(const Settings & settings, const std::string & read_resource_name, const std::string & write_resource_name)
-{
-    if (read_resource_name.empty() && write_resource_name.empty())
-        return settings;
-    if (auto query_context = CurrentThread::tryGetQueryContext())
-    {
-        Settings result(settings);
-        if (!read_resource_name.empty())
-            result.io_scheduling.read_resource_link = query_context->getWorkloadClassifier()->get(read_resource_name);
-        if (!write_resource_name.empty())
-            result.io_scheduling.write_resource_link = query_context->getWorkloadClassifier()->get(write_resource_name);
-        return result;
-    }
-    return settings;
-}
-
-}
-
-ReadSettings updateIOSchedulingSettings(const ReadSettings & settings, const std::string & read_resource_name, const std::string & write_resource_name)
-{
-    return updateIOSchedulingSettingsImpl(settings, read_resource_name, write_resource_name);
-}
-
-WriteSettings updateIOSchedulingSettings(const WriteSettings & settings, const std::string & read_resource_name, const std::string & write_resource_name)
-{
-    return updateIOSchedulingSettingsImpl(settings, read_resource_name, write_resource_name);
 }
 
 ObjectStoragePtr DiskObjectStorage::getObjectStorage()
@@ -306,7 +274,7 @@ void DiskObjectStorage::copyFile( /// NOLINT
         /// It may use s3-server-side copy
         auto & to_disk_object_storage = dynamic_cast<DiskObjectStorage &>(to_disk);
         auto transaction = createObjectStorageTransactionToAnotherDisk(to_disk_object_storage);
-        transaction->copyFile(from_file_path, to_file_path, /*read_settings*/ {}, /*write_settings*/ {});
+        transaction->copyFile(from_file_path, to_file_path, read_settings, write_settings);
         transaction->commit();
     }
     else
@@ -932,9 +900,8 @@ std::unique_ptr<WriteBufferFromFileBase> DiskObjectStorage::writeFile(
 {
     LOG_TEST(log, "Write file: {}", path);
 
-    WriteSettings write_settings = updateIOSchedulingSettings(settings, getReadResourceName(), getWriteResourceName());
     auto transaction = createObjectStorageTransaction();
-    return transaction->writeFileWithAutoCommit(path, buf_size, mode, write_settings);
+    return transaction->writeFileWithAutoCommit(path, buf_size, mode, settings);
 }
 
 Strings DiskObjectStorage::getBlobPath(const String & path) const

@@ -2079,11 +2079,11 @@ class TestCase:
                 if result.status == TestStatus.FAIL:
                     fail_count += 1
             return (
-                f"\n\n--- Failure reproducibility check ---\n"
+                f"--- Failure reproducibility check ---\n"
                 f"Failed {fail_count} out of {max_reruns} reruns.\n"
             )
 
-        diagnosis_lines = ["\n\n--- Randomized settings diagnosis ---"]
+        diagnosis_lines = ["--- Randomized settings diagnosis ---"]
 
         # Step 1: Re-run with the same settings within the time budget
         diagnosis_lines.append(

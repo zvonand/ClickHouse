@@ -1754,7 +1754,7 @@ SET exclude_materialize_skip_indexes_on_insert = DEFAULT; -- reset setting to de
     DECLARE(Bool, per_part_index_stats, false, R"(
         Logs index statistics per part
 )", 0) \
-    DECLARE(Bool, materialize_statistics_on_insert, true, R"(
+    DECLARE(Bool, materialize_statistics_on_insert, false, R"(
 If INSERTs build and insert statistics. If disabled, statistics will be build and stored during merges or by explicit MATERIALIZE STATISTICS
 )", 0) \
     DECLARE(String, ignore_data_skipping_indices, "", R"(
@@ -3884,6 +3884,11 @@ Possible values:
     DECLARE(Bool, read_in_order_use_virtual_row, false, R"(
 Use virtual row while reading in order of primary key or its monotonic function fashion. It is useful when searching over multiple parts as only relevant ones are touched.
 )", 0) \
+    DECLARE(Bool, read_in_order_use_virtual_row_per_block, false, R"(
+When enabled together with `read_in_order_use_virtual_row`, emit a virtual row after each block read (not only at the beginning of each part).
+This allows `MergingSortedTransform` to reprioritize sources more frequently, which is useful when downstream filters discard many rows and data is distributed unevenly across parts.
+Note that it disables `read_in_order_use_buffering` optimization and preliminary merge (`read_in_order_two_level_merge_threshold`) for reading.
+)", 0) \
     DECLARE(Bool, optimize_aggregation_in_order, false, R"(
 Enables [GROUP BY](/sql-reference/statements/select/group-by) optimization in [SELECT](../../sql-reference/statements/select/index.md) queries for aggregating data in corresponding order in [MergeTree](../../engines/table-engines/mergetree-family/mergetree.md) tables.
 
@@ -5089,6 +5094,14 @@ Possible values:
 )", 0) \
     DECLARE(Bool, asterisk_include_alias_columns, false, R"(
 Include [ALIAS](../../sql-reference/statements/create/table.md/#alias) columns for wildcard query (`SELECT *`).
+
+Possible values:
+
+- 0 - disabled
+- 1 - enabled
+)", 0) \
+    DECLARE(Bool, asterisk_include_virtual_columns, false, R"(
+Include virtual columns for wildcard query (`SELECT *`).
 
 Possible values:
 
@@ -7563,6 +7576,9 @@ Limits the maximum size of the adaptive buffer used when writing to archive file
     DECLARE(UInt64, max_bytes_before_external_join, 0, R"(
 If set to a non-zero value and `join_algorithm` is `hash`, `parallel_hash`, `default`, or `auto`, the hash join will automatically be converted to grace hash join to enable spilling to disk when the right-side data exceeds this many bytes. When set to 0 (default), automatic spilling is disabled.
 )", 0) \
+    DECLARE(Bool, enable_join_fixed_hash_table_conversion, true, R"(
+Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range.
+)", 0) \
     \
     /* ####################################################### */ \
     /* ########### START OF EXPERIMENTAL FEATURES ############ */ \
@@ -7738,6 +7754,12 @@ Allow to execute `insert` queries into iceberg.
     DECLARE(Bool, allow_experimental_iceberg_compaction, false, R"(
 Allow to explicitly use 'OPTIMIZE' for iceberg tables.
 )", EXPERIMENTAL) \
+    DECLARE(Bool, allow_iceberg_remove_orphan_files, false, R"(
+Allow to use 'ALTER TABLE ... EXECUTE remove_orphan_files()' for iceberg tables.
+)", EXPERIMENTAL) \
+    DECLARE(UInt64, iceberg_orphan_files_older_than_seconds, 259200, R"(
+Default age threshold in seconds for orphan file removal in Iceberg tables. Files newer than this are not considered orphans. Used when the older_than argument is omitted from the remove_orphan_files() procedure call. Default is 259200 (3 days).
+)", EXPERIMENTAL) \
     DECLARE(Bool, allow_experimental_expire_snapshots, false, R"(
 Allow to execute experimental Iceberg command `ALTER TABLE ... EXECUTE expire_snapshots`.
 )", EXPERIMENTAL) \
@@ -7773,6 +7795,9 @@ Possible values:
 )", EXPERIMENTAL) \
     DECLARE(UInt64, distributed_plan_max_rows_to_broadcast, 20000, R"(
 Maximum rows to use broadcast join instead of shuffle join in distributed query plan.
+)", EXPERIMENTAL) \
+    DECLARE(Bool, distributed_plan_prefer_replicas_over_workers, false, R"(
+Serialize the distributed query plan for execution at replicas.
 )", EXPERIMENTAL) \
     DECLARE(Bool, allow_experimental_ytsaurus_table_engine, false, R"(
 Experimental table engine for integration with YTsaurus.

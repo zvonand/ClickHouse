@@ -46,10 +46,7 @@
 #include <Types.hh>
 #include <ValidSchema.hh>
 
-
 #include <base/EnumReflection.h>
-
-
 
 namespace DB
 {
@@ -989,7 +986,6 @@ AvroDeserializer::Action AvroDeserializer::createAction(const Block & header, co
     }
 }
 
-
 AvroDeserializer::AvroDeserializer(DataTypePtr data_type, const std::string & column_name, avro::ValidSchema schema, bool allow_missing_fields, bool null_as_default_, const FormatSettings & settings_)
     : null_as_default(null_as_default_), settings(settings_)
 {
@@ -1050,7 +1046,6 @@ void AvroDeserializer::deserializeRow(MutableColumns & columns, avro::Decoder & 
             columns[i]->insertDefault();
     }
 }
-
 
 AvroRowInputFormat::AvroRowInputFormat(SharedHeader header_, ReadBuffer & in_, Params params_, const FormatSettings & format_settings_)
     : IRowInputFormat(header_, in_, params_), format_settings(format_settings_)
@@ -1367,7 +1362,6 @@ void registerAvroSchemaReader(FormatFactory & factory)
     });
 
 }
-
 
 }
 

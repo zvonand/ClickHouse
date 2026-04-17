@@ -694,7 +694,7 @@ def main():
             results.append(
                 Result(
                     name="Diagnostics",
-                    status=Result.Status.SUCCESS,
+                    status=Result.Status.OK,
                     info=f"Diagnosed {len(diag_results)} out of {len(failed_tests)} failed test(s)",
                 ).set_timing(stopwatch=diag_stopwatch)
             )

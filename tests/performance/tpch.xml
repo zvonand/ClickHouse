@@ -1,6 +1,5 @@
 <!-- https://clickhouse.com/docs/getting-started/example-datasets/tpch -->
 <!-- Scale factor: 10 -->
-<!-- cache-bust: force fresh perf run -->
 <test>
 
 <settings file="../benchmarks/tpc-h/settings.json"/>

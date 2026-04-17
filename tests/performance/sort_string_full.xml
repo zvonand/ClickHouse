@@ -18,7 +18,7 @@
     <fill_query>
         INSERT INTO sort_string_full
         SELECT randomPrintableASCII(rand() % 100 + 1) AS str_col
-        FROM numbers(5000000)
+        FROM numbers(3000000)
     </fill_query>
 
     <query>SELECT * FROM sort_string_full ORDER BY str_col FORMAT Null SETTINGS max_threads = {threads}</query>

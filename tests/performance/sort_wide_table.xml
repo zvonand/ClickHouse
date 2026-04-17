@@ -56,7 +56,7 @@
             rand64(), rand64(), rand64(), rand64(), rand64(), rand64(), rand64(), rand64(),
             rand64(), rand64(), rand64(), rand64(), rand64(), rand64(), rand64(), rand64(),
             rand64(), rand64(), rand64(), rand64(), rand64(), rand64(), rand64(), rand64()
-        FROM numbers(4000000)
+        FROM numbers(800000)
     </fill_query>
 
     <query>SELECT * FROM sort_wide_16 ORDER BY k1, k2 FORMAT Null SETTINGS max_threads = {threads}</query>

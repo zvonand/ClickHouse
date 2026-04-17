@@ -128,6 +128,9 @@ struct PreparedStatementInfo
     std::shared_ptr<arrow::Schema> dataset_schema;
     /// Schema of the parameters (empty fields for now since '?' carries no type info).
     std::shared_ptr<arrow::Schema> parameter_schema;
+    /// Bound parameter values (set via DoPut with CommandPreparedStatementQuery).
+    /// Contains one row with one column per '?' placeholder.
+    std::shared_ptr<arrow::RecordBatch> bound_parameters;
 };
 
 /// Keeps information about calls - e.g. blocks extracted from query pipelines, flight tickets, poll descriptors.
@@ -197,7 +200,10 @@ public:
     String createPreparedStatement(PreparedStatementInfo info);
 
     /// Returns information about a prepared statement by handle.
-    [[nodiscard]] arrow::Result<std::shared_ptr<const PreparedStatementInfo>> getPreparedStatement(const String & handle) const;
+    [[nodiscard]] arrow::Result<std::shared_ptr<PreparedStatementInfo>> getPreparedStatement(const String & handle) const;
+
+    /// Binds parameter values to a prepared statement.
+    [[nodiscard]] arrow::Status bindParameters(const String & handle, std::shared_ptr<arrow::RecordBatch> params);
 
     /// Closes (removes) a prepared statement by handle.
     void closePreparedStatement(const String & handle);
@@ -237,7 +243,7 @@ private:
     /// `tickets_by_expiration_time` and `poll_descriptors_by_expiration_time` are sorted by `expiration_time` so `std::set` is used.
     std::set<std::pair<Timestamp, String>> tickets_by_expiration_time TSA_GUARDED_BY(mutex);
     std::set<std::pair<Timestamp, String>> poll_descriptors_by_expiration_time TSA_GUARDED_BY(mutex);
-    std::unordered_map<String, std::shared_ptr<const PreparedStatementInfo>> prepared_statements TSA_GUARDED_BY(mutex);
+    std::unordered_map<String, std::shared_ptr<PreparedStatementInfo>> prepared_statements TSA_GUARDED_BY(mutex);
     std::optional<Timestamp> next_expiration_time TSA_GUARDED_BY(mutex);
     mutable std::condition_variable next_expiration_time_updated;
     bool stop_waiting_next_expiration_time TSA_GUARDED_BY(mutex) = false;

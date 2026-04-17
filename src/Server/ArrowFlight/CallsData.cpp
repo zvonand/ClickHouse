@@ -541,19 +541,29 @@ String CallsData::createPreparedStatement(PreparedStatementInfo info)
 {
     String handle = generatePreparedStatementHandle();
     LOG_DEBUG(log, "Creating prepared statement {}", handle);
-    auto shared_info = std::make_shared<const PreparedStatementInfo>(std::move(info));
+    auto shared_info = std::make_shared<PreparedStatementInfo>(std::move(info));
     std::lock_guard lock{mutex};
     prepared_statements.emplace(handle, std::move(shared_info));
     return handle;
 }
 
-arrow::Result<std::shared_ptr<const PreparedStatementInfo>> CallsData::getPreparedStatement(const String & handle) const
+arrow::Result<std::shared_ptr<PreparedStatementInfo>> CallsData::getPreparedStatement(const String & handle) const
 {
     std::lock_guard lock{mutex};
     auto it = prepared_statements.find(handle);
     if (it == prepared_statements.end())
         return arrow::Status::KeyError("Prepared statement handle not found");
     return it->second;
+}
+
+arrow::Status CallsData::bindParameters(const String & handle, std::shared_ptr<arrow::RecordBatch> params)
+{
+    std::lock_guard lock{mutex};
+    auto it = prepared_statements.find(handle);
+    if (it == prepared_statements.end())
+        return arrow::Status::KeyError("Prepared statement handle not found");
+    it->second->bound_parameters = std::move(params);
+    return arrow::Status::OK();
 }
 
 void CallsData::closePreparedStatement(const String & handle)

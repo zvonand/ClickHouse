@@ -681,11 +681,21 @@ static std::optional<CommandSelectorResult> commandSelectorImpl(const google::pr
     }
     else if (any_msg.Is<arrow::flight::protocol::sql::CommandPreparedStatementQuery>())
     {
-        return arrow::Status::NotImplemented("sql::CommandPreparedStatementQuery is not yet implemented");
+        arrow::flight::protocol::sql::CommandPreparedStatementQuery command;
+        if (!any_msg.UnpackTo(&command))
+            return arrow::Status::SerializationError("Deserialization of sql::CommandPreparedStatementQuery failed.");
+        if (command.prepared_statement_handle().empty())
+            return arrow::Status::Invalid("CommandPreparedStatementQuery: prepared_statement_handle must not be empty");
+        return SQLSet{command.prepared_statement_handle(), {}, {}};
     }
     else if (any_msg.Is<arrow::flight::protocol::sql::CommandPreparedStatementUpdate>())
     {
-        return arrow::Status::NotImplemented("sql::CommandPreparedStatementUpdate is not yet implemented");
+        arrow::flight::protocol::sql::CommandPreparedStatementUpdate command;
+        if (!any_msg.UnpackTo(&command))
+            return arrow::Status::SerializationError("Deserialization of sql::CommandPreparedStatementUpdate failed.");
+        if (command.prepared_statement_handle().empty())
+            return arrow::Status::Invalid("CommandPreparedStatementUpdate: prepared_statement_handle must not be empty");
+        return SQLSet{command.prepared_statement_handle(), {}, {}};
     }
     else
     {

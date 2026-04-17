@@ -128,7 +128,8 @@ CommandStatementIngest = _globals['CommandStatementIngest']
 # Prepared-statement messages (separate proto file to avoid conflicts).
 # Defines: ActionCreatePreparedStatementRequest/Result,
 #          ActionClosePreparedStatementRequest,
-#          CommandPreparedStatementQuery.
+#          CommandPreparedStatementQuery, CommandPreparedStatementUpdate,
+#          DoPutPreparedStatementResult.
 # ---------------------------------------------------------------------------
 _PREP_STMT_DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
     b'\n\x1fflightsql/flightsql_extra.proto\x12\x19arrow.flight.protocol.sql'
@@ -143,6 +144,11 @@ _PREP_STMT_DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
     b'\x12!\n\x19prepared_statement_handle\x18\x01 \x01(\x0c'
     b'"B\n\x1dCommandPreparedStatementQuery'
     b'\x12!\n\x19prepared_statement_handle\x18\x01 \x01(\x0c'
+    b'"C\n\x1eCommandPreparedStatementUpdate'
+    b'\x12!\n\x19prepared_statement_handle\x18\x01 \x01(\x0c'
+    b'"d\n\x1cDoPutPreparedStatementResult'
+    b'\x12&\n\x19prepared_statement_handle\x18\x01 \x01(\x0cH\x00\x88\x01\x01'
+    b'B\x1c\n\x1a_prepared_statement_handle'
     b'b\x06proto3'
 )
 
@@ -154,6 +160,8 @@ ActionCreatePreparedStatementRequest = _globals['ActionCreatePreparedStatementRe
 ActionCreatePreparedStatementResult = _globals['ActionCreatePreparedStatementResult']
 ActionClosePreparedStatementRequest = _globals['ActionClosePreparedStatementRequest']
 CommandPreparedStatementQuery = _globals['CommandPreparedStatementQuery']
+CommandPreparedStatementUpdate = _globals['CommandPreparedStatementUpdate']
+DoPutPreparedStatementResult = _globals['DoPutPreparedStatementResult']
 
 # ---------------------------------------------------------------------------
 # Flight.proto action messages (arrow.flight.protocol package)
@@ -556,6 +564,53 @@ class PreparedStatement:
         self.handle = handle
         self.dataset_schema = dataset_schema
         self.parameter_schema = parameter_schema
+
+    def bind_parameters(self, params: pa.RecordBatch):
+        """Bind parameter values via DoPut with CommandPreparedStatementQuery."""
+        cmd = CommandPreparedStatementQuery(prepared_statement_handle=self.handle)
+        descriptor = flight_descriptor(cmd)
+        options = self.client._flight_call_options()
+        writer, reader = self.client.client.do_put(descriptor, params.schema, options)
+        writer.write_batch(params)
+        writer.done_writing()
+        result_buf = reader.read()
+        writer.close()
+        if result_buf:
+            result = DoPutPreparedStatementResult()
+            result.ParseFromString(result_buf.to_pybytes())
+            if result.HasField('prepared_statement_handle'):
+                self.handle = result.prepared_statement_handle
+
+    def execute(self) -> pa.Table:
+        """Execute the prepared statement query and return the result table."""
+        cmd = CommandPreparedStatementQuery(prepared_statement_handle=self.handle)
+        descriptor = flight_descriptor(cmd)
+        options = self.client._flight_call_options()
+        flight_info = self.client.client.get_flight_info(descriptor, options)
+        tables = []
+        for endpoint in flight_info.endpoints:
+            reader = self.client.do_get(endpoint.ticket)
+            tables.append(reader.read_all())
+        return pa.concat_tables(tables)
+
+    def execute_update(self) -> int:
+        """Execute the prepared statement as an update (INSERT/DDL) and return affected row count."""
+        cmd = CommandPreparedStatementUpdate(prepared_statement_handle=self.handle)
+        descriptor = flight_descriptor(cmd)
+        options = self.client._flight_call_options()
+
+        # DoPut with CommandPreparedStatementUpdate - send empty batch
+        schema = pa.schema([])
+        writer, reader = self.client.client.do_put(descriptor, schema, options)
+        writer.done_writing()
+        result_buf = reader.read()
+        writer.close()
+
+        if result_buf:
+            update_result = DoPutUpdateResult()
+            update_result.ParseFromString(result_buf.to_pybytes())
+            return update_result.record_count
+        return 0
 
     def close(self):
         """Close the prepared statement on the server."""

@@ -95,6 +95,24 @@ private:
         return arguments[prompt_arg_index].column->getDataAt(row);
     }
 
+    /** Builds the OpenAI `response_format` schema object constraining the model to output one of the
+      * provided category labels. Given `categories = ['positive', 'negative', 'neutral']`:
+      *   {
+      *     "type": "json_schema",
+      *     "json_schema": {
+      *       "name": "classification",
+      *       "strict": true,
+      *       "schema": {
+      *         "type": "object",
+      *         "properties": {
+      *           "category": {"type": "string", "enum": ["positive", "negative", "neutral"]}
+      *         },
+      *         "required": ["category"],
+      *         "additionalProperties": false
+      *       }
+      *     }
+      *   }
+      */
     Poco::JSON::Object::Ptr buildResponseFormat(const ColumnsWithTypeAndName & arguments) const override
     {
         const auto categories = getCategories(arguments);
@@ -132,6 +150,7 @@ private:
 
     String postProcessResponse(const String & raw_response) const override
     {
+        /// If response is empty or not JSON, we just return it as-is
         if (raw_response.empty() || raw_response.front() != '{')
             return raw_response;
 
@@ -141,12 +160,14 @@ private:
             auto parsed = parser.parse(raw_response);
             auto obj = parsed.extract<Poco::JSON::Object::Ptr>();
             if (obj && obj->has("category"))
-                return obj->getValue<String>("category");
+                return obj->getValue<String>("category"); /// Successful parse
         }
         catch (...)
         {
             tryLogCurrentException(__PRETTY_FUNCTION__);
         }
+
+        /// Fallback
         return raw_response;
     }
 };

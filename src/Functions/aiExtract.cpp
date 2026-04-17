@@ -58,7 +58,7 @@ private:
 
     static bool isJSONSchema(const String & instruction)
     {
-        return !instruction.empty() && instruction.front() == '{';
+        return (!instruction.empty() && instruction.front() == '{');
     }
 
     String getInstruction(const ColumnsWithTypeAndName & arguments) const
@@ -73,8 +73,9 @@ private:
             return "Extract the following fields from the given text. Return a JSON object matching the requested schema exactly. "
                    "For any field not found in the text, use null. Field descriptions:\n"
                 + instruction;
-        return "Extract the following information from the given text: " + instruction
-            + ". Return only the extracted value, nothing else. If not found, return null.";
+        else
+            return "Extract the following information from the given text: " + instruction
+                + ". Return only the extracted value, nothing else. If not found, return null.";
     }
 
     std::string_view buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const override
@@ -82,6 +83,41 @@ private:
         return arguments[prompt_arg_index].column->getDataAt(row);
     }
 
+    /** Builds the OpenAI `response_format` schema object. Two shapes depending on `instruction_or_schema`:
+      *
+      * Schema mode — instruction is a JSON object like `{"name": "person name", "city": "city"}`:
+      *   {
+      *     "type": "json_schema",
+      *     "json_schema": {
+      *       "name": "extraction",
+      *       "strict": true,
+      *       "schema": {
+      *         "type": "object",
+      *         "properties": {
+      *           "name": {"type": ["string", "null"], "description": "person name"},
+      *           "city": {"type": ["string", "null"], "description": "city"}
+      *         },
+      *         "required": ["name", "city"],
+      *         "additionalProperties": false
+      *       }
+      *     }
+      *   }
+      *
+      * Instruction mode — free-form natural-language instruction:
+      *   {
+      *     "type": "json_schema",
+      *     "json_schema": {
+      *       "name": "extraction",
+      *       "strict": true,
+      *       "schema": {
+      *         "type": "object",
+      *         "properties": { "result": {"type": ["string", "null"]} },
+      *         "required": ["result"],
+      *         "additionalProperties": false
+      *       }
+      *     }
+      *   }
+      */
     Poco::JSON::Object::Ptr buildResponseFormat(const ColumnsWithTypeAndName & arguments) const override
     {
         const auto instruction = getInstruction(arguments);

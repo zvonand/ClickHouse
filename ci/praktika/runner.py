@@ -761,7 +761,7 @@ class Runner:
                 if _GH_Auth():
                     GH.post_commit_status(
                         name=workflow.name,
-                        status=GH.convert_to_gh_status(status_updated),
+                        status=status_updated,
                         description="",
                         url=Info().get_report_url(latest=False),
                     )
@@ -843,13 +843,13 @@ class Runner:
                 traceback.print_exc()
 
         # finally, set the status flag for GH Actions
-        pipeline_status = Result.Status.SUCCESS
+        pipeline_status = Result.Status.OK
         if not result.is_ok():
             if result.is_failure() and result.do_not_block_pipeline_on_failure():
                 # job explicitly says to not block ci even though result is failure
                 pass
             else:
-                pipeline_status = Result.Status.FAILED
+                pipeline_status = Result.Status.FAIL
         with open(env.JOB_OUTPUT_STREAM, "a", encoding="utf8") as f:
             print(
                 f"pipeline_status={pipeline_status}",

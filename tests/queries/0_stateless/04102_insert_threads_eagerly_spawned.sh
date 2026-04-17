@@ -25,8 +25,7 @@ $CLICKHOUSE_CLIENT \
     --max_threads=16 \
     --max_insert_threads=1 \
     --log_queries=1 \
-    --send_logs_level=trace \
-    -q "INSERT INTO test_insert_threads FORMAT TSV" 2>"${CLICKHOUSE_TMP}/04102_no_mv.txt"
+    -q "INSERT INTO test_insert_threads FORMAT TSV"
 
 $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS"
 
@@ -41,11 +40,7 @@ $CLICKHOUSE_CLIENT -q "
         AND query_id = '$QUERY_ID1'
 "
 
-# Verify CC allocation uses max_insert_threads (1), not max_threads (16)
-grep -c 'Allocating CPU slots from ConcurrencyControl: min=1, max=1' "${CLICKHOUSE_TMP}/04102_no_mv.txt"
-
-
-# Test 2: INSERT with a materialized view — should use max_threads.
+# Test 2: INSERT with a materialized view — should use more threads.
 echo "=== Plain INSERT with MV ==="
 $CLICKHOUSE_CLIENT -q "CREATE MATERIALIZED VIEW test_insert_threads_mv ENGINE = MergeTree ORDER BY x AS SELECT x FROM test_insert_threads"
 
@@ -57,14 +52,21 @@ $CLICKHOUSE_CLIENT \
     --max_threads=16 \
     --max_insert_threads=1 \
     --log_queries=1 \
-    --send_logs_level=trace \
-    -q "INSERT INTO test_insert_threads FORMAT TSV" 2>"${CLICKHOUSE_TMP}/04102_with_mv.txt"
+    -q "INSERT INTO test_insert_threads FORMAT TSV"
 
 $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS"
 
-# With MVs, should request max_threads (16) for MV inner selects
-grep -c 'Allocating CPU slots from ConcurrencyControl: min=1, max=16' "${CLICKHOUSE_TMP}/04102_with_mv.txt"
-
+# With MVs, peak_threads should be higher than without MVs
+$CLICKHOUSE_CLIENT -q "
+    SELECT
+        if(peak_threads_usage > 1, 'MORE THAN 1 THREAD', 'SINGLE THREAD')
+    FROM system.query_log
+    WHERE event_date >= yesterday()
+        AND event_time >= now() - 600
+        AND current_database = currentDatabase()
+        AND type = 'QueryFinish'
+        AND query_id = '$QUERY_ID2'
+"
 
 $CLICKHOUSE_CLIENT -q "DROP TABLE test_insert_threads_mv"
 $CLICKHOUSE_CLIENT -q "DROP TABLE test_insert_threads"

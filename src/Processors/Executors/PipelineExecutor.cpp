@@ -511,7 +511,6 @@ SlotAllocationPtr PipelineExecutor::allocateCPU(size_t num_threads, bool concurr
         else
         {
             /// Allocate CPU slots from concurrency control with guaranteed master thread slot.
-            LOG_TRACE(log, "Allocating CPU slots from ConcurrencyControl: min={}, max={}", master_threads, num_threads);
             return ConcurrencyControl::instance().allocate(master_threads, num_threads);
         }
     }

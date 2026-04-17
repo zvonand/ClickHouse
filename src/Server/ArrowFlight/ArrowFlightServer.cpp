@@ -1214,6 +1214,34 @@ arrow::Status ArrowFlightServer::DoAction(
 
             results.push_back(std::move(packed_result));
         }
+        else if (action.type == "CreatePreparedStatement")
+        {
+            if (!action.body)
+                return arrow::Status::Invalid("Invalid empty CreatePreparedStatement action.");
+
+            arrow::flight::protocol::sql::ActionCreatePreparedStatementRequest request;
+            if (!request.ParseFromArray(action.body->data(), static_cast<int>(action.body->size())))
+                return arrow::Status::Invalid("Could not deserialize ActionCreatePreparedStatementRequest.");
+
+            LOG_DEBUG(log, "CreatePreparedStatement request: query={}", request.query());
+
+            /// TODO: implement prepared statement creation
+            return arrow::Status::NotImplemented("CreatePreparedStatement is not yet implemented");
+        }
+        else if (action.type == "ClosePreparedStatement")
+        {
+            if (!action.body)
+                return arrow::Status::Invalid("Invalid empty ClosePreparedStatement action.");
+
+            arrow::flight::protocol::sql::ActionClosePreparedStatementRequest request;
+            if (!request.ParseFromArray(action.body->data(), static_cast<int>(action.body->size())))
+                return arrow::Status::Invalid("Could not deserialize ActionClosePreparedStatementRequest.");
+
+            LOG_DEBUG(log, "ClosePreparedStatement request: handle size={}", request.prepared_statement_handle().size());
+
+            /// TODO: implement prepared statement closing
+            return arrow::Status::NotImplemented("ClosePreparedStatement is not yet implemented");
+        }
         else
             return arrow::Status::NotImplemented(action.type, " is not supported");
 

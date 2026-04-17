@@ -679,6 +679,14 @@ static std::optional<CommandSelectorResult> commandSelectorImpl(const google::pr
             return arrow::Status::SerializationError("Deserialization of sql::CommandStatementIngest failed.");
         return commandStatementIngest(command);
     }
+    else if (any_msg.Is<arrow::flight::protocol::sql::CommandPreparedStatementQuery>())
+    {
+        return arrow::Status::NotImplemented("sql::CommandPreparedStatementQuery is not yet implemented");
+    }
+    else if (any_msg.Is<arrow::flight::protocol::sql::CommandPreparedStatementUpdate>())
+    {
+        return arrow::Status::NotImplemented("sql::CommandPreparedStatementUpdate is not yet implemented");
+    }
     else
     {
         if (isArrowFlightSql(any_msg))

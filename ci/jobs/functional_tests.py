@@ -623,6 +623,7 @@ def main():
         res = results[-1].is_ok()
 
     if JobStages.DIAGNOSTICS in stages and test_result and test_result.is_failure():
+        diag_stopwatch = Utils.Stopwatch()
         failed_tests_seen = set()
         failed_tests = []
         has_errors = False
@@ -646,7 +647,7 @@ def main():
                     name="Diagnostics",
                     status=Result.Status.SKIPPED,
                     info="Too many failed tests",
-                )
+                ).set_timing(stopwatch=diag_stopwatch)
             )
         elif failed_tests:
             memory_limit = (
@@ -690,6 +691,13 @@ def main():
                 label_key = diag.get("label", "")
                 if label_key in label_map:
                     test_case.set_label(label_map[label_key])
+            results.append(
+                Result(
+                    name="Diagnostics",
+                    status=Result.Status.SUCCESS,
+                    info=f"Diagnosed {len(diag_results)} out of {len(failed_tests)} failed test(s)",
+                ).set_timing(stopwatch=diag_stopwatch)
+            )
 
     if args.debug:
         print("\n\n=== Debug mode enabled, starting clickhouse-client ===\n")

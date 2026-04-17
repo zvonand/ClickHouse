@@ -56,6 +56,7 @@
 #include <Interpreters/InterpreterSetQuery.h>
 #include <Interpreters/InterpreterTransactionControlQuery.h>
 #include <Interpreters/NormalizeSelectWithUnionQueryVisitor.h>
+#include <Interpreters/processColumnTransformers.h>
 #include <Interpreters/ProcessList.h>
 #include <Interpreters/ProcessorsProfileLog.h>
 #include <Interpreters/QueryLog.h>
@@ -1525,18 +1526,21 @@ static BlockIO executeQueryImpl(
         {
             if (const auto & storage = DatabaseCatalog::instance().tryGetTable(insert_query->table_id, context))
             {
+                auto metadata_snapshot = storage->getInMemoryMetadataPtr(context, false);
                 std::optional<Names> insert_column_names;
                 if (insert_query->columns)
                 {
+                    const auto columns_ast = processColumnTransformers(context->getCurrentDatabase(), storage, metadata_snapshot, insert_query->columns);
                     Names names;
-                    for (const auto & identifier : insert_query->columns->children)
+                    names.reserve(columns_ast->children.size());
+                    for (const auto & identifier : columns_ast->children)
                         names.emplace_back(identifier->getColumnName());
                     insert_column_names = std::move(names);
                 }
                 context->setInsertionTable(
                     insert_query->table_id,
                     insert_column_names,
-                    std::make_shared<ColumnsDescription>(storage->getInMemoryMetadataPtr(context, false)->columns));
+                    std::make_shared<ColumnsDescription>(metadata_snapshot->columns));
             }
         }
 

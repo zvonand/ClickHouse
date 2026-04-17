@@ -18,5 +18,11 @@ ${CLICKHOUSE_CLIENT} --query="SELECT 'val' AS b FROM numbers(3) FORMAT Native" |
     ${CLICKHOUSE_CURL} -sS "${CLICKHOUSE_URL}&query=INSERT+INTO+t_04099+(b)+SELECT+*+FROM+input(%27auto%27)+FORMAT+Native" --data-binary @-
 
 ${CLICKHOUSE_CLIENT} --query="SELECT * FROM t_04099 ORDER BY b"
+${CLICKHOUSE_CLIENT} --query="TRUNCATE TABLE t_04099"
+
+${CLICKHOUSE_CLIENT} --query="SELECT number::UInt32 AS a, 'val' AS b FROM numbers(3) FORMAT Native" | \
+    ${CLICKHOUSE_CURL} -sS "${CLICKHOUSE_URL}&query=INSERT+INTO+t_04099(*+EXCEPT+extra)+SELECT+*+FROM+input(%27auto%27)+FORMAT+Native" --data-binary @-
+
+${CLICKHOUSE_CLIENT} --query="SELECT * FROM t_04099 ORDER BY a"
 
 ${CLICKHOUSE_CLIENT} --query="DROP TABLE t_04099"

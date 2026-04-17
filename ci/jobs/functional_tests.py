@@ -675,14 +675,21 @@ def main():
                         line = line.strip()
                         if line:
                             entry = json.loads(line)
-                            diag_results[entry["test_name"]] = entry.get(
-                                "diagnosis", ""
-                            )
+                            diag_results[entry["test_name"]] = entry
+            label_map = {
+                "setting": Result.Label.SETTING_VALUE,
+                "flaky": Result.Label.FLAKY,
+                "reproducible": Result.Label.REPRODUCIBLE,
+            }
             for test_case in test_result.results:
-                if test_case.name in diag_results and diag_results[test_case.name]:
-                    test_case.info = (
-                        diag_results[test_case.name] + "\n" + test_case.info
-                    )
+                diag = diag_results.get(test_case.name)
+                if not diag:
+                    continue
+                if diag.get("diagnosis"):
+                    test_case.info = diag["diagnosis"] + "\n" + test_case.info
+                label_key = diag.get("label", "")
+                if label_key in label_map:
+                    test_case.set_label(label_map[label_key])
 
     if args.debug:
         print("\n\n=== Debug mode enabled, starting clickhouse-client ===\n")

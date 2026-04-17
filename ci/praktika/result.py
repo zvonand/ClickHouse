@@ -86,6 +86,9 @@ class Result(MetaClasses.Serializable):
         INFRA = "infra"
         XFAIL = "xfail"
         CIDB = "cidb"
+        SETTING_VALUE = "setting"
+        FLAKY = "flaky"
+        REPRODUCIBLE = "reproducible"
 
     # Default hints rendered as a hover tooltip in json.html.
     # Looked up automatically when set_label is called without an explicit hint.
@@ -97,6 +100,9 @@ class Result(MetaClasses.Serializable):
         Label.INFRA: "Infrastructure error",
         Label.XFAIL: "Expected to fail (bugfix validation inverts the status)",
         Label.CIDB: "Failure history for this test in the CI database",
+        Label.SETTING_VALUE: "Failure caused by a specific randomized setting value",
+        Label.FLAKY: "Failure is reproducible in less than 100% of reruns",
+        Label.REPRODUCIBLE: "Failure is reproducible in 100% of reruns",
     }
 
     name: str

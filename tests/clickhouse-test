@@ -4077,9 +4077,17 @@ def run_diagnose_from_artifacts(args, server_died):
                 exit_code = 1
             else:
                 diagnosis = ""
-                print("No diagnosis produced (test has no randomized settings).")
 
-            result_entry = {"test_name": test_name, "diagnosis": diagnosis}
+            # Classify the diagnosis for CI labeling
+            label = ""
+            if "Culprit settings:" in diagnosis or "Culprit MergeTree settings:" in diagnosis:
+                label = "setting"
+            elif "Failed 0 out of" in diagnosis or "not reproducible" in diagnosis.lower():
+                label = "flaky"
+            elif diagnosis:
+                label = "reproducible"
+
+            result_entry = {"test_name": test_name, "diagnosis": diagnosis, "label": label}
             results_file.write(json.dumps(result_entry, ensure_ascii=False) + "\n")
             results_file.flush()
 

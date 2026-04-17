@@ -1909,18 +1909,24 @@
             for (const item of items) {
                 const row = document.createElement('div');
                 row.className = 'notification-item';
-                row.textContent = item.message || '';
 
-                if (Array.isArray(item.jobs) && item.jobs.length > 0) {
-                    const jobsSpan = document.createElement('span');
-                    jobsSpan.className = 'notification-jobs';
-                    if (item.jobs.length === 1) {
-                        jobsSpan.textContent = `(${item.jobs[0]})`;
-                    } else {
-                        jobsSpan.textContent = `(${item.jobs.length} jobs)`;
-                        jobsSpan.title = item.jobs.join('\n');
+                if (typeof item === 'string') {
+                    // Job level: simple string list
+                    row.textContent = item;
+                } else {
+                    // Workflow level: grouped {message, jobs}
+                    row.textContent = item.message || '';
+                    if (Array.isArray(item.jobs) && item.jobs.length > 0) {
+                        const jobsSpan = document.createElement('span');
+                        jobsSpan.className = 'notification-jobs';
+                        if (item.jobs.length === 1) {
+                            jobsSpan.textContent = `(${item.jobs[0]})`;
+                        } else {
+                            jobsSpan.textContent = `(${item.jobs.length} jobs)`;
+                            jobsSpan.title = item.jobs.join('\n');
+                        }
+                        row.appendChild(jobsSpan);
                     }
-                    row.appendChild(jobsSpan);
                 }
 
                 panel.appendChild(row);

@@ -1,8 +1,6 @@
 -- Tags: no-fasttest
--- Regression test for https://github.com/ClickHouse/ClickHouse/issues/102359
--- Inserting a null whole-JSON value ('null') into a JSON column with Enum typed paths
--- should insert the correct Enum default, not 0.
 
+set enable_analyzer = 1;
 set allow_experimental_json_type = 1;
 
 -- Case 1: Null whole JSON object via VALUES format

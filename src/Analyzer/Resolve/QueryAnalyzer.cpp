@@ -594,17 +594,25 @@ void QueryAnalyzer::mergeWindowWithParentWindow(const QueryTreeNodePtr & window_
 void QueryAnalyzer::replaceNodesWithPositionalArguments(QueryTreeNodePtr & node_list, const QueryTreeNodes & projection_nodes, IdentifierResolveScope & scope)
 {
     const auto & settings = scope.context->getSettingsRef();
+    /// Views are expanded on remote nodes, not on the initiator — check the original query
+    /// context to get the user's intent before system overrides (distributed plan nodes
+    /// disable enable_positional_arguments to prevent double-resolution of the outer query).
+    /// When there is no query context (e.g. projection parsing during CREATE TABLE), the distributed
+    /// planner override cannot be in effect, so local settings reflect the user's actual intent.
+    const bool user_enable_positional_arguments = scope.context->hasQueryContext()
+        ? scope.context->getQueryContext()->getSettingsRef()[Setting::enable_positional_arguments]
+        : settings[Setting::enable_positional_arguments];
+    if (!user_enable_positional_arguments)
+        return;
     const bool is_view_inner = scope.context->isViewInnerQuery();
-    /// Positional arguments are only resolved on the initiator, not on remote/local-plan nodes,
-    /// to avoid double-resolution of already-rewritten distributed queries.
-    /// Both guards are bypassed for view inner contexts: views are expanded on remote nodes
-    /// (not on the initiator), so their positional arguments can only be resolved there,
-    /// regardless of the enable_positional_arguments setting or query_kind.
-    if (!settings[Setting::enable_positional_arguments] && !is_view_inner)
-        return;
-    if (scope.context->getClientInfo().query_kind != ClientInfo::QueryKind::INITIAL_QUERY
-        && !is_view_inner)
-        return;
+    if (!is_view_inner)
+    {
+        /// Only resolve on the initiator to avoid double-resolution on remote/local-plan nodes.
+        if (!settings[Setting::enable_positional_arguments])
+            return;
+        if (scope.context->getClientInfo().query_kind != ClientInfo::QueryKind::INITIAL_QUERY)
+            return;
+    }
 
     auto & node_list_typed = node_list->as<ListNode &>();
 

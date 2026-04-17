@@ -125,7 +125,7 @@ bool hasJoin(const ASTSelectWithUnionQuery & ast)
   * resolves positional arguments inside the view even on remote/secondary nodes
   * (views are expanded on remote nodes, unlike the outer query).
   */
-ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage_snapshot, const StorageView * view, const SelectQueryInfo & query_info)
+ContextPtr getViewContext(ContextPtr context, const StorageSnapshotPtr & storage_snapshot, const StorageView * view)
 {
     auto view_context = storage_snapshot->metadata->getSQLSecurityOverriddenContext(context);
     Settings view_settings = view_context->getSettingsCopy();
@@ -338,7 +338,7 @@ void StorageView::readImpl(
 
     if (context->getSettingsRef()[Setting::allow_experimental_analyzer])
     {
-        auto view_context = getViewContext(context, storage_snapshot, this, query_info);
+        auto view_context = getViewContext(context, storage_snapshot, this);
         InterpreterSelectQueryAnalyzer interpreter(
             current_inner_query, view_context, options, column_names, query_info.filter_actions_dag.get());
         interpreter.addStorageLimits(*query_info.storage_limits);
@@ -346,7 +346,7 @@ void StorageView::readImpl(
     }
     else
     {
-        auto view_context = getViewContext(context, storage_snapshot, this, query_info);
+        auto view_context = getViewContext(context, storage_snapshot, this);
         InterpreterSelectWithUnionQuery interpreter(current_inner_query, view_context, options, column_names);
         interpreter.addStorageLimits(*query_info.storage_limits);
         interpreter.buildQueryPlan(query_plan);

@@ -283,12 +283,16 @@
         }
 
         th.name-column, td.name-column,
-        th.status-column, td.status-column,
         td.dur-column, th.dur-column {
             width: 1px;
             max-width: fit-content;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+        th.status-column, td.status-column {
+            width: 1px;
+            max-width: fit-content;
+            text-align: center;
         }
 
         td.dur-column {
@@ -602,16 +606,15 @@
     function getStatusPriority(status) {
         const statusLower = (status || '').toLowerCase();
         if (statusLower.includes('error')) return 0;
-        if (statusLower.includes('fail')) return 1;
+        if (statusLower.includes('fail') && statusLower !== 'xfail') return 1;
         if (statusLower === 'xpass') return 2;
         if (statusLower.includes('running')) return 3;
         if (statusLower.includes('dropped')) return 4;
         if (statusLower.includes('pending')) return 5;
-        if (statusLower.includes('success')) return 6;
-        if (statusLower === 'ok') return 7;
-        if (statusLower === 'xfail') return 8;
-        if (statusLower.includes('skipped')) return 9;
-        return 10;
+        if (statusLower === 'ok' || statusLower.includes('success')) return 6;
+        if (statusLower === 'xfail') return 7;
+        if (statusLower.includes('skipped')) return 8;
+        return 9;
     }
 
     function formatTimestamp(timestamp, showDate = true) {
@@ -1202,7 +1205,8 @@
                     x = 0;
                     width = canvas.width;
                     const getCss = (name) => getComputedStyle(document.body).getPropertyValue(name).trim();
-                    color = task.status === "pending" ? getCss('--pending-bar-color') : getCss('--skipped-bar-color');
+                    const sl = (task.status || '').toLowerCase();
+                    color = sl === "pending" ? getCss('--pending-bar-color') : getCss('--skipped-bar-color');
                 } else if (task.duration === null) {
                     x = (task.start_time - minStartTime) * scaleX;
                     width = (maxTime - (task.start_time - minStartTime)) * scaleX;
@@ -1219,7 +1223,8 @@
                 taskRects.push({ x, y, width, height, task });
 
                 // Save failure marker position for second pass
-                if (task.status === "failure" || task.status === "error" || task.status === "dropped") {
+                const tsl = (task.status || '').toLowerCase();
+                if (tsl === "fail" || tsl === "failure" || tsl === "error" || tsl === "dropped") {
                     failedMarkers.push({ x: x + width, y: y + height / 2 });
                 }
             });
@@ -1437,11 +1442,12 @@
                 if (column === lastColumn) td.classList.add('time-column');
 
                 if (column === 'status') {
+                    const value_ = value ? value.toLowerCase() : "";
                     const span = document.createElement('span');
-                    span.className = getStatusClass(value);
-                    span.textContent = value;
+                    span.className = getStatusClass(value_);
+                    span.textContent = value_;
                     td.classList.add('status-column');
-                    row.dataset.status = value ? value.toLowerCase() : "";
+                    row.dataset.status = value_;
                     if ((result.info && result.info.trim() !== "") || (Array.isArray(result.links) && result.links.length > 0) || (Array.isArray(result.results) && result.results.length > 0)) {
                         span.style.cursor = "pointer";
                         span.addEventListener('click', () => toggleInfoRow(row, result.info, result.results, result.links));
@@ -2098,11 +2104,11 @@
 
                 if (nameParams?.length === 1) {
                     // For single-level results, check json0 status
-                    shouldContinue = ["running", "pending"].includes(runtimeCache?.json0?.status);
+                    shouldContinue = ["running", "pending"].includes((runtimeCache?.json0?.status || '').toLowerCase());
                 } else if (nameParams?.length === 2) {
                     // For two-level results, check json1 status (or json0 if json1 is null)
                     if (runtimeCache?.json1) {
-                        shouldContinue = ["running", "pending"].includes(runtimeCache?.json1?.status);
+                        shouldContinue = ["running", "pending"].includes((runtimeCache?.json1?.status || '').toLowerCase());
                     } else {
                         // If json1 is null, we might still be loading, so continue
                         shouldContinue = true;

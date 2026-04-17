@@ -640,6 +640,9 @@ class Result(MetaClasses.Serializable):
         :return: Result
         """
 
+        if not name:
+            name = Info().job_name
+
         command = f"{unit_tests_path} --gtest_output='json:{ResultTranslator.GTEST_RESULT_FILE}'"
         if gtest_filter:
             command += f" --gtest_filter='{gtest_filter}'"

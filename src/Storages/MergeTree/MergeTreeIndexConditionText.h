@@ -106,6 +106,9 @@ private:
             FUNCTION_MATCH,
             FUNCTION_HAS_ANY_TOKENS,
             FUNCTION_HAS_ALL_TOKENS,
+            /// Corresponds to hasAll(arr, const_arr) when the indexed column's tokenizer splits strings into multiple tokens.
+            /// Carries one TextSearchQuery per element of the searched array, evaluated as a conjunction.
+            FUNCTION_HAS_ALL_ELEMENTS,
             FUNCTION_LIKE,
             /// Can take any value
             FUNCTION_UNKNOWN,

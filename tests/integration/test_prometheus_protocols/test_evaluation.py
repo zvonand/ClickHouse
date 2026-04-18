@@ -330,6 +330,27 @@ def do_range_query_test(
     ), f"actual_result_from_http_api: {actual_result_from_http_api}, expected: {result}"
 
 
+# Evaluates a query in ClickHouse only (no comparison with Prometheus) and checks the result.
+# Used to verify deterministic behavior of our implementation in cases where Prometheus is expected
+# to provide a different result.
+def do_clickhouse_only_query_test(
+    query,
+    timestamp,
+    result,
+    chresult,
+    eps=0,
+):
+    actual_chresult = execute_query_in_clickhouse_sql(query, timestamp)
+    assert tsv_close_to(
+        actual_chresult, chresult, eps=eps
+    ), f"actual result: {actual_chresult}, expected: {chresult}"
+
+    actual_result_from_http_api = execute_query_in_clickhouse_http_api(query, timestamp)
+    assert http_api_response_close_to(
+        actual_result_from_http_api, result, eps=eps
+    ), f"actual_result_from_http_api: {actual_result_from_http_api}, expected: {result}"
+
+
 def test_up():
     do_query_test(
         "up",
@@ -2614,13 +2635,37 @@ def test_aggregation_operators():
         ],
     )
 
-    # limitk is not really deterministic, so we try to check what we can.
     # limitk(0): returns no series.
     do_query_test(
         "limitk(0, last_over_time(foo[10]))[50:10]",
         150,
         '{"resultType": "matrix", "result": []}',
         [],
+    )
+
+    # Our implementation of limitk() picks k time series deterministically after sorting them by CityHash64(tags).
+    # Prometheus uses its own fingerprint (xxhash.Sum64), so limitk() in Prometheus picks different time series.
+    # That's why these tests check only ClickHouse results, and don't compare with Prometheus.
+    do_clickhouse_only_query_test(
+        "limitk(1, last_over_time(foo[10]))[50:10]",
+        150,
+        '{"resultType": "matrix", "result": [{"metric": {"__name__": "foo", "shape": "circle", "size": "l"}, "values": [[150, "16"]]}, {"metric": {"__name__": "foo", "shape": "square", "size": "s"}, "values": [[110, "4"], [130, "40"]]}, {"metric": {"__name__": "foo", "shape": "triangle", "size": "m"}, "values": [[120, "80"]]}]}',
+        [
+            ["[('__name__','foo'),('shape','circle'),('size','l')]", "[('1970-01-01 00:02:30.000',16)]"],
+            ["[('__name__','foo'),('shape','square'),('size','s')]", "[('1970-01-01 00:01:50.000',4),('1970-01-01 00:02:10.000',40)]"],
+            ["[('__name__','foo'),('shape','triangle'),('size','m')]", "[('1970-01-01 00:02:00.000',80)]"],
+        ],
+    )
+
+    do_clickhouse_only_query_test(
+        "limitk(2, last_over_time(foo[10]))[50:10]",
+        150,
+        '{"resultType": "matrix", "result": [{"metric": {"__name__": "foo", "shape": "circle", "size": "l"}, "values": [[130, "16"], [150, "16"]]}, {"metric": {"__name__": "foo", "shape": "square", "size": "s"}, "values": [[110, "4"], [130, "40"]]}, {"metric": {"__name__": "foo", "shape": "triangle", "size": "m"}, "values": [[110, "8"], [120, "80"]]}]}',
+        [
+            ["[('__name__','foo'),('shape','circle'),('size','l')]", "[('1970-01-01 00:02:10.000',16),('1970-01-01 00:02:30.000',16)]"],
+            ["[('__name__','foo'),('shape','square'),('size','s')]", "[('1970-01-01 00:01:50.000',4),('1970-01-01 00:02:10.000',40)]"],
+            ["[('__name__','foo'),('shape','triangle'),('size','m')]", "[('1970-01-01 00:01:50.000',8),('1970-01-01 00:02:00.000',80)]"],
+        ],
     )
 
     # count(limitk(2)): returns min(k, n) where k=2 and n is the number of series at each timestamp.

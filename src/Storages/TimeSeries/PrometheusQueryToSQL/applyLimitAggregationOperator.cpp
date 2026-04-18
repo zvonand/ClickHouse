@@ -144,91 +144,86 @@ namespace
     }
 
     /// Returns the sort key lambda for `arrayPartialSort` over an index array:
-    /// - descending (topk)   : i -> -assumeNotNull(v[i])
-    /// - ascending (bottomk) : i -> assumeNotNull(v[i])
-    ASTPtr makeSortKeyLambda(ASTPtr && v, bool descending)
+    /// - ascending  : `i -> assumeNotNull(arr[i])`   (used by `bottomk` with arr=v and by `limitk` with arr=sampling_keys)
+    /// - descending : `i -> -assumeNotNull(arr[i])`  (used by `topk` with arr=v)
+    ASTPtr buildSortKeyLambda(ASTPtr && arr, bool descending)
     {
-        auto v_at_i = makeASTFunction("arrayElement", std::move(v), make_intrusive<ASTIdentifier>("i"));
-        ASTPtr value_key = makeASTFunction("assumeNotNull", std::move(v_at_i));
+        chassert(arr);
+        auto arr_at_i = makeASTFunction("arrayElement", std::move(arr), make_intrusive<ASTIdentifier>("i"));
+        ASTPtr value_key = makeASTFunction("assumeNotNull", std::move(arr_at_i));
         if (descending)
             value_key = makeASTFunction("negate", std::move(value_key));
         return makeASTLambda({"i"}, std::move(value_key));
     }
 
-    /// Builds the per-time-step indices expression for `topk` or `bottomk`:
-    ///
-    ///   arraySort(arraySlice(
-    ///       arrayPartialSort(i -> ±assumeNotNull(v[i]), k,
-    ///           arrayFilter((i, x) -> x IS NOT NULL, arrayEnumerate(v), v)),
-    ///       1, k))
-    ///
-    /// TODO: Consider adding new functions arrayTopK() and arrayBottomK() to ClickHouse
-    /// to simplify this expression.
-    ASTPtr buildSortedTopKIndices(ASTPtr && k, ASTPtr && v, bool descending)
-    {
-        /// arrayFilter((i, x) -> x IS NOT NULL, arrayEnumerate(v), v)
-        auto non_null_indices = makeASTFunction("arrayFilter",
-            makeASTLambda({"i", "x"}, makeASTFunction("isNotNull", make_intrusive<ASTIdentifier>("x"))),
-            makeASTFunction("arrayEnumerate", v->clone()),
-            v->clone());
-
-        /// arraySort(arraySlice(arrayPartialSort(i -> ±assumeNotNull(v[i]), k, non_null_indices), 1, k))
-        /// The outer arraySort is required so that step 3 can use indexOfAssumeSorted.
-        return makeASTFunction("arraySort",
-            makeASTFunction("arraySlice",
-                makeASTFunction("arrayPartialSort",
-                    makeSortKeyLambda(std::move(v), descending),
-                    k->clone(),
-                    std::move(non_null_indices)),
-                make_intrusive<ASTLiteral>(1u),
-                k->clone()));
-    }
-
-    /// Builds the per-time-step indices expression for `limitk`:
-    ///
-    ///   arraySlice(arrayFilter((i, x) -> x IS NOT NULL, arrayEnumerate(v), v), 1, k)
-    ASTPtr buildLimitKIndices(ASTPtr && k, ASTPtr && v)
-    {
-        /// arrayFilter((i, x) -> x IS NOT NULL, arrayEnumerate(v), v)
-        auto non_null_indices = makeASTFunction("arrayFilter",
-            makeASTLambda({"i", "x"}, makeASTFunction("isNotNull", make_intrusive<ASTIdentifier>("x"))),
-            makeASTFunction("arrayEnumerate", v->clone()),
-            std::move(v));
-
-        /// arraySlice(non_null_indices, 1, k)
-        return makeASTFunction("arraySlice",
-            std::move(non_null_indices),
-            make_intrusive<ASTLiteral>(1u),
-            k->clone());
-    }
-
-    using BuildIndicesASTFunc = ASTPtr (*)(ASTPtr && k, ASTPtr && v);
+    /// Returns a function that builds the sort key lambda for a given operator.
+    /// `values` is an array of values of different time series at a specific time,
+    /// `sampling_keys` is a matching array of sampling keys calculated for each time series.
+    /// `sampling_keys` is used only for `limitk`, it's nullptr for `topk` and `bottomk`.
+    using BuildSortKeyLambdaFunc = ASTPtr (*)(ASTPtr values, ASTPtr sampling_keys);
 
     struct ImplInfo
     {
-        BuildIndicesASTFunc build_indices;
+        BuildSortKeyLambdaFunc build_sort_key_lambda;
+        /// Whether `timeSeriesGroupToSamplingKey(group)` should be used as `sampling_keys`
+        /// to provide deterministic "pseudo-random" sampling for `limitk`.
+        bool needs_sampling_keys;
     };
 
     const ImplInfo * getImplInfo(std::string_view operator_name)
     {
         static const std::unordered_map<std::string_view, ImplInfo> impl_map = {
             {"topk",
-             {[](ASTPtr && k, ASTPtr && v) -> ASTPtr
-              { return buildSortedTopKIndices(std::move(k), std::move(v), /*descending=*/true); }}},
+             {[](ASTPtr values, ASTPtr /*sampling_keys*/) -> ASTPtr
+              { return buildSortKeyLambda(std::move(values), /*descending=*/ true); },
+              /*needs_sampling_keys=*/ false}},
 
             {"bottomk",
-             {[](ASTPtr && k, ASTPtr && v) -> ASTPtr
-              { return buildSortedTopKIndices(std::move(k), std::move(v), /*descending=*/false); }}},
+             {[](ASTPtr values, ASTPtr /*sampling_keys*/) -> ASTPtr
+              { return buildSortKeyLambda(std::move(values), /*descending=*/ false); },
+              /*needs_sampling_keys=*/ false}},
 
             {"limitk",
-             {[](ASTPtr && k, ASTPtr && v) -> ASTPtr
-              { return buildLimitKIndices(std::move(k), std::move(v)); }}},
+             {[](ASTPtr /*values*/, ASTPtr sampling_keys) -> ASTPtr
+              { return buildSortKeyLambda(std::move(sampling_keys), /*descending=*/ false); },
+              /*needs_sampling_keys=*/ true}},
         };
 
         auto it = impl_map.find(operator_name);
         if (it == impl_map.end())
             return nullptr;
         return &it->second;
+    }
+
+    /// Builds an expression returning a sorted list of indices:
+    ///
+    ///   arraySort(arraySlice(
+    ///       arrayPartialSort(sort_key_lambda, k,
+    ///           arrayFilter((i, x) -> x IS NOT NULL, arrayEnumerate(values), values)),
+    ///       1, k))
+    ///
+    /// The inner `arrayFilter` drops NULL values; `arrayPartialSort` picks k by `sort_key_lambda`;
+    /// `arraySlice` takes exactly k (the partial sort may return more); the outer `arraySort`
+    /// re-sorts the k indices numerically so Step 3 can use `indexOfAssumeSorted`.
+    ///
+    /// TODO: Consider adding new functions `arrayTopK`/`arrayBottomK` to ClickHouse
+    /// to simplify this expression.
+    ASTPtr buildKIndices(ASTPtr && k, ASTPtr && values, ASTPtr && sort_key_lambda)
+    {
+        /// arrayFilter((i, x) -> x IS NOT NULL, arrayEnumerate(values), values)
+        auto non_null_indices = makeASTFunction("arrayFilter",
+            makeASTLambda({"i", "x"}, makeASTFunction("isNotNull", make_intrusive<ASTIdentifier>("x"))),
+            makeASTFunction("arrayEnumerate", values->clone()),
+            std::move(values));
+
+        return makeASTFunction("arraySort",
+            makeASTFunction("arraySlice",
+                makeASTFunction("arrayPartialSort",
+                    std::move(sort_key_lambda),
+                    k->clone(),
+                    std::move(non_null_indices)),
+                make_intrusive<ASTLiteral>(1u),
+                std::move(k)));
     }
 }
 
@@ -267,12 +262,16 @@ SQLQueryPiece applyLimitAggregationOperator(
 
     /// Step 1: collect all series within each aggregation group.
     ///
-    ///   SELECT groupArray(group) AS groups, arrayTranspose(groupArray(values)) AS values
+    ///   SELECT groupArray(group) AS groups,
+    ///          arrayTranspose(groupArray(values)) AS values
+    ///          [, groupArray(timeSeriesGroupToSamplingKey(group)) AS sampling_keys]  -- for limitk
     ///   FROM vector_grid
     ///   GROUP BY <by_tags_expr>
     ///
     /// `groups` is an array of original series group IDs (length N).
     /// `values` is a TxN matrix: for each time step t, an array of N series values.
+    /// `sampling_keys` (added for limitk) is an N-length array aligned with `groups`/`values`,
+    /// used by Step 2 to pick k series deterministically regardless of row read order.
     ASTPtr step1_query;
     {
         SelectQueryBuilder builder;
@@ -286,6 +285,13 @@ SQLQueryPiece applyLimitAggregationOperator(
         builder.select_list.push_back(makeASTFunction("arrayTranspose",
             makeASTFunction("groupArray", make_intrusive<ASTIdentifier>(ColumnNames::Values))));
         builder.select_list.back()->setAlias(ColumnNames::Values);
+
+        if (impl_info->needs_sampling_keys)
+        {
+            builder.select_list.push_back(makeASTFunction("groupArray",
+                makeASTFunction("timeSeriesGroupToSamplingKey", make_intrusive<ASTIdentifier>(ColumnNames::Group))));
+            builder.select_list.back()->setAlias(ColumnNames::SamplingKeys);
+        }
 
         if (operator_node->by || operator_node->without)
         {
@@ -318,10 +324,18 @@ SQLQueryPiece applyLimitAggregationOperator(
         builder.select_list.push_back(make_intrusive<ASTIdentifier>(ColumnNames::Groups));
         builder.select_list.push_back(make_intrusive<ASTIdentifier>(ColumnNames::Values));
 
+        ASTPtr sampling_keys;
+        if (impl_info->needs_sampling_keys)
+            sampling_keys = make_intrusive<ASTIdentifier>(ColumnNames::SamplingKeys);
+
+        auto sort_key_lambda = impl_info->build_sort_key_lambda(
+            make_intrusive<ASTIdentifier>("v"),
+            std::move(sampling_keys));
+
         if (k_is_array)
         {
             ASTPtr k_per_step = makeASTFunction("arrayElement", std::move(k), make_intrusive<ASTIdentifier>("j"));
-            ASTPtr indices_expr = impl_info->build_indices(std::move(k_per_step), make_intrusive<ASTIdentifier>("v"));
+            ASTPtr indices_expr = buildKIndices(std::move(k_per_step), make_intrusive<ASTIdentifier>("v"), std::move(sort_key_lambda));
             builder.select_list.push_back(makeASTFunction("arrayMap",
                 makeASTLambda({"v", "j"}, std::move(indices_expr)),
                 make_intrusive<ASTIdentifier>(ColumnNames::Values),
@@ -329,7 +343,7 @@ SQLQueryPiece applyLimitAggregationOperator(
         }
         else
         {
-            ASTPtr indices_expr = impl_info->build_indices(std::move(k), make_intrusive<ASTIdentifier>("v"));
+            ASTPtr indices_expr = buildKIndices(std::move(k), make_intrusive<ASTIdentifier>("v"), std::move(sort_key_lambda));
             builder.select_list.push_back(makeASTFunction("arrayMap",
                 makeASTLambda({"v"}, std::move(indices_expr)),
                 make_intrusive<ASTIdentifier>(ColumnNames::Values)));

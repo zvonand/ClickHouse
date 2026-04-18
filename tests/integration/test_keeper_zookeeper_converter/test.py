@@ -38,8 +38,12 @@ def stop_zookeeper():
     # matches the first word of the command line. The ZooKeeper Java process
     # starts with "java -Dzookeeper..." so it never matches. Use a direct pgrep
     # for the ZooKeeper main class to properly detect the running JVM.
+    # The bracket expression [o]rg is a standard trick to keep pgrep -f from
+    # matching the shell process that is running pgrep itself (its argv
+    # contains the literal string '[o]rg.apache.zookeeper.server', which the
+    # regex '[o]rg.apache.zookeeper.server' does not match).
     while node.exec_in_container(
-        ["bash", "-c", "pgrep -f org.apache.zookeeper.server || true"],
+        ["bash", "-c", "pgrep -f '[o]rg\\.apache\\.zookeeper\\.server' || true"],
         nothrow=True,
     ).strip():
         if time.time() > timeout:

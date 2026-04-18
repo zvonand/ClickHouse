@@ -124,6 +124,8 @@ struct PreparedStatementInfo
     String query;
     /// Number of '?' parameter placeholders found in the query.
     size_t num_params = 0;
+    /// The user who created this prepared statement.
+    String username;
     /// Schema of the result set (may be nullptr for non-SELECT queries).
     std::shared_ptr<arrow::Schema> dataset_schema;
     /// Bound parameter values (set via DoPut with CommandPreparedStatementQuery).
@@ -135,7 +137,7 @@ struct PreparedStatementInfo
 class CallsData
 {
 public:
-    CallsData(std::optional<Duration> tickets_lifetime_, std::optional<Duration> poll_descriptors_lifetime_, LoggerPtr log_);
+    CallsData(std::optional<Duration> tickets_lifetime_, std::optional<Duration> poll_descriptors_lifetime_, size_t max_prepared_statements_per_user_, LoggerPtr log_);
 
     /// Creates a flight ticket which allows to download a specified block.
     std::shared_ptr<const TicketInfo> createTicket(std::shared_ptr<arrow::Table> arrow_table);
@@ -197,16 +199,19 @@ public:
     /// Creates a prepared statement and returns its opaque handle.
     /// If session_id is non-empty, the prepared statement is associated with
     /// that session and will be cleaned up when the session closes.
-    String createPreparedStatement(PreparedStatementInfo info, const String & session_id = {});
+    [[nodiscard]] arrow::Result<String> createPreparedStatement(PreparedStatementInfo info, const String & session_id = {});
 
     /// Returns information about a prepared statement by handle.
-    [[nodiscard]] arrow::Result<std::shared_ptr<PreparedStatementInfo>> getPreparedStatement(const String & handle) const;
+    /// Checks that the caller's username matches the owner.
+    [[nodiscard]] arrow::Result<std::shared_ptr<PreparedStatementInfo>> getPreparedStatement(const String & handle, const String & username) const;
 
     /// Binds parameter values to a prepared statement.
-    [[nodiscard]] arrow::Status bindParameters(const String & handle, std::shared_ptr<arrow::RecordBatch> params);
+    /// Checks that the caller's username matches the owner.
+    [[nodiscard]] arrow::Status bindParameters(const String & handle, const String & username, std::shared_ptr<arrow::RecordBatch> params);
 
     /// Closes (removes) a prepared statement by handle.
-    void closePreparedStatement(const String & handle);
+    /// Checks that the caller's username matches the owner.
+    void closePreparedStatement(const String & handle, const String & username);
 
     /// Closes all prepared statements associated with a session.
     void closeSessionPreparedStatements(const String & session_id);
@@ -234,6 +239,7 @@ private:
 
     const std::optional<Duration> tickets_lifetime;
     const std::optional<Duration> poll_descriptors_lifetime;
+    const size_t max_prepared_statements_per_user;
     const LoggerPtr log;
     mutable std::mutex mutex;
     std::unordered_map<String, std::shared_ptr<const TicketInfo>> tickets TSA_GUARDED_BY(mutex);
@@ -249,6 +255,7 @@ private:
     std::unordered_map<String, std::shared_ptr<PreparedStatementInfo>> prepared_statements TSA_GUARDED_BY(mutex);
     std::unordered_map<String, std::unordered_set<String>> session_to_prepared_statements TSA_GUARDED_BY(mutex);
     std::unordered_map<String, String> prepared_statement_to_session TSA_GUARDED_BY(mutex);
+    std::unordered_map<String, std::unordered_set<String>> user_to_prepared_statements TSA_GUARDED_BY(mutex);
     std::optional<Timestamp> next_expiration_time TSA_GUARDED_BY(mutex);
     mutable std::condition_variable next_expiration_time_updated;
     bool stop_waiting_next_expiration_time TSA_GUARDED_BY(mutex) = false;

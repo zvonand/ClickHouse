@@ -306,7 +306,8 @@ namespace
 
 arrow::Result<ArrowFlightServer::DecodeResult> ArrowFlightServer::decodeDescriptor(
     const arrow::flight::FlightDescriptor & descriptor,
-    bool for_put_operation) const
+    bool for_put_operation,
+    const std::string & username) const
 {
     switch (descriptor.type)
     {
@@ -332,7 +333,7 @@ arrow::Result<ArrowFlightServer::DecodeResult> ArrowFlightServer::decodeDescript
             /// If the command resolved to a prepared statement handle, look up the actual query.
             if (isPreparedStatementHandle(sql_set->sql))
             {
-                auto ps_info_res = calls_data->getPreparedStatement(sql_set->sql);
+                auto ps_info_res = calls_data->getPreparedStatement(sql_set->sql, username);
                 ARROW_RETURN_NOT_OK(ps_info_res);
                 const auto & ps_info = ps_info_res.ValueUnsafe();
                 auto resolved_query_res = replaceQuestionMarksWithValues(ps_info->query, ps_info->bound_parameters);
@@ -356,11 +357,13 @@ ArrowFlightServer::ArrowFlightServer(IServer & server_, const Poco::Net::SocketA
     , cancel_ticket_after_do_get(server.config().getBool("arrowflight.cancel_ticket_after_do_get", false))
     , poll_descriptors_lifetime_seconds(server.config().getUInt("arrowflight.poll_descriptors_lifetime_seconds", 600))
     , cancel_poll_descriptor_after_poll_flight_info(server.config().getBool("arrowflight.cancel_flight_descriptor_after_poll_flight_info", false))
+    , max_prepared_statements_per_user(server.config().getUInt("arrowflight.max_prepared_statements_per_user", 100))
     , calls_data(
           std::make_unique<CallsData>(
               tickets_lifetime_seconds ? std::make_optional(std::chrono::seconds{tickets_lifetime_seconds}) : std::optional<Duration>{},
               poll_descriptors_lifetime_seconds ? std::make_optional(std::chrono::seconds{poll_descriptors_lifetime_seconds})
                                                 : std::optional<Duration>{},
+              max_prepared_statements_per_user,
               log))
 {
 }
@@ -638,7 +641,7 @@ arrow::Status ArrowFlightServer::GetFlightInfo(
         std::shared_ptr<arrow::Table> table;
         std::shared_ptr<arrow::Schema> schema;
 
-        ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false))
+        ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false, auth.getUsername()))
         chassert(!sql.empty() || table);
 
         std::vector<arrow::flight::FlightEndpoint> endpoints;
@@ -727,7 +730,7 @@ arrow::Status ArrowFlightServer::GetSchema(
             ArrowFlight::BlockModifier block_modifier;
             std::shared_ptr<arrow::Table> table;
 
-            ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false))
+            ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false, auth.getUsername()))
             chassert(!sql.empty() || table);
 
             if (table)
@@ -830,7 +833,7 @@ arrow::Status ArrowFlightServer::PollFlightInfo(
             ArrowFlight::BlockModifier block_modifier;
             std::shared_ptr<arrow::Table> table;
 
-            ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false))
+            ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false, auth.getUsername()))
             chassert(!sql.empty() || table);
 
             if (table)
@@ -1124,7 +1127,7 @@ arrow::Status ArrowFlightServer::DoPut(
                     ARROW_ASSIGN_OR_RAISE(params, batches.Next())
                 }
 
-                ARROW_RETURN_NOT_OK(calls_data->bindParameters(handle, std::move(params)));
+                ARROW_RETURN_NOT_OK(calls_data->bindParameters(handle, auth.getUsername(), std::move(params)));
 
                 /// Return DoPutPreparedStatementResult with the same handle.
                 arrow::flight::protocol::sql::DoPutPreparedStatementResult result;
@@ -1143,7 +1146,7 @@ arrow::Status ArrowFlightServer::DoPut(
         ArrowFlight::BlockModifier block_modifier;
         std::shared_ptr<arrow::Table> table;
 
-        ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, true))
+        ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, true, auth.getUsername()))
         /// DoPut command should only produce sql query
         chassert(!sql.empty() && !schema_modifier && !block_modifier && !table);
 
@@ -1422,6 +1425,7 @@ arrow::Status ArrowFlightServer::DoAction(
             ArrowFlight::PreparedStatementInfo info;
             info.query = query;
             info.num_params = num_params;
+            info.username = auth.getUsername();
 
             auto query_context = session->makeQueryContext();
             query_context->setCurrentQueryId("");
@@ -1464,13 +1468,13 @@ arrow::Status ArrowFlightServer::DoAction(
                 }
             }
 
-            auto handle = calls_data->createPreparedStatement(std::move(info), auth.getSessionId());
+            ARROW_ASSIGN_OR_RAISE(auto handle, calls_data->createPreparedStatement(std::move(info), auth.getSessionId()))
 
             /// Build the protobuf result.
             arrow::flight::protocol::sql::ActionCreatePreparedStatementResult result;
             result.set_prepared_statement_handle(handle);
 
-            if (auto ps_res = calls_data->getPreparedStatement(handle); ps_res.ok())
+            if (auto ps_res = calls_data->getPreparedStatement(handle, auth.getUsername()); ps_res.ok())
             {
                 const auto & ps_info = ps_res.ValueUnsafe();
                 if (ps_info->dataset_schema)
@@ -1496,7 +1500,7 @@ arrow::Status ArrowFlightServer::DoAction(
             const auto & handle = request.prepared_statement_handle();
             LOG_DEBUG(log, "ClosePreparedStatement request: handle={}", handle);
 
-            calls_data->closePreparedStatement(handle);
+            calls_data->closePreparedStatement(handle, auth.getUsername());
 
             /// ClosePreparedStatement has no response body per the spec.
         }

@@ -298,6 +298,8 @@ def _create_flight_client(
     insecure: Optional[bool] = None,
     disable_server_verification: Optional[bool] = None,
     metadata: Optional[Dict[str, str]] = None,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
     **kwargs: Any,
 ) -> Tuple[flight.FlightClient, List[Tuple[bytes, bytes]]]:
     protocol = "tls"
@@ -310,6 +312,11 @@ def _create_flight_client(
     client = flight.FlightClient(url, **kwargs)
 
     headers: List[Tuple[bytes, bytes]] = []
+
+    if username is not None:
+        token = client.authenticate_basic_token(username, password or "")
+        headers.append(token)
+
     for k, v in (metadata or {}).items():
         headers.append((k.encode("utf-8"), v.encode("utf-8")))
 
@@ -345,9 +352,25 @@ class FlightSQLClient:
         headers = list(OrderedDict(self.headers).items())
         return flight.FlightCallOptions(headers=headers)
 
-    def execute(self, query: str) -> flight.FlightInfo:
-        """Execute a query and return FlightInfo for result retrieval."""
-        cmd = CommandStatementQuery(query=query)
+    def execute(self, query_or_stmt) -> flight.FlightInfo:
+        """Execute a query string or a PreparedStatement.
+
+        When given a string, returns FlightInfo for result retrieval.
+        When given a PreparedStatement, executes it using this client's session and returns a pa.Table.
+        """
+        if isinstance(query_or_stmt, PreparedStatement):
+            stmt = query_or_stmt
+            cmd = CommandPreparedStatementQuery(prepared_statement_handle=stmt.handle)
+            descriptor = flight_descriptor(cmd)
+            options = self._flight_call_options()
+            flight_info = self.client.get_flight_info(descriptor, options)
+            tables = []
+            for endpoint in flight_info.endpoints:
+                reader = self.do_get(endpoint.ticket)
+                tables.append(reader.read_all())
+            return pa.concat_tables(tables)
+
+        cmd = CommandStatementQuery(query=query_or_stmt)
         options = self._flight_call_options()
         return self.client.get_flight_info(flight_descriptor(cmd), options)
 

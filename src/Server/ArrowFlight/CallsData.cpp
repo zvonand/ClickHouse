@@ -24,9 +24,10 @@ Timestamp CallsData::now()
     return std::chrono::system_clock::now();
 }
 
-CallsData::CallsData(std::optional<Duration> tickets_lifetime_, std::optional<Duration> poll_descriptors_lifetime_, LoggerPtr log_)
+CallsData::CallsData(std::optional<Duration> tickets_lifetime_, std::optional<Duration> poll_descriptors_lifetime_, size_t max_prepared_statements_per_user_, LoggerPtr log_)
     : tickets_lifetime(tickets_lifetime_)
     , poll_descriptors_lifetime(poll_descriptors_lifetime_)
+    , max_prepared_statements_per_user(max_prepared_statements_per_user_)
     , log(log_)
 {
 }
@@ -537,12 +538,21 @@ String CallsData::generatePreparedStatementHandle()
     return PREPARED_STATEMENT_HANDLE_PREFIX + toString(UUIDHelpers::generateV4());
 }
 
-String CallsData::createPreparedStatement(PreparedStatementInfo info, const String & session_id)
+arrow::Result<String> CallsData::createPreparedStatement(PreparedStatementInfo info, const String & session_id)
 {
     String handle = generatePreparedStatementHandle();
-    LOG_DEBUG(log, "Creating prepared statement {}", handle);
+    LOG_DEBUG(log, "Creating prepared statement {} for user {}", handle, info.username);
     auto shared_info = std::make_shared<PreparedStatementInfo>(std::move(info));
     std::lock_guard lock{mutex};
+    if (max_prepared_statements_per_user > 0)
+    {
+        auto & user_handles = user_to_prepared_statements[shared_info->username];
+        if (user_handles.size() >= max_prepared_statements_per_user)
+            return arrow::Status::CapacityError(
+                "Too many prepared statements for user ", shared_info->username,
+                " (limit: ", std::to_string(max_prepared_statements_per_user), ")");
+        user_handles.insert(handle);
+    }
     prepared_statements.emplace(handle, std::move(shared_info));
     if (!session_id.empty())
     {
@@ -552,40 +562,57 @@ String CallsData::createPreparedStatement(PreparedStatementInfo info, const Stri
     return handle;
 }
 
-arrow::Result<std::shared_ptr<PreparedStatementInfo>> CallsData::getPreparedStatement(const String & handle) const
+arrow::Result<std::shared_ptr<PreparedStatementInfo>> CallsData::getPreparedStatement(const String & handle, const String & username) const
 {
     std::lock_guard lock{mutex};
     auto it = prepared_statements.find(handle);
     if (it == prepared_statements.end())
         return arrow::Status::KeyError("Prepared statement handle not found");
+    if (it->second->username != username)
+        return arrow::Status::KeyError("Prepared statement handle not found");
     return it->second;
 }
 
-arrow::Status CallsData::bindParameters(const String & handle, std::shared_ptr<arrow::RecordBatch> params)
+arrow::Status CallsData::bindParameters(const String & handle, const String & username, std::shared_ptr<arrow::RecordBatch> params)
 {
     std::lock_guard lock{mutex};
     auto it = prepared_statements.find(handle);
     if (it == prepared_statements.end())
+        return arrow::Status::KeyError("Prepared statement handle not found");
+    if (it->second->username != username)
         return arrow::Status::KeyError("Prepared statement handle not found");
     it->second->bound_parameters = std::move(params);
     return arrow::Status::OK();
 }
 
-void CallsData::closePreparedStatement(const String & handle)
+void CallsData::closePreparedStatement(const String & handle, const String & username)
 {
     std::lock_guard lock{mutex};
-    prepared_statements.erase(handle);
-    auto it = prepared_statement_to_session.find(handle);
-    if (it != prepared_statement_to_session.end())
+    auto it = prepared_statements.find(handle);
+    if (it == prepared_statements.end())
+        return;
+    if (it->second->username != username)
+        return;
+    auto ps_username = it->second->username;
+    prepared_statements.erase(it);
+    auto user_it = user_to_prepared_statements.find(ps_username);
+    if (user_it != user_to_prepared_statements.end())
     {
-        auto session_it = session_to_prepared_statements.find(it->second);
-        if (session_it != session_to_prepared_statements.end())
+        user_it->second.erase(handle);
+        if (user_it->second.empty())
+            user_to_prepared_statements.erase(user_it);
+    }
+    auto session_it = prepared_statement_to_session.find(handle);
+    if (session_it != prepared_statement_to_session.end())
+    {
+        auto s_it = session_to_prepared_statements.find(session_it->second);
+        if (s_it != session_to_prepared_statements.end())
         {
-            session_it->second.erase(handle);
-            if (session_it->second.empty())
-                session_to_prepared_statements.erase(session_it);
+            s_it->second.erase(handle);
+            if (s_it->second.empty())
+                session_to_prepared_statements.erase(s_it);
         }
-        prepared_statement_to_session.erase(it);
+        prepared_statement_to_session.erase(session_it);
     }
 }
 
@@ -598,7 +625,18 @@ void CallsData::closeSessionPreparedStatements(const String & session_id)
     for (const auto & handle : it->second)
     {
         LOG_DEBUG(log, "Closing prepared statement {} (session {} closed)", handle, session_id);
-        prepared_statements.erase(handle);
+        auto ps_it = prepared_statements.find(handle);
+        if (ps_it != prepared_statements.end())
+        {
+            auto user_it = user_to_prepared_statements.find(ps_it->second->username);
+            if (user_it != user_to_prepared_statements.end())
+            {
+                user_it->second.erase(handle);
+                if (user_it->second.empty())
+                    user_to_prepared_statements.erase(user_it);
+            }
+            prepared_statements.erase(ps_it);
+        }
         prepared_statement_to_session.erase(handle);
     }
     session_to_prepared_statements.erase(it);

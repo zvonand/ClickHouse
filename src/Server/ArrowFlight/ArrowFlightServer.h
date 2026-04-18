@@ -67,7 +67,8 @@ private:
 
     [[nodiscard]] arrow::Result<DecodeResult> decodeDescriptor(
         const arrow::flight::FlightDescriptor & descriptor,
-        bool for_put_operation) const;
+        bool for_put_operation,
+        const std::string & username) const;
 
     arrow::Status tryRunAndLogIfError(std::string_view method_name, std::function<arrow::Status()> && func) const;
     arrow::Status evaluatePollDescriptor(const String & poll_descriptor);
@@ -84,6 +85,7 @@ private:
     const bool cancel_ticket_after_do_get;
     const UInt64 poll_descriptors_lifetime_seconds;
     const bool cancel_poll_descriptor_after_poll_flight_info;
+    const UInt64 max_prepared_statements_per_user;
 
     std::unique_ptr<ArrowFlight::CallsData> calls_data;
 };

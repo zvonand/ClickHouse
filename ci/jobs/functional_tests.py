@@ -663,7 +663,7 @@ def main():
                 f" -- {' '.join(failed_tests)}"
             )
             print(f"Running diagnostics for {len(failed_tests)} test(s)...")
-            Shell.run(diag_command, verbose=True)
+            diag_exit_code = Shell.run(diag_command, verbose=True)
 
             # Read diagnostics results and prepend to original test info
             diag_results_path = os.path.join(
@@ -691,11 +691,22 @@ def main():
                 label_key = diag.get("label", "")
                 if label_key in label_map:
                     test_case.set_label(label_map[label_key])
+            if diag_exit_code != 0:
+                diag_status = Result.Status.FAIL
+                diag_info = (
+                    f"Diagnostics runner exited with code {diag_exit_code}; "
+                    f"diagnosed {len(diag_results)} out of {len(failed_tests)} failed test(s)"
+                )
+            else:
+                diag_status = Result.Status.OK
+                diag_info = (
+                    f"Diagnosed {len(diag_results)} out of {len(failed_tests)} failed test(s)"
+                )
             results.append(
                 Result(
                     name="Diagnostics",
-                    status=Result.Status.OK,
-                    info=f"Diagnosed {len(diag_results)} out of {len(failed_tests)} failed test(s)",
+                    status=diag_status,
+                    info=diag_info,
                 ).set_timing(stopwatch=diag_stopwatch)
             )
 

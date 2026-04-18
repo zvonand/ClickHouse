@@ -2108,6 +2108,11 @@ class TestCase:
                     "Result: No failures, but no clean passes either. Inconclusive."
                 )
             return "\n".join(diagnosis_lines) + "\n"
+        if ok1 > 0:
+            diagnosis_lines.append(
+                f"Result: Failure is flaky ({fail1}/{total1} reruns failed)."
+            )
+            return "\n".join(diagnosis_lines) + "\n"
 
         diagnosis_lines.append("Result: Failure is reproducible.")
 
@@ -4071,10 +4076,15 @@ def run_diagnose_from_artifacts(args, server_died):
                 print(f"  MergeTree settings: {TestCase.cli_format_settings(mt_settings)}")
             print(f"{'='*70}")
 
-            diagnosis = test_case.diagnose_random_settings(args, test_suite, client_options)
+            try:
+                diagnosis = test_case.diagnose_random_settings(args, test_suite, client_options)
+            except Exception as e:
+                print(f"ERROR: Diagnosis failed for {test_name}: {e}")
+                traceback.print_exc()
+                exit_code = 1
+                continue
             if diagnosis:
                 print(diagnosis)
-                exit_code = 1
             else:
                 diagnosis = ""
 
@@ -4082,10 +4092,19 @@ def run_diagnose_from_artifacts(args, server_died):
             label = ""
             if "Culprit settings:" in diagnosis or "Culprit MergeTree settings:" in diagnosis:
                 label = "setting"
-            elif "Failed 0 out of" in diagnosis or "not reproducible" in diagnosis.lower():
+            elif "Failure is flaky" in diagnosis or "not reproducible" in diagnosis.lower():
                 label = "flaky"
-            elif diagnosis:
-                label = "reproducible"
+            else:
+                # Match "Failed N out of M reruns." for the no-random-settings path
+                m = re.search(r"Failed (\d+) out of (\d+) reruns", diagnosis)
+                if m:
+                    fail_n, total_n = int(m.group(1)), int(m.group(2))
+                    if fail_n < total_n:
+                        label = "flaky"
+                    else:
+                        label = "reproducible"
+                elif diagnosis:
+                    label = "reproducible"
 
             result_entry = {"test_name": test_name, "diagnosis": diagnosis, "label": label}
             results_file.write(json.dumps(result_entry, ensure_ascii=False) + "\n")

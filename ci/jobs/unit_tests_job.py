@@ -22,7 +22,6 @@ if __name__ == "__main__":
 
     R = Result.from_gtest_run(
         unit_tests_path="./ci/tmp/unit_tests_dbms",
-        name="unit_tests",
         command_launcher=command_launcher,
     )
 

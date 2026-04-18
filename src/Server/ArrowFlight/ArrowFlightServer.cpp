@@ -267,53 +267,6 @@ namespace
         return convertPathToSQL(path, /* for_put_operation = */ true);
     }
 
-    using DecodeResult = std::tuple<std::string, ArrowFlight::SchemaModifier, ArrowFlight::BlockModifier, std::shared_ptr<arrow::Table>>;
-
-    [[nodiscard]]
-    arrow::Result<DecodeResult> decodeDescriptor(
-        const arrow::flight::FlightDescriptor & descriptor,
-        bool for_put_operation,
-        const CallsData * calls_data = nullptr)
-    {
-        switch (descriptor.type)
-        {
-            case arrow::flight::FlightDescriptor::PATH:
-            {
-                auto sql_res = for_put_operation ? convertPutPathToSQL(descriptor.path) : convertGetPathToSQL(descriptor.path);
-                ARROW_RETURN_NOT_OK(sql_res);
-                return DecodeResult {sql_res.ValueUnsafe(), {}, {}, {}};
-            }
-            case arrow::flight::FlightDescriptor::CMD:
-            {
-                if (!for_put_operation && hasPollDescriptorPrefix(descriptor.cmd))
-                    return arrow::Status::Invalid("Method GetFlightInfo cannot be called with a flight descriptor returned by method PollFlightInfo");
-
-                auto res = ArrowFlight::commandSelector(descriptor.cmd);
-                if (const auto * result_table = res.getTable())
-                {
-                    ARROW_RETURN_NOT_OK(*result_table);
-                    return DecodeResult {{}, {}, {}, result_table->ValueUnsafe()};
-                }
-                const auto * sql_set = res.getSQLSet();
-
-                /// If the command resolved to a prepared statement handle, look up the actual query.
-                if (calls_data && isPreparedStatementHandle(sql_set->sql))
-                {
-                    auto ps_info_res = calls_data->getPreparedStatement(sql_set->sql);
-                    ARROW_RETURN_NOT_OK(ps_info_res);
-                    const auto & ps_info = ps_info_res.ValueUnsafe();
-                    auto resolved_query_res = replaceQuestionMarksWithValues(ps_info->query, ps_info->bound_parameters);
-                    ARROW_RETURN_NOT_OK(resolved_query_res);
-                    return DecodeResult {std::move(resolved_query_res).ValueUnsafe(), {}, {}, {}};
-                }
-
-                return DecodeResult {sql_set->sql, sql_set->schema_modifier, sql_set->block_modifier, {}};
-            }
-            default:
-                return arrow::Status::TypeError("Flight descriptor has unknown type ", magic_enum::enum_name(descriptor.type));
-        }
-    }
-
     /// For method doGet() the pipeline should have an output.
     [[nodiscard]] arrow::Status checkPipelineIsPulling(const QueryPipeline & pipeline)
     {
@@ -347,6 +300,50 @@ namespace
         auto ch_to_arrow_converter = std::make_shared<CHColumnToArrowColumn>(header, "Arrow", arrow_settings);
         ch_to_arrow_converter->initializeArrowSchema();
         return ch_to_arrow_converter;
+    }
+}
+
+
+arrow::Result<ArrowFlightServer::DecodeResult> ArrowFlightServer::decodeDescriptor(
+    const arrow::flight::FlightDescriptor & descriptor,
+    bool for_put_operation) const
+{
+    switch (descriptor.type)
+    {
+        case arrow::flight::FlightDescriptor::PATH:
+        {
+            auto sql_res = for_put_operation ? convertPutPathToSQL(descriptor.path) : convertGetPathToSQL(descriptor.path);
+            ARROW_RETURN_NOT_OK(sql_res);
+            return DecodeResult {sql_res.ValueUnsafe(), {}, {}, {}};
+        }
+        case arrow::flight::FlightDescriptor::CMD:
+        {
+            if (!for_put_operation && hasPollDescriptorPrefix(descriptor.cmd))
+                return arrow::Status::Invalid("Method GetFlightInfo cannot be called with a flight descriptor returned by method PollFlightInfo");
+
+            auto res = ArrowFlight::commandSelector(descriptor.cmd);
+            if (const auto * result_table = res.getTable())
+            {
+                ARROW_RETURN_NOT_OK(*result_table);
+                return DecodeResult {{}, {}, {}, result_table->ValueUnsafe()};
+            }
+            const auto * sql_set = res.getSQLSet();
+
+            /// If the command resolved to a prepared statement handle, look up the actual query.
+            if (isPreparedStatementHandle(sql_set->sql))
+            {
+                auto ps_info_res = calls_data->getPreparedStatement(sql_set->sql);
+                ARROW_RETURN_NOT_OK(ps_info_res);
+                const auto & ps_info = ps_info_res.ValueUnsafe();
+                auto resolved_query_res = replaceQuestionMarksWithValues(ps_info->query, ps_info->bound_parameters);
+                ARROW_RETURN_NOT_OK(resolved_query_res);
+                return DecodeResult {std::move(resolved_query_res).ValueUnsafe(), {}, {}, {}};
+            }
+
+            return DecodeResult {sql_set->sql, sql_set->schema_modifier, sql_set->block_modifier, {}};
+        }
+        default:
+            return arrow::Status::TypeError("Flight descriptor has unknown type ", magic_enum::enum_name(descriptor.type));
     }
 }
 
@@ -641,7 +638,7 @@ arrow::Status ArrowFlightServer::GetFlightInfo(
         std::shared_ptr<arrow::Table> table;
         std::shared_ptr<arrow::Schema> schema;
 
-        ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false, calls_data.get()))
+        ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false))
         chassert(!sql.empty() || table);
 
         std::vector<arrow::flight::FlightEndpoint> endpoints;
@@ -730,7 +727,7 @@ arrow::Status ArrowFlightServer::GetSchema(
             ArrowFlight::BlockModifier block_modifier;
             std::shared_ptr<arrow::Table> table;
 
-            ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false, calls_data.get()))
+            ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false))
             chassert(!sql.empty() || table);
 
             if (table)
@@ -833,7 +830,7 @@ arrow::Status ArrowFlightServer::PollFlightInfo(
             ArrowFlight::BlockModifier block_modifier;
             std::shared_ptr<arrow::Table> table;
 
-            ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false, calls_data.get()))
+            ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, false))
             chassert(!sql.empty() || table);
 
             if (table)
@@ -1207,7 +1204,7 @@ arrow::Status ArrowFlightServer::DoPut(
         ArrowFlight::BlockModifier block_modifier;
         std::shared_ptr<arrow::Table> table;
 
-        ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, true, calls_data.get()))
+        ARROW_ASSIGN_OR_RAISE(std::tie(sql, schema_modifier, block_modifier, table), decodeDescriptor(request, true))
         /// DoPut command should only produce sql query
         chassert(!sql.empty() && !schema_modifier && !block_modifier && !table);
 

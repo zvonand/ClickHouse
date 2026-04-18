@@ -5,6 +5,7 @@
 #if USE_ARROWFLIGHT
 
 #include <Common/ThreadPool.h>
+#include <Server/ArrowFlight/commandSelector.h>
 #include <Server/GRPCServer.h>
 #include <arrow/flight/server.h>
 
@@ -62,6 +63,12 @@ public:
         std::unique_ptr<arrow::flight::ResultStream> * result) override;
 
 private:
+    using DecodeResult = std::tuple<std::string, ArrowFlight::SchemaModifier, ArrowFlight::BlockModifier, std::shared_ptr<arrow::Table>>;
+
+    [[nodiscard]] arrow::Result<DecodeResult> decodeDescriptor(
+        const arrow::flight::FlightDescriptor & descriptor,
+        bool for_put_operation) const;
+
     arrow::Status tryRunAndLogIfError(std::string_view method_name, std::function<arrow::Status()> && func) const;
     arrow::Status evaluatePollDescriptor(const String & poll_descriptor);
 

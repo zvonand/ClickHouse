@@ -539,6 +539,9 @@ static const UnionNode * findTableUnionForParallelReplicas(const IQueryTreeNode 
             case QueryTreeNodeType::UNION:
             {
                 const auto & union_node = query_tree_node->as<UnionNode &>();
+                if (union_node.getUnionMode() != SelectUnionMode::UNION_ALL)
+                    return nullptr;
+
                 const auto & union_queries = union_node.getQueries().getNodes();
 
                 if (union_queries.empty())

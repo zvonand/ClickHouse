@@ -456,6 +456,19 @@ void VersionMetadata::validateInfo(const String & object_name, const VersionInfo
 {
     chassert(!info.creation_tid.isEmpty());
 
+    /// A rolled-back part is a transient state produced by `VersionMetadataOnDisk::loadMetadata`
+    /// when only a `txn_version.txt.tmp` file exists on disk (i.e. the previous write was
+    /// interrupted before the atomic rename). In that case `creation_tid == Tx::DummyTID` and
+    /// `creation_csn == Tx::RolledBackCSN`. Skip the rest of validation because:
+    ///  - `DummyTID` has `start_csn == NonTransactionalCSN` but `local_tid == DummyLocalTID`,
+    ///    which would trip the `assert` inside `TransactionID::isNonTransactional` in debug /
+    ///    sanitizer builds and abort the server during startup or `ATTACH`.
+    ///  - The part will be marked `Outdated` immediately after loading (see
+    ///    `MergeTreeData::loadDataPart`) and subsequently cleaned up, so the invariants that
+    ///    `validateInfo` enforces for live parts do not apply here.
+    if (info.creation_csn == Tx::RolledBackCSN)
+        return;
+
     MergeTreeTransactionPtr creating_txn{nullptr};
     if (!info.creation_tid.isNonTransactional())
         creating_txn = TransactionLog::instance().tryGetRunningTransaction(info.creation_tid.getHash());

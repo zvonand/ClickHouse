@@ -32,7 +32,7 @@ public:
     {
         FunctionArgumentDescriptors mandatory_args{
             {"collection", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isString), &isColumnConst, "const String"},
-            {"text", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isString), nullptr, "String"},
+            {"text", static_cast<FunctionArgumentDescriptor::TypeValidator>(&FunctionBaseAI::isStringOrNullableString), nullptr, "String or Nullable(String)"},
             {"target_language", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isString), &isColumnConst, "const String"},
         };
         FunctionArgumentDescriptors optional_args{
@@ -45,7 +45,7 @@ public:
         if (target_language.find_first_not_of(" \t\n\r") == std::string_view::npos)
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "aiTranslate: 'target_language' must not be empty");
 
-        return std::make_shared<DataTypeString>();
+        return wrapReturnTypeForNullablePrompt(arguments, prompt_arg_index, std::make_shared<DataTypeString>());
     }
 
 private:

@@ -4,6 +4,7 @@
 #include <Functions/FunctionFactory.h>
 #include <Functions/AI/IAIProvider.h>
 #include <Functions/AI/AIQuotaTracker.h>
+#include <DataTypes/DataTypeNullable.h>
 #include <Interpreters/Context.h>
 
 namespace DB
@@ -21,10 +22,30 @@ public:
     bool isDeterministicInScopeOfQuery() const override { return false; }
     bool isSuitableForConstantFolding() const override { return false; }
     bool isSuitableForShortCircuitArgumentsExecution(const DataTypesWithConstInfo &) const override { return true; }
-    bool useDefaultImplementationForNulls() const override { return true; }
+    /// Handle Nullable cols explicitly, since setting this to true may call functions with arbitrary input values
+    bool useDefaultImplementationForNulls() const override { return false; }
     bool useDefaultImplementationForConstants() const override { return false; }
 
     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const override;
+
+    /// Helpers for nullable col handling
+
+    static bool isStringOrNullableString(const IDataType & type)
+    {
+        if (isString(type))
+            return true;
+        if (const auto * nullable = typeid_cast<const DataTypeNullable *>(&type))
+            return isString(*nullable->getNestedType());
+        return false;
+    }
+
+    static DataTypePtr wrapReturnTypeForNullablePrompt(const ColumnsWithTypeAndName & arguments, size_t prompt_idx, DataTypePtr inner)
+    {
+        if (arguments[prompt_idx].type->isNullable())
+            return makeNullable(inner);
+        else
+            return inner;
+    }
 
 protected:
     ContextWeakPtr context_weak;

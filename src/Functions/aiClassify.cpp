@@ -46,7 +46,7 @@ public:
     {
         FunctionArgumentDescriptors mandatory_args{
             {"collection", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isString), &isColumnConst, "const String"},
-            {"text", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isString), nullptr, "String"},
+            {"text", static_cast<FunctionArgumentDescriptor::TypeValidator>(&FunctionBaseAI::isStringOrNullableString), nullptr, "String or Nullable(String)"},
             {"categories", static_cast<FunctionArgumentDescriptor::TypeValidator>(&isArrayOfStrings), &isColumnConst, "const Array(String)"},
         };
         FunctionArgumentDescriptors optional_args{
@@ -59,7 +59,7 @@ public:
         if (getCategories(arguments).empty())
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "aiClassify: 'categories' must contain at least one label");
 
-        return std::make_shared<DataTypeString>();
+        return wrapReturnTypeForNullablePrompt(arguments, prompt_arg_index, std::make_shared<DataTypeString>());
     }
 
 private:

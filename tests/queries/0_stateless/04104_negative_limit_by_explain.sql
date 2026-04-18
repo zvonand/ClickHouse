@@ -17,6 +17,8 @@ SELECT replaceRegexpAll(explain, '^\s*', '') FROM (EXPLAIN actions=1 SELECT numb
 
 SELECT replaceRegexpAll(explain, '^\s*', '') FROM (EXPLAIN actions=1 SELECT number FROM numbers(12) ORDER BY number % 2, number % 3, number LIMIT -1 BY number % 2, number % 3) WHERE match(explain, '^\s*(NegativeLimitBy|LimitBy|Negative Length|Negative Offset|Length |Offset )');
 
+SELECT replaceRegexpAll(explain, '^\s*', '') FROM (EXPLAIN actions=1 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g) WHERE match(explain, '^\s*(NegativeLimitBy|LimitBy|Negative Length|Negative Offset|Length |Offset )');
+
 SELECT explain LIKE '%"Node Type": "NegativeLimitBy"%' AND explain LIKE '%"Negative Length": 2%' AND explain LIKE '%"Negative Offset": 3%' FROM (EXPLAIN json=1, actions=1 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET -3 BY g);
 
 SELECT explain LIKE '%"Node Type": "NegativeLimitBy"%' AND explain LIKE '%"Negative Length": 2%' AND explain LIKE '%"Negative Offset": 0%' AND explain LIKE '%"Node Type": "LimitBy"%' FROM (EXPLAIN json=1, actions=1 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g);
@@ -24,6 +26,8 @@ SELECT explain LIKE '%"Node Type": "NegativeLimitBy"%' AND explain LIKE '%"Negat
 SELECT explain LIKE '%"Node Type": "NegativeLimitBy"%' AND explain LIKE '%"Negative Length": 2%' AND explain LIKE '%"Node Type": "LimitBy"%' AND explain LIKE '%"Offset": 3%' FROM (EXPLAIN json=1, actions=1 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET 3 BY g);
 
 SELECT explain LIKE '%"Node Type": "NegativeLimitBy"%' AND explain LIKE '%"Negative Offset": 3%' AND explain LIKE '%"Node Type": "LimitBy"%' AND explain LIKE '%"Length": 2%' FROM (EXPLAIN json=1, actions=1 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSET -3 BY g);
+
+SELECT explain LIKE '%"Node Type": "NegativeLimitBy"%' AND explain LIKE '%"Negative Length": 2%' FROM (EXPLAIN json=1, actions=1 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g);
 
 SELECT DISTINCT trim(BOTH ' ' FROM explain) FROM (EXPLAIN PIPELINE SELECT g, x FROM test ORDER BY g, x LIMIT -2 BY g) WHERE explain ILIKE '%NegativeLimitByTransform%' OR explain ILIKE '%LimitByTransform%';
 
@@ -34,5 +38,7 @@ SELECT DISTINCT trim(BOTH ' ' FROM explain) FROM (EXPLAIN PIPELINE SELECT g, x F
 SELECT DISTINCT trim(BOTH ' ' FROM explain) FROM (EXPLAIN PIPELINE SELECT g, x FROM test LIMIT -2 BY g) WHERE explain ILIKE '%NegativeLimitByTransform%' OR explain ILIKE '%LimitByTransform%';
 
 SELECT DISTINCT trim(BOTH ' ' FROM explain) FROM (EXPLAIN PIPELINE SELECT g, x FROM test ORDER BY g, x LIMIT 2 OFFSET -3 BY g) WHERE explain ILIKE '%NegativeLimitByTransform%' OR explain ILIKE '%LimitByTransform%';
+
+SELECT DISTINCT trim(BOTH ' ' FROM explain) FROM (EXPLAIN PIPELINE SELECT g, x FROM test ORDER BY x LIMIT 2 OFFSET -3 BY g) WHERE explain ILIKE '%NegativeLimitByTransform%' OR explain ILIKE '%LimitByTransform%';
 
 DROP TABLE test;

@@ -1,10 +1,9 @@
 -- { echo }
 
 SET enable_analyzer = 0;
-SELECT 'Old Analyzer:';
-Old Analyzer:
-SELECT 'Negative Limit By Only';
-Negative Limit By Only
+-- Old Analyzer
+
+-- Negative Limit By Only
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -1 BY g;
 12	0
 13	1
@@ -56,8 +55,7 @@ SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY g, number LIMIT -1
 999999	0
 999997	1
 999998	2
-SELECT 'Negative Limit By and Negative Offset';
-Negative Limit By and Negative Offset
+-- Negative Limit By and Negative Offset
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -1 OFFSET -2 BY g;
 6	0
 7	1
@@ -125,8 +123,7 @@ SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY g, number LIMIT -5 
 92980	6
 92987	6
 92994	6
-SELECT 'Negative Limit By and Positive Offset';
-Negative Limit By and Positive Offset
+-- Negative Limit By and Positive Offset
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -1 OFFSET 2 BY g;
 12	0
 13	1
@@ -151,8 +148,7 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -8 OFFS
 13	1
 11	2
 14	2
-SELECT 'Common (Unordered) Path';
-Common (Unordered) Path
+-- Common (Unordered) Path
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g;
 9	0
 12	0
@@ -174,8 +170,7 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 OFFSET 
 13	1
 11	2
 14	2
-SELECT 'Edge Cases';
-Edge Cases
+-- Edge Cases
 SELECT number, number % 3 AS g FROM numbers(0) ORDER BY g, number LIMIT -2 BY g;
 SELECT number, number AS g FROM numbers(5) ORDER BY g LIMIT -1 BY g;
 0	0
@@ -191,8 +186,7 @@ SELECT number, if(number % 3 = 0, NULL, number % 3) AS g FROM numbers(15) ORDER 
 13	1
 14	2
 12	\N
-SELECT 'Combined with Regular Limit';
-Combined with Regular Limit
+-- Combined with Regular Limit
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g LIMIT 3;
 9	0
 12	0
@@ -201,8 +195,7 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g
 13	1
 11	2
 14	2
-SELECT 'Multiple Key Columns';
-Multiple Key Columns
+-- Multiple Key Columns
 SELECT number, number % 2 AS g1, number % 3 AS g2 FROM numbers(12) ORDER BY g1, g2, number LIMIT -1 BY g1, g2;
 6	0	0
 10	0	1
@@ -210,13 +203,11 @@ SELECT number, number % 2 AS g1, number % 3 AS g2 FROM numbers(12) ORDER BY g1, 
 9	1	0
 7	1	1
 11	1	2
-SELECT 'String Keys';
-String Keys
+-- String Keys
 SELECT number, toString(number % 2) AS g FROM numbers(10) ORDER BY g, number LIMIT -1 BY g;
 8	0
 9	1
-SELECT 'Misc';
-Misc
+-- Misc
 SELECT DISTINCT number % 8 AS x FROM numbers(120) ORDER BY x LIMIT -3 OFFSET -2 BY x;
 SELECT DISTINCT number % 80 AS x FROM numbers(120) ORDER BY x LIMIT -3 OFFSET 50 BY x;
 SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY g, number LIMIT -1 BY g;
@@ -224,8 +215,7 @@ SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY g, number LIMIT -1
 999997	1
 999998	2
 SELECT DISTINCT number % 5 AS g FROM numbers(1000000) ORDER BY g LIMIT -1 OFFSET -4 BY g;
-SELECT 'Real Table';
-Real Table
+-- Real Table
 DROP TABLE IF EXISTS neg_limit_by_tab;
 CREATE TABLE neg_limit_by_tab (id UInt8, val UInt32) ENGINE = MergeTree ORDER BY (id, val)
 AS SELECT number % 3 AS id, number AS val FROM numbers(30);
@@ -250,8 +240,7 @@ SELECT id, val FROM neg_limit_by_tab ORDER BY id, val LIMIT -1 OFFSET 8 BY id;
 0	27
 1	28
 2	29
-SELECT 'Big Table';
-Big Table
+-- Big Table
 SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY g, number LIMIT -3 BY g;
 99981	0
 99988	0
@@ -296,8 +285,7 @@ SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY number LIMIT -3 BY 
 99980	6
 99987	6
 99994	6
-SELECT 'Positive Limit Negative Offset';
-Positive Limit Negative Offset
+-- Positive Limit Negative Offset
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSET -1 BY g;
 0	0
 3	0
@@ -316,8 +304,7 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT 2 OFFSET -
 4	1
 2	2
 5	2
-SELECT 'Zero Limit and Offset Edge Cases';
-Zero Limit and Offset Edge Cases
+-- Zero Limit and Offset Edge Cases
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -0 OFFSET -2 BY g;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFSET 0 BY g;
 6	0
@@ -330,8 +317,7 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFS
 11	2
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -0 OFFSET 2 BY g;
-SELECT 'Expression LIMIT BY';
-Expression LIMIT BY
+-- Expression LIMIT BY
 SELECT number FROM numbers(15) ORDER BY number % 3, number LIMIT -2 BY number % 3;
 9
 12
@@ -346,8 +332,7 @@ SELECT number FROM numbers(15) ORDER BY number % 3, number LIMIT -2 OFFSET -1 BY
 10
 8
 11
-SELECT 'Sparse columns';
-Sparse columns
+-- Sparse columns
 DROP TABLE IF EXISTS test_sparse;
 CREATE TABLE test_sparse (id UInt8 DEFAULT 0, val UInt32 DEFAULT 0) ENGINE = MergeTree ORDER BY (id, val)
 SETTINGS ratio_of_defaults_for_sparse_serialization = 0.001;
@@ -361,11 +346,42 @@ SELECT id, val FROM test_sparse ORDER BY id, val LIMIT -2 BY id;
 1	28
 2	26
 2	29
+-- No ORDER BY
+SELECT number, number % 3 AS g FROM numbers(15) LIMIT -2 BY g;
+9	0
+12	0
+10	1
+13	1
+11	2
+14	2
+SELECT number, number % 3 AS g FROM numbers(15) LIMIT -2 OFFSET -1 BY g;
+6	0
+9	0
+7	1
+10	1
+8	2
+11	2
+SELECT number, number % 3 AS g FROM numbers(15) LIMIT -2 OFFSET 1 BY g;
+9	0
+12	0
+10	1
+13	1
+11	2
+14	2
+SELECT number, number % 3 AS g FROM numbers(15) LIMIT 2 OFFSET -1 BY g;
+0	0
+3	0
+1	1
+4	1
+2	2
+5	2
+-- INT_MIN with offsets
+SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -9223372036854775808 OFFSET -5 BY g;
+SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -9223372036854775808 OFFSET 5 BY g;
 SET enable_analyzer = 1;
-SELECT 'Analyzer:';
-Analyzer:
-SELECT 'Negative Limit By Only';
-Negative Limit By Only
+-- Analyzer
+
+-- Negative Limit By Only
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -1 BY g;
 12	0
 13	1
@@ -417,8 +433,7 @@ SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY g, number LIMIT -1
 999999	0
 999997	1
 999998	2
-SELECT 'Negative Limit By and Negative Offset';
-Negative Limit By and Negative Offset
+-- Negative Limit By and Negative Offset
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -1 OFFSET -2 BY g;
 6	0
 7	1
@@ -486,8 +501,7 @@ SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY g, number LIMIT -5 
 92980	6
 92987	6
 92994	6
-SELECT 'Negative Limit By and Positive Offset';
-Negative Limit By and Positive Offset
+-- Negative Limit By and Positive Offset
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -1 OFFSET 2 BY g;
 12	0
 13	1
@@ -512,8 +526,7 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -8 OFFS
 13	1
 11	2
 14	2
-SELECT 'Common (Unordered) Path';
-Common (Unordered) Path
+-- Common (Unordered) Path
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g;
 9	0
 12	0
@@ -535,8 +548,7 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 OFFSET 
 13	1
 11	2
 14	2
-SELECT 'Edge Cases';
-Edge Cases
+-- Edge Cases
 SELECT number, number % 3 AS g FROM numbers(0) ORDER BY g, number LIMIT -2 BY g;
 SELECT number, number AS g FROM numbers(5) ORDER BY g LIMIT -1 BY g;
 0	0
@@ -552,8 +564,7 @@ SELECT number, if(number % 3 = 0, NULL, number % 3) AS g FROM numbers(15) ORDER 
 13	1
 14	2
 12	\N
-SELECT 'Combined with Regular Limit';
-Combined with Regular Limit
+-- Combined with Regular Limit
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g LIMIT 3;
 9	0
 12	0
@@ -562,8 +573,7 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g
 13	1
 11	2
 14	2
-SELECT 'Multiple Key Columns';
-Multiple Key Columns
+-- Multiple Key Columns
 SELECT number, number % 2 AS g1, number % 3 AS g2 FROM numbers(12) ORDER BY g1, g2, number LIMIT -1 BY g1, g2;
 6	0	0
 10	0	1
@@ -571,13 +581,11 @@ SELECT number, number % 2 AS g1, number % 3 AS g2 FROM numbers(12) ORDER BY g1, 
 9	1	0
 7	1	1
 11	1	2
-SELECT 'String Keys';
-String Keys
+-- String Keys
 SELECT number, toString(number % 2) AS g FROM numbers(10) ORDER BY g, number LIMIT -1 BY g;
 8	0
 9	1
-SELECT 'Misc';
-Misc
+-- Misc
 SELECT DISTINCT number % 8 AS x FROM numbers(120) ORDER BY x LIMIT -3 OFFSET -2 BY x;
 SELECT DISTINCT number % 80 AS x FROM numbers(120) ORDER BY x LIMIT -3 OFFSET 50 BY x;
 SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY g, number LIMIT -1 BY g;
@@ -585,8 +593,7 @@ SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY g, number LIMIT -1
 999997	1
 999998	2
 SELECT DISTINCT number % 5 AS g FROM numbers(1000000) ORDER BY g LIMIT -1 OFFSET -4 BY g;
-SELECT 'Real Table';
-Real Table
+-- Real Table
 DROP TABLE IF EXISTS neg_limit_by_tab;
 CREATE TABLE neg_limit_by_tab (id UInt8, val UInt32) ENGINE = MergeTree ORDER BY (id, val)
 AS SELECT number % 3 AS id, number AS val FROM numbers(30);
@@ -611,8 +618,7 @@ SELECT id, val FROM neg_limit_by_tab ORDER BY id, val LIMIT -1 OFFSET 8 BY id;
 0	27
 1	28
 2	29
-SELECT 'Big Table';
-Big Table
+-- Big Table
 SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY g, number LIMIT -3 BY g;
 99981	0
 99988	0
@@ -657,8 +663,7 @@ SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY number LIMIT -3 BY 
 99980	6
 99987	6
 99994	6
-SELECT 'Positive Limit Negative Offset';
-Positive Limit Negative Offset
+-- Positive Limit Negative Offset
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSET -1 BY g;
 0	0
 3	0
@@ -677,8 +682,7 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT 2 OFFSET -
 4	1
 2	2
 5	2
-SELECT 'Zero Limit and Offset Edge Cases';
-Zero Limit and Offset Edge Cases
+-- Zero Limit and Offset Edge Cases
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -0 OFFSET -2 BY g;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFSET 0 BY g;
 6	0
@@ -691,8 +695,7 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFS
 11	2
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -0 OFFSET 2 BY g;
-SELECT 'Expression LIMIT BY';
-Expression LIMIT BY
+-- Expression LIMIT BY
 SELECT number FROM numbers(15) ORDER BY number % 3, number LIMIT -2 BY number % 3;
 9
 12
@@ -707,8 +710,7 @@ SELECT number FROM numbers(15) ORDER BY number % 3, number LIMIT -2 OFFSET -1 BY
 10
 8
 11
-SELECT 'Sparse columns';
-Sparse columns
+-- Sparse columns
 DROP TABLE IF EXISTS test_sparse;
 CREATE TABLE test_sparse (id UInt8 DEFAULT 0, val UInt32 DEFAULT 0) ENGINE = MergeTree ORDER BY (id, val)
 SETTINGS ratio_of_defaults_for_sparse_serialization = 0.001;
@@ -722,3 +724,35 @@ SELECT id, val FROM test_sparse ORDER BY id, val LIMIT -2 BY id;
 1	28
 2	26
 2	29
+-- No ORDER BY
+SELECT number, number % 3 AS g FROM numbers(15) LIMIT -2 BY g;
+9	0
+12	0
+10	1
+13	1
+11	2
+14	2
+SELECT number, number % 3 AS g FROM numbers(15) LIMIT -2 OFFSET -1 BY g;
+6	0
+9	0
+7	1
+10	1
+8	2
+11	2
+SELECT number, number % 3 AS g FROM numbers(15) LIMIT -2 OFFSET 1 BY g;
+9	0
+12	0
+10	1
+13	1
+11	2
+14	2
+SELECT number, number % 3 AS g FROM numbers(15) LIMIT 2 OFFSET -1 BY g;
+0	0
+3	0
+1	1
+4	1
+2	2
+5	2
+-- INT_MIN with offsets
+SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -9223372036854775808 OFFSET -5 BY g;
+SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -9223372036854775808 OFFSET 5 BY g;

@@ -1,0 +1,52 @@
+-- { echo }
+
+SET max_block_size = 3;
+SELECT number, number % 3 AS g FROM numbers(10) ORDER BY g DESC, number DESC LIMIT -4 BY g;
+
+SELECT intDiv(number, 2) AS g, number FROM numbers(10) ORDER BY g DESC, number DESC LIMIT -1 BY g;
+
+SELECT intDiv(number, 3) AS g FROM numbers(12) ORDER BY g LIMIT -2 BY g;
+
+SELECT intDiv(number, 3) AS g, number FROM numbers(12) ORDER BY g, number LIMIT -2 OFFSET -1 BY g;
+
+SELECT intDiv(number, 3) AS g FROM numbers(9) ORDER BY g LIMIT -3 BY g;
+
+SET max_block_size = 1;
+SELECT intDiv(number, 3) AS g, number FROM numbers(9) ORDER BY g, number LIMIT -2 BY g;
+
+SELECT intDiv(number, 3) AS g, number FROM numbers(9) ORDER BY g, number LIMIT -2 OFFSET -1 BY g;
+
+SET max_block_size = 65536;
+SELECT 0 AS g FROM numbers(100) ORDER BY g LIMIT -5 BY g;
+
+SET max_block_size = 2;
+SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -0 OFFSET -3 BY g;
+
+SET max_block_size = 65536;
+SELECT intDiv(number, 3) AS g, number % 2 AS tag, number FROM numbers(12) ORDER BY g, tag, number LIMIT -2 BY g;
+
+SELECT number, 0 AS g FROM numbers(1) ORDER BY g LIMIT -1 BY g;
+
+SELECT number, 0 AS g FROM numbers(0) ORDER BY g LIMIT -1 BY g;
+
+SELECT number, 0 AS g FROM numbers(5) ORDER BY g LIMIT -100 BY g;
+
+SELECT sum(x) FROM (SELECT number AS x, intDiv(number, 3) AS g FROM numbers(9) ORDER BY g, x LIMIT -2 BY g);
+
+SELECT sum(x) FROM (SELECT number AS x, intDiv(number, 3) AS g FROM numbers(9) ORDER BY g, x LIMIT -2 OFFSET 1 BY g);
+
+SELECT sum(x) FROM (SELECT number AS x, intDiv(number, 3) AS g FROM numbers(9) ORDER BY g, x LIMIT 2 OFFSET -1 BY g);
+
+SELECT DISTINCT number % 3 AS g, number FROM numbers(15) ORDER BY g, number LIMIT -2 BY g;
+
+SET max_block_size = 2;
+SELECT number, number % 3 AS g FROM numbers(15) LIMIT -2 BY g;
+
+{% for block_size in [1, 2, 3] -%}
+SET max_block_size = {{ block_size }};
+SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g;
+SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFSET -1 BY g;
+SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET 2 BY g;
+SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSET -2 BY g;
+
+{% endfor -%}

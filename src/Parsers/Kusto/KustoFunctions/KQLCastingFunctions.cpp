@@ -75,7 +75,7 @@ bool ToLong::convertImpl(String & out, IParser::Pos & pos)
         "multiIf(isNull({0}), NULL, "
         "isNotNull(toInt64OrNull(toString({0}))), toInt64OrNull(toString({0})), "
         "startsWith(toString({0}), '0x') OR startsWith(toString({0}), '0X'), "
-        "reinterpretAsInt64(reverse(unhex(leftPad(substr(toString({0}), 3), 16, '0')))), "
+        "reinterpretAsInt64(reverse(unhex(right(leftPad(substr(toString({0}), 3), 16, '0'), 16)))), "
         "isNotNull(toFloat64OrNull(toString({0}))) AND NOT isNaN(toFloat64OrNull(toString({0}))), "
         "CAST(toFloat64OrNull(toString({0})) AS Nullable(Int64)), NULL)",
         param);

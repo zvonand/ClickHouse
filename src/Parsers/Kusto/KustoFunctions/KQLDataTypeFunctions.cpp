@@ -43,7 +43,7 @@ bool DatatypeDatetime::convertImpl(String & out, IParser::Pos & pos)
         datetime_str = getConvertedArgument(fn_name, pos);
         if (Poco::toUpper(datetime_str) == "NULL")
         {
-            out = "''";
+            out = "NULL";
             return true;
         }
         else

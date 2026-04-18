@@ -114,7 +114,8 @@ bool Bin::convertImpl(String & out, IParser::Pos & pos)
         String bin_value = fmt::format("toInt64(floor({0}/{1})) * {1}", t, bin_sz);
         auto result = fmt::format(
             "concat("
-            "if(abs(toInt64((({0}) as _bv))) >= 86400, concat(toString(intDiv(abs(toInt64(_bv)), 86400)), '.'), ''), "
+            "if((({0}) as _bv) < 0, '-', ''), "
+            "if(abs(toInt64(_bv)) >= 86400, concat(toString(intDiv(abs(toInt64(_bv)), 86400)), '.'), ''), "
             "leftPad(toString(intDiv(abs(toInt64(_bv)) % 86400, 3600)), 2, '0'), ':', "
             "leftPad(toString(intDiv(abs(toInt64(_bv)) % 3600, 60)), 2, '0'), ':', "
             "leftPad(toString(abs(toInt64(_bv)) % 60), 2, '0'))",
@@ -422,7 +423,9 @@ bool ParseHex::convertImpl(String & out, IParser::Pos & pos)
         return false;
 
     const auto argument = getArgument(fn_name, pos);
-    out = fmt::format("reinterpretAsInt64(reverse(unhex(leftPad(replaceOne(toString({}), '0x', ''), 16, '0'))))", argument);
+    out = fmt::format(
+        "reinterpretAsInt64(reverse(unhex(right(leftPad(replaceOne(toString({}), '0x', ''), 16, '0'), 16))))",
+        argument);
     return true;
 }
 
@@ -569,7 +572,9 @@ bool FormatInterp::convertImpl(String & out, IParser::Pos & pos)
     {
         String placeholder_plain = fmt::format("{{{}:x}}", i);
         String placeholder_simple = fmt::format("{{{}}}", i);
-        result = fmt::format("replaceAll({}, '{}', lower(trimLeft(hex(toInt64({})), '0')))", result, placeholder_plain, args[i]);
+        result = fmt::format(
+            "replaceAll({0}, '{1}', lower(if(empty(trimLeft(hex(toInt64({2})), '0')), '0', trimLeft(hex(toInt64({2})), '0'))))",
+            result, placeholder_plain, args[i]);
         result = fmt::format("replaceAll({}, '{}', toString({}))", result, placeholder_simple, args[i]);
     }
 

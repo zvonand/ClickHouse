@@ -409,13 +409,18 @@ void ExecutingGraph::cancel(IProcessor::CancelReason reason)
 
     {
         std::lock_guard guard(processors_mutex);
-        cancel_reason = reason;
+
+        if (cancel_reason == IProcessor::CancelReason::NotCancelled)
+            cancel_reason = reason;
+        else if (cancel_reason == IProcessor::CancelReason::PartialResult && reason != IProcessor::CancelReason::PartialResult)
+            cancel_reason = reason;
+
         uint64_t num_processors = processors->size();
         for (uint64_t proc = 0; proc < num_processors; ++proc)
         {
             try
             {
-                processors->at(proc)->cancel(reason);
+                processors->at(proc)->cancel(cancel_reason);
             }
             catch (...)
             {

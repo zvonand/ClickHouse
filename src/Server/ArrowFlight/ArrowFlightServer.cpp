@@ -1480,6 +1480,18 @@ arrow::Status ArrowFlightServer::DoAction(
                     if (serialized_schema.ok())
                         result.set_dataset_schema(serialized_schema.ValueUnsafe()->data(), serialized_schema.ValueUnsafe()->size());
                 }
+
+                /// Build parameter schema: one field per '?' placeholder.
+                /// Type is null because ClickHouse accepts any type and parses the value as a SQL literal.
+                arrow::FieldVector param_fields;
+                size_t num_params = ps_info.numParams();
+                param_fields.reserve(num_params);
+                for (size_t i = 0; i < num_params; ++i)
+                    param_fields.push_back(arrow::field("parameter_" + std::to_string(i + 1), arrow::null(), /* nullable = */ true));
+                auto param_schema = arrow::schema(std::move(param_fields));
+                auto serialized_param_schema = arrow::ipc::SerializeSchema(*param_schema, arrow::default_memory_pool());
+                if (serialized_param_schema.ok())
+                    result.set_parameter_schema(serialized_param_schema.ValueUnsafe()->data(), serialized_param_schema.ValueUnsafe()->size());
             }
 
             ARROW_ASSIGN_OR_RAISE(auto packed_result, arrow::Result<arrow::flight::Result>{arrow::flight::Result{arrow::Buffer::FromString(result.SerializeAsString())}})

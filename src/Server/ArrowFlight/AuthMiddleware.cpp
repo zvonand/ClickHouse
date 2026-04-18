@@ -1,4 +1,5 @@
 #include <Server/ArrowFlight/AuthMiddleware.h>
+#include <Server/ArrowFlight/CallsData.h>
 
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>
@@ -31,7 +32,11 @@ void AuthMiddleware::CallCompleted(const arrow::Status & /*status*/)
     if (!session_id.empty())
     {
         if (session_close)
+        {
+            if (calls_data)
+                calls_data->closeSessionPreparedStatements(session_id);
             session->closeSession(session_id);
+        }
         else
             session->releaseSessionID();
     }
@@ -243,7 +248,7 @@ arrow::Status AuthMiddlewareFactory::StartCall(
         if (auth)
             token = token_storage.getToken(username, password);
 
-        *middleware = std::make_unique<AuthMiddleware>(session, token, username, session_id, session_close == "1" && server.config().getBool("enable_arrow_close_session", true));
+        *middleware = std::make_unique<AuthMiddleware>(session, token, username, calls_data, session_id, session_close == "1" && server.config().getBool("enable_arrow_close_session", true));
     }
     catch (DB::Exception & e)
     {

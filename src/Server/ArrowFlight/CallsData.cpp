@@ -537,13 +537,18 @@ String CallsData::generatePreparedStatementHandle()
     return PREPARED_STATEMENT_HANDLE_PREFIX + toString(UUIDHelpers::generateV4());
 }
 
-String CallsData::createPreparedStatement(PreparedStatementInfo info)
+String CallsData::createPreparedStatement(PreparedStatementInfo info, const String & session_id)
 {
     String handle = generatePreparedStatementHandle();
     LOG_DEBUG(log, "Creating prepared statement {}", handle);
     auto shared_info = std::make_shared<PreparedStatementInfo>(std::move(info));
     std::lock_guard lock{mutex};
     prepared_statements.emplace(handle, std::move(shared_info));
+    if (!session_id.empty())
+    {
+        session_to_prepared_statements[session_id].insert(handle);
+        prepared_statement_to_session[handle] = session_id;
+    }
     return handle;
 }
 
@@ -570,6 +575,33 @@ void CallsData::closePreparedStatement(const String & handle)
 {
     std::lock_guard lock{mutex};
     prepared_statements.erase(handle);
+    auto it = prepared_statement_to_session.find(handle);
+    if (it != prepared_statement_to_session.end())
+    {
+        auto session_it = session_to_prepared_statements.find(it->second);
+        if (session_it != session_to_prepared_statements.end())
+        {
+            session_it->second.erase(handle);
+            if (session_it->second.empty())
+                session_to_prepared_statements.erase(session_it);
+        }
+        prepared_statement_to_session.erase(it);
+    }
+}
+
+void CallsData::closeSessionPreparedStatements(const String & session_id)
+{
+    std::lock_guard lock{mutex};
+    auto it = session_to_prepared_statements.find(session_id);
+    if (it == session_to_prepared_statements.end())
+        return;
+    for (const auto & handle : it->second)
+    {
+        LOG_DEBUG(log, "Closing prepared statement {} (session {} closed)", handle, session_id);
+        prepared_statements.erase(handle);
+        prepared_statement_to_session.erase(handle);
+    }
+    session_to_prepared_statements.erase(it);
 }
 
 std::optional<Timestamp> CallsData::calculateTicketExpirationTime(Timestamp current_time) const

@@ -195,7 +195,9 @@ public:
     void stopWaitingNextExpirationTime();
 
     /// Creates a prepared statement and returns its opaque handle.
-    String createPreparedStatement(PreparedStatementInfo info);
+    /// If session_id is non-empty, the prepared statement is associated with
+    /// that session and will be cleaned up when the session closes.
+    String createPreparedStatement(PreparedStatementInfo info, const String & session_id = {});
 
     /// Returns information about a prepared statement by handle.
     [[nodiscard]] arrow::Result<std::shared_ptr<PreparedStatementInfo>> getPreparedStatement(const String & handle) const;
@@ -205,6 +207,9 @@ public:
 
     /// Closes (removes) a prepared statement by handle.
     void closePreparedStatement(const String & handle);
+
+    /// Closes all prepared statements associated with a session.
+    void closeSessionPreparedStatements(const String & session_id);
 
 private:
     static String generateTicketName();
@@ -242,6 +247,8 @@ private:
     std::set<std::pair<Timestamp, String>> tickets_by_expiration_time TSA_GUARDED_BY(mutex);
     std::set<std::pair<Timestamp, String>> poll_descriptors_by_expiration_time TSA_GUARDED_BY(mutex);
     std::unordered_map<String, std::shared_ptr<PreparedStatementInfo>> prepared_statements TSA_GUARDED_BY(mutex);
+    std::unordered_map<String, std::unordered_set<String>> session_to_prepared_statements TSA_GUARDED_BY(mutex);
+    std::unordered_map<String, String> prepared_statement_to_session TSA_GUARDED_BY(mutex);
     std::optional<Timestamp> next_expiration_time TSA_GUARDED_BY(mutex);
     mutable std::condition_variable next_expiration_time_updated;
     bool stop_waiting_next_expiration_time TSA_GUARDED_BY(mutex) = false;

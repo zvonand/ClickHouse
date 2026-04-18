@@ -375,7 +375,7 @@ void ArrowFlightServer::start()
 
     arrow::flight::FlightServerOptions options(location);
     options.auth_handler = std::make_unique<arrow::flight::NoOpAuthHandler>();
-    options.middleware.emplace_back(AUTHORIZATION_MIDDLEWARE_NAME, std::make_shared<AuthMiddlewareFactory>(server));
+    options.middleware.emplace_back(AUTHORIZATION_MIDDLEWARE_NAME, std::make_shared<AuthMiddlewareFactory>(server, calls_data.get()));
 
     if (use_tls)
     {
@@ -1464,7 +1464,7 @@ arrow::Status ArrowFlightServer::DoAction(
                 }
             }
 
-            auto handle = calls_data->createPreparedStatement(std::move(info));
+            auto handle = calls_data->createPreparedStatement(std::move(info), auth.getSessionId());
 
             /// Build the protobuf result.
             arrow::flight::protocol::sql::ActionCreatePreparedStatementResult result;

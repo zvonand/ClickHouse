@@ -1134,67 +1134,6 @@ arrow::Status ArrowFlightServer::DoPut(
                 LOG_INFO(log, "DoPut: parameter binding succeeded for prepared statement {}", handle);
                 return arrow::Status::OK();
             }
-
-            /// DoPut with CommandPreparedStatementUpdate executes the prepared query directly
-            /// (the SQL already contains substituted parameter values, no Arrow data streaming).
-            if (any_msg.Is<arrow::flight::protocol::sql::CommandPreparedStatementUpdate>())
-            {
-                arrow::flight::protocol::sql::CommandPreparedStatementUpdate command;
-                if (!any_msg.UnpackTo(&command))
-                    return arrow::Status::SerializationError("Deserialization of sql::CommandPreparedStatementUpdate failed.");
-
-                const auto & handle = command.prepared_statement_handle();
-                LOG_DEBUG(log, "DoPut: executing prepared statement update {}", handle);
-
-                auto ps_info_res = calls_data->getPreparedStatement(handle);
-                ARROW_RETURN_NOT_OK(ps_info_res);
-                const auto & ps_info = ps_info_res.ValueUnsafe();
-                auto resolved_query_res = replaceQuestionMarksWithValues(ps_info->query, ps_info->bound_parameters);
-                ARROW_RETURN_NOT_OK(resolved_query_res);
-                const auto & resolved_sql = resolved_query_res.ValueUnsafe();
-
-                auto query_context = session->makeQueryContext();
-                query_context->setCurrentQueryId("");
-                QueryScope query_scope = QueryScope::create(query_context);
-
-                auto [ast, block_io] = executeQuery(resolved_sql, query_context, QueryFlags{}, QueryProcessingStage::Complete);
-
-                bool query_finished = false;
-                bool handling_exception = false;
-                SCOPE_EXIT({
-                    if (query_finished)
-                        block_io.onFinish();
-                    else if (!handling_exception)
-                        block_io.onCancelOrConnectionLoss();
-                });
-
-                try
-                {
-                    auto & pipeline = block_io.pipeline;
-                    if (pipeline.completed())
-                    {
-                        CompletedPipelineExecutor executor(pipeline);
-                        executor.execute();
-                    }
-                    query_finished = true;
-                }
-                catch (...)
-                {
-                    handling_exception = true;
-                    block_io.onException();
-                    throw;
-                }
-
-                arrow::flight::protocol::sql::DoPutUpdateResult update_result;
-                if (auto element = query_context->getProcessListElement())
-                    update_result.set_record_count(element->getInfo().written_rows);
-                else
-                    update_result.set_record_count(0);
-                ARROW_RETURN_NOT_OK(writer->WriteMetadata(*arrow::Buffer::FromString(update_result.SerializeAsString())));
-
-                LOG_INFO(log, "DoPut: prepared statement update succeeded for {}", handle);
-                return arrow::Status::OK();
-            }
         }
 
         bool dont_write_flight_sql_metadata = !ArrowFlight::flightDescriptorIsArrowFlightSqlCommand(request);

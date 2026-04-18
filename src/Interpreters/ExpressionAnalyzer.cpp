@@ -841,7 +841,7 @@ void ExpressionAnalyzer::makeWindowDescriptions(ActionsDAG & actions)
             window_function.argument_types,
             window_function.function_parameters,
             properties,
-            AggregateFunctionUsage::Window);
+            AggregateFunctionStateVariant::Window);
 
         // Find the window corresponding to this function. It may be either
         // referenced by name and previously defined in WINDOW clause, or it

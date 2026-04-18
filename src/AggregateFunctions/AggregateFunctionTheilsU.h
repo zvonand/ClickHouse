@@ -75,7 +75,7 @@ struct TheilsUWindowData : CrossTabCountsState
         return TheilsUData::getName();
     }
 
-    static constexpr CrossTabImplementationVariant state_representation = CrossTabImplementationVariant::Window;
+    static constexpr AggregateFunctionStateVariant state_representation = AggregateFunctionStateVariant::Window;
 
     void add(UInt64 hash1, UInt64 hash2)
     {

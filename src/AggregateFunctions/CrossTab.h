@@ -28,12 +28,6 @@ namespace ErrorCodes
     extern const int INCORRECT_DATA;
 }
 
-enum class CrossTabImplementationVariant : UInt8
-{
-    Aggregation,
-    Window
-};
-
 struct CrossTabPhiSquaredWindowData;
 
 /// Common (count + maps) state layout.
@@ -93,7 +87,7 @@ struct CrossTabCountsState
 
 struct CrossTabAggregateData : CrossTabCountsState
 {
-    static constexpr CrossTabImplementationVariant state_representation = CrossTabImplementationVariant::Aggregation;
+    static constexpr AggregateFunctionStateVariant state_representation = AggregateFunctionStateVariant::Aggregation;
 
     using CrossTabCountsState::add;
     using CrossTabCountsState::deserialize;
@@ -234,7 +228,7 @@ struct CrossTabAggregateData : CrossTabCountsState
 /// which will be very slow.
 struct CrossTabPhiSquaredWindowData
 {
-    static constexpr CrossTabImplementationVariant state_representation = CrossTabImplementationVariant::Window;
+    static constexpr AggregateFunctionStateVariant state_representation = AggregateFunctionStateVariant::Window;
 
     struct Edge
     {
@@ -768,19 +762,19 @@ template <typename Data>
 class AggregateFunctionCrossTab final : public IAggregateFunctionDataHelper<Data, AggregateFunctionCrossTab<Data>>
 {
     static_assert(
-        Data::state_representation != CrossTabImplementationVariant::Window
+        Data::state_representation != AggregateFunctionStateVariant::Window
             || std::is_base_of_v<CrossTabPhiSquaredWindowData, Data> || std::is_base_of_v<CrossTabCountsState, Data>,
         "CrossTab window state must either derive from CrossTabPhiSquaredWindowData or keep CrossTabCountsState prefix (derive from "
         "CrossTabCountsState).");
 
     static_assert(
-        Data::state_representation != CrossTabImplementationVariant::Window
+        Data::state_representation != AggregateFunctionStateVariant::Window
             || !std::is_base_of_v<CrossTabPhiSquaredWindowData, Data> || sizeof(Data) == sizeof(CrossTabPhiSquaredWindowData),
         "CrossTab window state derived from CrossTabPhiSquaredWindowData must not add data members; it is merged as "
         "CrossTabPhiSquaredWindowData.");
 
     static_assert(
-        Data::state_representation != CrossTabImplementationVariant::Aggregation || std::is_base_of_v<CrossTabAggregateData, Data>,
+        Data::state_representation != AggregateFunctionStateVariant::Aggregation || std::is_base_of_v<CrossTabAggregateData, Data>,
         "CrossTab aggregation state must derive from CrossTabAggregateData.");
 
 public:
@@ -826,7 +820,7 @@ public:
         if (rhs.getStateVariant() == getStateVariant())
             return false;
 
-        if constexpr (Data::state_representation == CrossTabImplementationVariant::Window)
+        if constexpr (Data::state_representation == AggregateFunctionStateVariant::Window)
         {
             /// Merge aggregation states into the window representation.
             /// The aggregation representation for this family is CrossTabAggregateData.
@@ -835,7 +829,7 @@ public:
 
             return true;
         }
-        else if constexpr (Data::state_representation == CrossTabImplementationVariant::Aggregation)
+        else if constexpr (Data::state_representation == AggregateFunctionStateVariant::Aggregation)
         {
             /// Merge window states into the aggregation representation.
             ///
@@ -858,13 +852,13 @@ public:
     {
         chassert(canMergeStateFromDifferentVariant(rhs));
 
-        if constexpr (Data::state_representation == CrossTabImplementationVariant::Window)
+        if constexpr (Data::state_representation == AggregateFunctionStateVariant::Window)
         {
             auto & dst = this->data(place);
             const auto & src = *reinterpret_cast<const CrossTabAggregateData *>(rhs_place);
             dst.merge(src);
         }
-        else if constexpr (Data::state_representation == CrossTabImplementationVariant::Aggregation)
+        else if constexpr (Data::state_representation == AggregateFunctionStateVariant::Aggregation)
         {
             auto & dst = this->data(place);
 
@@ -899,7 +893,7 @@ public:
 
     AggregateFunctionStateVariant getStateVariant() const override
     {
-        if constexpr (Data::state_representation == CrossTabImplementationVariant::Window)
+        if constexpr (Data::state_representation == AggregateFunctionStateVariant::Window)
             return AggregateFunctionStateVariant::Window;
         return AggregateFunctionStateVariant::Aggregation;
     }

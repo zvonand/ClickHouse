@@ -1201,7 +1201,7 @@ ProjectionNames QueryAnalyzer::resolveFunction(QueryTreeNodePtr & node, Identifi
                 argument_types,
                 parameters,
                 properties,
-                AggregateFunctionUsage::Window);
+                AggregateFunctionStateVariant::Window);
 
         function_node.resolveAsWindowFunction(std::move(aggregate_function));
 

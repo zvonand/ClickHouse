@@ -1938,18 +1938,17 @@ struct FunctionsStressTestThread
 
         bool injective = resolved_function->isInjective(valid_args);
         bool resolver_injective = resolver->isInjective(valid_args);
-        if (resolver_injective && !injective)
+        /// Skip isInjective mismatch check for Dynamic/Variant/Object types: the resolver and the
+        /// resolved function can disagree here — the resolver answers based on the declared function,
+        /// while `build()` may wrap the function in `FunctionBaseVariantAdaptor`/`FunctionBaseDynamicAdaptor`,
+        /// which default `isInjective` to `false` (and rightly so: values of different variant types can
+        /// map to the same output, so injectivity is not preserved across the wrapper).
+        if (!isAnyArgumentDynamicallyTyped(valid_args))
         {
-            stats.reportProblem(P_UNEXPECTED_ERROR, fmt::format("isInjective is false with arguments but true without; {}", operation.describe()));
-        }
-        else if (!resolver_injective && injective)
-        {
-            /// Skip isInjective mismatch check for Dynamic/Variant/Object types: the resolver doesn't have full
-            /// type information before build(), so it may return a different (default) answer than the resolved function.
-            if (!isAnyArgumentDynamicallyTyped(valid_args))
-            {
+            if (resolver_injective && !injective)
+                stats.reportProblem(P_UNEXPECTED_ERROR, fmt::format("isInjective is false with arguments but true without; {}", operation.describe()));
+            else if (!resolver_injective && injective)
                 stats.reportProblem(P_UNEXPECTED_ERROR, fmt::format("isInjective mismatch between IFunctionOverloadResolver and IFunctionBase; {}", operation.describe()));
-            }
         }
 
         bool has_monotonicity = resolved_function->hasInformationAboutMonotonicity();

@@ -1429,8 +1429,8 @@ arrow::Status ArrowFlightServer::DoAction(
 
             /// Parse the substituted query to validate syntax and determine query type.
             /// We only call executeQuery for SELECT-like queries (to infer the result schema).
-            /// For INSERT/DDL queries, parsing is sufficient — executing them would cause
-            /// side effects (e.g. inserting rows with NULL default values into the table).
+            /// For other queries (INSERT, SET, DDL, etc.), parsing is sufficient — executing
+            /// them would cause side effects (e.g. inserting rows or changing settings).
             ParserQuery parser(substituted_query.data() + substituted_query.size());
             auto ast = parseQuery(
                 parser, substituted_query,
@@ -1439,7 +1439,7 @@ arrow::Status ArrowFlightServer::DoAction(
                 query_context->getSettingsRef()[Setting::max_parser_backtracks]);
             ARROW_RETURN_NOT_OK(checkNoCustomFormat(ast));
 
-            if (!dynamic_cast<const ASTInsertQuery *>(ast.get()))
+            if (dynamic_cast<const ASTQueryWithOutput *>(ast.get()))
             {
                 auto [_, block_io] = executeQuery(substituted_query, query_context, QueryFlags{}, QueryProcessingStage::Complete);
 

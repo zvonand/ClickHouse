@@ -1464,9 +1464,6 @@ arrow::Status ArrowFlightServer::DoAction(
                 }
             }
 
-            /// Parameter schema: empty since '?' carries no type info.
-            info.parameter_schema = arrow::schema({});
-
             auto handle = calls_data->createPreparedStatement(std::move(info));
 
             /// Build the protobuf result.
@@ -1481,12 +1478,6 @@ arrow::Status ArrowFlightServer::DoAction(
                     auto serialized_schema = arrow::ipc::SerializeSchema(*ps_info->dataset_schema, arrow::default_memory_pool());
                     if (serialized_schema.ok())
                         result.set_dataset_schema(serialized_schema.ValueUnsafe()->data(), serialized_schema.ValueUnsafe()->size());
-                }
-                if (ps_info->parameter_schema)
-                {
-                    auto serialized_schema = arrow::ipc::SerializeSchema(*ps_info->parameter_schema, arrow::default_memory_pool());
-                    if (serialized_schema.ok())
-                        result.set_parameter_schema(serialized_schema.ValueUnsafe()->data(), serialized_schema.ValueUnsafe()->size());
                 }
             }
 

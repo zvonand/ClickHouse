@@ -126,8 +126,6 @@ struct PreparedStatementInfo
     size_t num_params = 0;
     /// Schema of the result set (may be nullptr for non-SELECT queries).
     std::shared_ptr<arrow::Schema> dataset_schema;
-    /// Schema of the parameters (empty fields for now since '?' carries no type info).
-    std::shared_ptr<arrow::Schema> parameter_schema;
     /// Bound parameter values (set via DoPut with CommandPreparedStatementQuery).
     /// Contains one row with one column per '?' placeholder.
     std::shared_ptr<arrow::RecordBatch> bound_parameters;

@@ -817,34 +817,13 @@ public:
         if (!this->haveSameDefinition(rhs))
             return false;
 
-        if (rhs.getStateVariant() == getStateVariant())
-            return false;
-
-        if constexpr (Data::state_representation == AggregateFunctionStateVariant::Window)
-        {
-            /// Merge aggregation states into the window representation.
-            /// The aggregation representation for this family is CrossTabAggregateData.
-            if (rhs.getStateVariant() != AggregateFunctionStateVariant::Aggregation)
-                return false;
-
-            return true;
-        }
-        else if constexpr (Data::state_representation == AggregateFunctionStateVariant::Aggregation)
-        {
-            /// Merge window states into the aggregation representation.
-            ///
-            /// There are multiple window representations:
-            ///  - CrossTabPhiSquaredWindowData based (cramersV, cramersVBiasCorrected, contingency).
-            ///  - CrossTabCountsState prefix based (window states that keep the same (count, maps) layout and may add cached fields).
-            if (rhs.getStateVariant() != AggregateFunctionStateVariant::Window)
-                return false;
-
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        /// `AggregateFunctionStateVariant` has exactly two values, so a different variant is sufficient:
+        ///  - if we are Window, rhs must be Aggregation (merge aggregation states into the window representation).
+        ///  - if we are Aggregation, rhs must be Window (merge window states into the aggregation representation).
+        ///    There are two window state layouts in this family:
+        ///      * CrossTabPhiSquaredWindowData — used by cramersV, cramersVBiasCorrected, contingency.
+        ///      * TheilsUWindowData — keeps CrossTabCountsState as a prefix and adds cached entropy sums.
+        return rhs.getStateVariant() != getStateVariant();
     }
 
     void mergeStateFromDifferentVariant(
@@ -852,16 +831,14 @@ public:
     {
         chassert(canMergeStateFromDifferentVariant(rhs));
 
+        auto & dst = this->data(place);
+
         if constexpr (Data::state_representation == AggregateFunctionStateVariant::Window)
         {
-            auto & dst = this->data(place);
-            const auto & src = *reinterpret_cast<const CrossTabAggregateData *>(rhs_place);
-            dst.merge(src);
+            dst.merge(*reinterpret_cast<const CrossTabAggregateData *>(rhs_place));
         }
-        else if constexpr (Data::state_representation == AggregateFunctionStateVariant::Aggregation)
+        else
         {
-            auto & dst = this->data(place);
-
             /// By default, window state for this family is CrossTabPhiSquaredWindowData-based.
             /// If a specific aggregate function has a different window state layout, it can declare:
             ///   using WindowData = <its window state type>;
@@ -874,20 +851,12 @@ public:
                     "CrossTab custom window state must keep CrossTabCountsState prefix (derive from CrossTabCountsState).");
                 static_assert(requires(Data & data, const WindowData & other) { data.merge(other); });
 
-                const auto & src = *reinterpret_cast<const WindowData *>(rhs_place);
-                dst.merge(src);
+                dst.merge(*reinterpret_cast<const WindowData *>(rhs_place));
             }
             else
             {
-                const auto & src = *reinterpret_cast<const CrossTabPhiSquaredWindowData *>(rhs_place);
-                dst.merge(src);
+                dst.merge(*reinterpret_cast<const CrossTabPhiSquaredWindowData *>(rhs_place));
             }
-        }
-        else
-        {
-            static_assert(
-                std::is_same_v<Data, void>,
-                "AggregateFunctionCrossTab::mergeStateFromDifferentVariant is implemented only for Data types with state_representation");
         }
     }
 

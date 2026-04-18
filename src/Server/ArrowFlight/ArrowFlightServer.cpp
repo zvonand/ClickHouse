@@ -336,7 +336,7 @@ arrow::Result<ArrowFlightServer::DecodeResult> ArrowFlightServer::decodeDescript
                 auto ps_info_res = calls_data->getPreparedStatement(sql_set->sql, username);
                 ARROW_RETURN_NOT_OK(ps_info_res);
                 const auto & ps_info = ps_info_res.ValueUnsafe();
-                auto resolved_query_res = replaceQuestionMarksWithValues(ps_info->query, ps_info->bound_parameters);
+                auto resolved_query_res = replaceQuestionMarksWithValues(ps_info.query, ps_info.bound_parameters);
                 ARROW_RETURN_NOT_OK(resolved_query_res);
                 return DecodeResult {std::move(resolved_query_res).ValueUnsafe(), {}, {}, {}};
             }
@@ -1477,9 +1477,9 @@ arrow::Status ArrowFlightServer::DoAction(
             if (auto ps_res = calls_data->getPreparedStatement(handle, auth.getUsername()); ps_res.ok())
             {
                 const auto & ps_info = ps_res.ValueUnsafe();
-                if (ps_info->dataset_schema)
+                if (ps_info.dataset_schema)
                 {
-                    auto serialized_schema = arrow::ipc::SerializeSchema(*ps_info->dataset_schema, arrow::default_memory_pool());
+                    auto serialized_schema = arrow::ipc::SerializeSchema(*ps_info.dataset_schema, arrow::default_memory_pool());
                     if (serialized_schema.ok())
                         result.set_dataset_schema(serialized_schema.ValueUnsafe()->data(), serialized_schema.ValueUnsafe()->size());
                 }

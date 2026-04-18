@@ -201,9 +201,9 @@ public:
     /// that session and will be cleaned up when the session closes.
     [[nodiscard]] arrow::Result<String> createPreparedStatement(PreparedStatementInfo info, const String & session_id = {});
 
-    /// Returns information about a prepared statement by handle.
+    /// Returns a snapshot copy of a prepared statement's info by handle.
     /// Checks that the caller's username matches the owner.
-    [[nodiscard]] arrow::Result<std::shared_ptr<PreparedStatementInfo>> getPreparedStatement(const String & handle, const String & username) const;
+    [[nodiscard]] arrow::Result<PreparedStatementInfo> getPreparedStatement(const String & handle, const String & username) const;
 
     /// Binds parameter values to a prepared statement.
     /// Checks that the caller's username matches the owner.

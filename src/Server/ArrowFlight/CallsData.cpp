@@ -562,7 +562,7 @@ arrow::Result<String> CallsData::createPreparedStatement(PreparedStatementInfo i
     return handle;
 }
 
-arrow::Result<std::shared_ptr<PreparedStatementInfo>> CallsData::getPreparedStatement(const String & handle, const String & username) const
+arrow::Result<PreparedStatementInfo> CallsData::getPreparedStatement(const String & handle, const String & username) const
 {
     std::lock_guard lock{mutex};
     auto it = prepared_statements.find(handle);
@@ -570,7 +570,7 @@ arrow::Result<std::shared_ptr<PreparedStatementInfo>> CallsData::getPreparedStat
         return arrow::Status::KeyError("Prepared statement handle not found");
     if (it->second->username != username)
         return arrow::Status::KeyError("Prepared statement handle not found");
-    return it->second;
+    return *it->second;
 }
 
 arrow::Status CallsData::bindParameters(const String & handle, const String & username, std::shared_ptr<arrow::RecordBatch> params)

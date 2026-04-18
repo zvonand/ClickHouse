@@ -1111,6 +1111,10 @@ arrow::Status ArrowFlightServer::DoPut(
                 auto table = reader->ToTable();
                 ARROW_RETURN_NOT_OK(table);
 
+                if (table.ValueUnsafe()->num_rows() > 1)
+                    return arrow::Status::NotImplemented(
+                        "Multiple parameter sets are not supported (got ", table.ValueUnsafe()->num_rows(), " rows)");
+
                 std::shared_ptr<arrow::RecordBatch> params;
                 if (table.ValueUnsafe()->num_rows() > 0)
                 {

@@ -68,6 +68,7 @@ struct TopKFilterInfo
 {
     String column_name;
     DataTypePtr data_type;
+    size_t num_sort_columns;
     size_t limit_n;
     int direction; /// 1 = ASC, -1 = DESC
     bool where_clause;
@@ -82,11 +83,12 @@ public:
     enum class IndexType : uint8_t
     {
         None,
-        MinMax,
+        PartitionMinMax,
         Partition,
         PrimaryKey,
         Skip,
         PrimaryKeyExpand,
+        Statistics
     };
 
     struct DistributedIndexStat
@@ -391,6 +393,9 @@ public:
     void addStartingPartOffsetAndPartOffset(bool & added_part_starting_offset, bool & added_part_offset);
 
     void deferFiltersAfterFinalIfNeeded();
+
+    const FilterDAGInfoPtr & getDeferredRowLevelFilter() const { return deferred_row_level_filter; }
+    const PrewhereInfoPtr & getDeferredPrewhereInfo() const { return deferred_prewhere_info; }
 
 private:
     MergeTreeSettingsPtr data_settings;

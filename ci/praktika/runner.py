@@ -703,9 +703,9 @@ class Runner:
                 if test_cases_result and not test_cases_result.is_ok() and ci_db:
                     for test_case_result in test_cases_result.results:
                         if not test_case_result.is_ok():
-                            test_case_result.set_clickable_label(
-                                "cidb",
-                                ci_db.get_link_to_test_case_statistics(
+                            test_case_result.set_label(
+                                Result.Label.CIDB,
+                                link=ci_db.get_link_to_test_case_statistics(
                                     test_case_result.name,
                                     failure_patterns=Settings.TEST_FAILURE_PATTERNS,
                                     test_output=test_case_result.info,
@@ -722,7 +722,7 @@ class Runner:
             except Exception as ex:
                 if not info_errors:
                     traceback.print_exc()
-                    error = f"ERROR: Failed to set clickable label for test cases, exception [{ex}]"
+                    error = f"ERROR: Failed to set CIDB label for test cases, exception [{ex}]"
                     print(error)
                     info_errors.append(error)
 

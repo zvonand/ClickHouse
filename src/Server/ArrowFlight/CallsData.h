@@ -120,10 +120,10 @@ struct PollDescriptorInfo : public PollDescriptorWithExpirationTime
 /// Information about a prepared statement.
 struct PreparedStatementInfo
 {
-    /// The original query with '?' placeholders.
-    String query;
-    /// Number of '?' parameter placeholders found in the query.
-    size_t num_params = 0;
+    /// Query split at '?' placeholder positions.
+    /// For "SELECT ? + ?" this is ["SELECT ", " + ", ""].
+    /// The number of parameters equals query_parts.size() - 1.
+    std::vector<String> query_parts;
     /// The user who created this prepared statement.
     String username;
     /// Schema of the result set (may be nullptr for non-SELECT queries).
@@ -131,6 +131,8 @@ struct PreparedStatementInfo
     /// Bound parameter values (set via DoPut with CommandPreparedStatementQuery).
     /// Contains one row with one column per '?' placeholder.
     std::shared_ptr<arrow::RecordBatch> bound_parameters;
+
+    size_t numParams() const { return query_parts.empty() ? 0 : query_parts.size() - 1; }
 };
 
 /// Keeps information about calls - e.g. blocks extracted from query pipelines, flight tickets, poll descriptors.

@@ -581,6 +581,18 @@ arrow::Status CallsData::bindParameters(const String & handle, const String & us
         return arrow::Status::KeyError("Prepared statement handle not found");
     if (it->second->username != username)
         return arrow::Status::KeyError("Prepared statement handle not found");
+
+    const auto & ps_info = it->second;
+    size_t num_params = ps_info->numParams();
+
+    if (params && params->num_rows() > 1)
+        return arrow::Status::NotImplemented("Multiple parameter sets are not supported (got ", params->num_rows(), " rows)");
+
+    if (params && params->num_rows() > 0 && static_cast<size_t>(params->num_columns()) != num_params)
+        return arrow::Status::Invalid(
+            "Parameter count mismatch: query has ", num_params,
+            " '?' placeholders but ", params->num_columns(), " columns were bound");
+
     it->second->bound_parameters = std::move(params);
     return arrow::Status::OK();
 }

@@ -92,13 +92,13 @@ namespace
 
     /// Replaces '?' placeholders in a SQL query with NULL using the ClickHouse Lexer,
     /// so the resulting query can be parsed for syntax validation and schema inference.
-    /// Returns the substituted query and the number of '?' placeholders found.
-    std::pair<String, size_t> replaceQuestionMarksWithNULL(const String & query)
+    /// Splits a SQL query at '?' placeholder positions using the ClickHouse Lexer.
+    /// Returns a vector of query parts: for "SELECT ? + ?" it returns ["SELECT ", " + ", ""].
+    /// The number of parameters equals parts.size() - 1.
+    std::vector<String> splitQueryAtPlaceholders(const String & query)
     {
+        std::vector<String> parts;
         Lexer lexer(query.data(), query.data() + query.size());
-        String result;
-        result.reserve(query.size());
-        size_t num_params = 0;
         const char * prev_end = query.data();
 
         while (true)
@@ -109,15 +109,27 @@ namespace
 
             if (token.type == TokenType::QuestionMark)
             {
-                result.append(prev_end, token.begin);
-                result.append("NULL");
+                parts.emplace_back(prev_end, token.begin);
                 prev_end = token.end;
-                ++num_params;
             }
         }
 
-        result.append(prev_end, query.data() + query.size());
-        return {result, num_params};
+        parts.emplace_back(prev_end, query.data() + query.size());
+        return parts;
+    }
+
+    /// Builds a SQL query from pre-split parts by joining them with "NULL".
+    /// Used for syntax validation and schema inference during CreatePreparedStatement.
+    String buildQueryWithNULLs(const std::vector<String> & query_parts)
+    {
+        String result;
+        for (size_t i = 0; i < query_parts.size(); ++i)
+        {
+            if (i > 0)
+                result += "NULL";
+            result += query_parts[i];
+        }
+        return result;
     }
 
     /// Converts an Arrow scalar value to a ClickHouse SQL literal string.
@@ -167,49 +179,28 @@ namespace
         }
     }
 
-    /// Replaces '?' placeholders in a SQL query with values from an Arrow RecordBatch.
-    /// The RecordBatch must contain exactly one row with columns corresponding to '?' placeholders.
-    arrow::Result<String> replaceQuestionMarksWithValues(const String & query, const std::shared_ptr<arrow::RecordBatch> & params)
+    /// Builds a SQL query from pre-split parts by substituting bound parameter values.
+    /// The query_parts were produced by splitQueryAtPlaceholders at CreatePreparedStatement time.
+    arrow::Result<String> buildQueryWithValues(const std::vector<String> & query_parts, const std::shared_ptr<arrow::RecordBatch> & params)
     {
+        size_t num_params = query_parts.size() - 1;
+
         if (!params || params->num_rows() == 0)
-        {
-            /// No parameters bound: replace '?' with NULL.
-            return replaceQuestionMarksWithNULL(query).first;
-        }
+            return buildQueryWithNULLs(query_parts);
 
-        /// Extract values from the first row.
-        std::vector<String> values;
-        values.reserve(params->num_columns());
-        for (int i = 0; i < params->num_columns(); ++i)
-        {
-            ARROW_ASSIGN_OR_RAISE(auto scalar, params->column(i)->GetScalar(0))
-            values.push_back(arrowScalarToSQLLiteral(scalar));
-        }
+        if (params->num_rows() > 1)
+            return arrow::Status::NotImplemented("Multiple parameter sets are not supported (got ", params->num_rows(), " rows)");
 
-        Lexer lexer(query.data(), query.data() + query.size());
+        chassert(static_cast<size_t>(params->num_columns()) == num_params);
+
         String result;
-        result.reserve(query.size() * 2);
-        size_t param_index = 0;
-        const char * prev_end = query.data();
-
-        while (true)
+        for (size_t i = 0; i < num_params; ++i)
         {
-            Token token = lexer.nextToken();
-            if (token.isEnd())
-                break;
-
-            if (token.type == TokenType::QuestionMark)
-            {
-                if (param_index >= values.size())
-                    return arrow::Status::Invalid("Not enough parameter values: query has more '?' placeholders than bound columns");
-                result.append(prev_end, token.begin);
-                result.append(values[param_index]);
-                prev_end = token.end;
-                ++param_index;
-            }
+            result += query_parts[i];
+            ARROW_ASSIGN_OR_RAISE(auto scalar, params->column(static_cast<int>(i))->GetScalar(0))
+            result += arrowScalarToSQLLiteral(scalar);
         }
-
-        result.append(prev_end, query.data() + query.size());
+        result += query_parts[num_params];
         return result;
     }
 
@@ -336,7 +327,7 @@ arrow::Result<ArrowFlightServer::DecodeResult> ArrowFlightServer::decodeDescript
                 auto ps_info_res = calls_data->getPreparedStatement(sql_set->sql, username);
                 ARROW_RETURN_NOT_OK(ps_info_res);
                 const auto & ps_info = ps_info_res.ValueUnsafe();
-                auto resolved_query_res = replaceQuestionMarksWithValues(ps_info.query, ps_info.bound_parameters);
+                auto resolved_query_res = buildQueryWithValues(ps_info.query_parts, ps_info.bound_parameters);
                 ARROW_RETURN_NOT_OK(resolved_query_res);
                 return DecodeResult {std::move(resolved_query_res).ValueUnsafe(), {}, {}, {}};
             }
@@ -1418,13 +1409,15 @@ arrow::Status ArrowFlightServer::DoAction(
             if (query.empty())
                 return arrow::Status::Invalid("CreatePreparedStatement: query must not be empty");
 
-            /// Replace '?' placeholders with NULL so the query can be parsed and validated.
-            auto [substituted_query, num_params] = replaceQuestionMarksWithNULL(query);
+            /// Split the query at '?' placeholders once; reused at execution time.
+            auto query_parts = splitQueryAtPlaceholders(query);
+
+            /// Build a NULL-substituted query for syntax validation and schema inference.
+            auto substituted_query = buildQueryWithNULLs(query_parts);
 
             /// Validate syntax and infer result schema by executing the substituted query up to schema stage.
             ArrowFlight::PreparedStatementInfo info;
-            info.query = query;
-            info.num_params = num_params;
+            info.query_parts = std::move(query_parts);
             info.username = auth.getUsername();
 
             auto query_context = session->makeQueryContext();

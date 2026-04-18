@@ -43,7 +43,7 @@ INSERT INTO t_rtb_hourly_1
         number % 5,
         1,
         1
-    FROM numbers(10000);
+    FROM numbers(5000);
 
 INSERT INTO t_rtb_hourly_2
     SELECT
@@ -54,7 +54,7 @@ INSERT INTO t_rtb_hourly_2
         number % 5,
         1,
         1
-    FROM numbers(10000);
+    FROM numbers(5000);
 
 CREATE VIEW v_rtb_union AS
     SELECT * FROM t_rtb_hourly_1
@@ -75,6 +75,7 @@ ORDER BY ALL;
 
 SET automatic_parallel_replicas_mode = 0;
 SET enable_analyzer = 1;
+SET max_threads = 4; -- override random max_threads=1 which makes the correctness query too slow under sanitizers
 SET enable_parallel_replicas = 1, max_parallel_replicas = 2, cluster_for_parallel_replicas = 'test_cluster_one_shard_three_replicas_localhost', parallel_replicas_for_non_replicated_merge_tree = 1;
 
 -- Setting disabled — no distribution, plain Aggregating

@@ -36,7 +36,8 @@ $CLICKHOUSE_CLIENT --user "$READ_USER" --query_id "$read_query_id" -q "
 " &
 wait
 
-$CLICKHOUSE_CLIENT -m -q "
+# FIXME: some issues with query plan serialization
+$CLICKHOUSE_CLIENT --serialize_query_plan=0 -m -q "
     SYSTEM FLUSH LOGS query_log;
     SELECT
         if(query_id = '$write_query_id', 'write', 'read') AS q,

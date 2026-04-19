@@ -1,3 +1,5 @@
+-- Tags: long
+
 -- Three-level view nesting mirroring a customer's schema:
 -- Archive + current tables (different column names) -> D_SSP/D_DSP views
 --   (inner UNION ALL subquery with column renames + outer SELECT * with backward-compat aliases)
@@ -138,51 +140,51 @@ INSERT INTO t_ssp_archive SELECT
     toDateTime('2025-01-01 00:00:00', 'UTC') + toIntervalDay(number % 15) + toIntervalHour(number % 24),
     3050, 100, 200,
     100 + number % 50, 5 + number % 10
-FROM numbers(5000);
+FROM numbers(10000);
 
 -- Archive noise.
 INSERT INTO t_ssp_archive SELECT
     toDateTime('2025-01-01 00:00:00', 'UTC') + toIntervalHour(number % 360),
     (number % 10) + 1000, number % 50, number % 30,
     number % 100, number % 20
-FROM numbers(500);
+FROM numbers(1000);
 
 INSERT INTO t_dsp_archive SELECT
     toDateTime('2025-01-01 00:00:00', 'UTC') + toIntervalDay(number % 15) + toIntervalHour(number % 24),
     3050, 100, 200,
     10 + number % 20, 500 + number % 200
-FROM numbers(5000);
+FROM numbers(10000);
 
 INSERT INTO t_dsp_archive SELECT
     toDateTime('2025-01-01 00:00:00', 'UTC') + toIntervalHour(number % 360),
     (number % 10) + 1000, number % 50, number % 30,
     number % 50, number % 500
-FROM numbers(500);
+FROM numbers(1000);
 
 -- Current data: spread across 15 days after switch date, network_id=3050.
 INSERT INTO t_ssp_current SELECT
     toDateTime('2026-01-01 00:00:00', 'UTC') + toIntervalDay(number % 15) + toIntervalHour(number % 24),
     3050, 100, 200,
     50 + number % 30, 2 + number % 8
-FROM numbers(2500);
+FROM numbers(5000);
 
 INSERT INTO t_ssp_current SELECT
     toDateTime('2026-01-01 00:00:00', 'UTC') + toIntervalHour(number % 360),
     (number % 10) + 1000, number % 50, number % 30,
     number % 100, number % 20
-FROM numbers(500);
+FROM numbers(1000);
 
 INSERT INTO t_dsp_current SELECT
     toDateTime('2026-01-01 00:00:00', 'UTC') + toIntervalDay(number % 15) + toIntervalHour(number % 24),
     3050, 100, 200,
     5 + number % 15, 300 + number % 100
-FROM numbers(2500);
+FROM numbers(5000);
 
 INSERT INTO t_dsp_current SELECT
     toDateTime('2026-01-01 00:00:00', 'UTC') + toIntervalHour(number % 360),
     (number % 10) + 1000, number % 50, number % 30,
     number % 50, number % 500
-FROM numbers(500);
+FROM numbers(1000);
 
 SET automatic_parallel_replicas_mode = 0;
 SET enable_analyzer = 1;

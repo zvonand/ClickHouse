@@ -123,7 +123,8 @@ void SelectStreamFactory::createForShard(
     Shards & remote_shards,
     UInt32 shard_count,
     bool parallel_replicas_enabled,
-    AdditionalShardFilterGenerator shard_filter_generator)
+    AdditionalShardFilterGenerator shard_filter_generator,
+    const UnavailableShardTrackerPtr & unavailable_shard_tracker)
 {
     createForShardImpl(
         shard_info,
@@ -136,7 +137,8 @@ void SelectStreamFactory::createForShard(
         remote_shards,
         shard_count,
         parallel_replicas_enabled,
-        std::move(shard_filter_generator));
+        std::move(shard_filter_generator),
+        unavailable_shard_tracker);
 }
 
 void SelectStreamFactory::createForShardImpl(
@@ -150,7 +152,8 @@ void SelectStreamFactory::createForShardImpl(
     Shards & remote_shards,
     UInt32 shard_count,
     bool parallel_replicas_enabled,
-    AdditionalShardFilterGenerator shard_filter_generator) const
+    AdditionalShardFilterGenerator shard_filter_generator,
+    const UnavailableShardTrackerPtr & unavailable_shard_tracker) const
 {
     auto emplace_local_stream = [&]()
     {
@@ -239,6 +242,8 @@ void SelectStreamFactory::createForShardImpl(
                 LOG_WARNING(getLogger("ClusterProxy::SelectStreamFactory"),
                     "There is no table {} on local replica of shard {}, and no remote replicas configured. Skipping.",
                     main_table.getNameForLogs(), shard_info.shard_num);
+                if (unavailable_shard_tracker)
+                    unavailable_shard_tracker->onShardSkipped();
             }
             else
                 emplace_local_stream();  /// Let it fail the usual way.
@@ -316,7 +321,8 @@ void SelectStreamFactory::createForShard(
     Shards & remote_shards,
     UInt32 shard_count,
     bool parallel_replicas_enabled,
-    AdditionalShardFilterGenerator shard_filter_generator)
+    AdditionalShardFilterGenerator shard_filter_generator,
+    const UnavailableShardTrackerPtr & unavailable_shard_tracker)
 {
     createForShardImpl(
         shard_info,
@@ -329,7 +335,8 @@ void SelectStreamFactory::createForShard(
         remote_shards,
         shard_count,
         parallel_replicas_enabled,
-        std::move(shard_filter_generator));
+        std::move(shard_filter_generator),
+        unavailable_shard_tracker);
 }
 
 

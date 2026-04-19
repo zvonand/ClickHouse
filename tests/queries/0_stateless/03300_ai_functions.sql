@@ -5,7 +5,7 @@
 -- =============================================================================
 -- AI Functions Test Suite
 -- Tests argument validation, error handling, return types, settings behavior,
--- and named collection resolution for `aiGenerateContent`.
+-- and named collection resolution for `aiGenerate`.
 -- All tests run without a real AI provider or API key.
 -- =============================================================================
 
@@ -20,22 +20,22 @@ CREATE TABLE tab (x String) ENGINE = Memory;
 -- =============================================================================
 
 SELECT '-- Disabled by default';
-SELECT aiGenerateContent('hello', 'world'); -- { serverError SUPPORT_IS_DISABLED }
+SELECT aiGenerate('hello', 'world'); -- { serverError SUPPORT_IS_DISABLED }
 
 SET allow_experimental_ai_functions = 1;
 
 SELECT '-- Enabled after setting';
-SELECT name FROM system.functions WHERE name = 'aiGenerateContent';
+SELECT name FROM system.functions WHERE name = 'aiGenerate';
 
 -- =============================================================================
 -- 2. Argument count validation
 -- =============================================================================
 
-SELECT '-- aiGenerateContent: too few arguments';
-SELECT aiGenerateContent('a'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+SELECT '-- aiGenerate: too few arguments';
+SELECT aiGenerate('a'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
 
-SELECT '-- aiGenerateContent: too many arguments';
-SELECT aiGenerateContent('a', 'b', 'c', 0.7, 'x'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+SELECT '-- aiGenerate: too many arguments';
+SELECT aiGenerate('a', 'b', 'c', 0.7, 'x'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
 
 -- =============================================================================
 -- 3. Named collection: missing required fields
@@ -48,7 +48,7 @@ CREATE NAMED COLLECTION ai_no_provider AS
     api_key = 'fake-key';
 
 SELECT '-- Named collection missing provider';
-SELECT aiGenerateContent('ai_no_provider', x) FROM tab; -- { serverError BAD_ARGUMENTS }
+SELECT aiGenerate('ai_no_provider', x) FROM tab; -- { serverError BAD_ARGUMENTS }
 
 DROP NAMED COLLECTION ai_no_provider;
 
@@ -59,7 +59,7 @@ CREATE NAMED COLLECTION ai_no_endpoint AS
     api_key = 'fake-key';
 
 SELECT '-- Named collection missing endpoint';
-SELECT aiGenerateContent('ai_no_endpoint', x) FROM tab; -- { serverError BAD_ARGUMENTS }
+SELECT aiGenerate('ai_no_endpoint', x) FROM tab; -- { serverError BAD_ARGUMENTS }
 
 DROP NAMED COLLECTION ai_no_endpoint;
 
@@ -70,7 +70,7 @@ CREATE NAMED COLLECTION ai_no_model AS
     api_key = 'fake-key';
 
 SELECT '-- Named collection missing model';
-SELECT aiGenerateContent('ai_no_model', x) FROM tab; -- { serverError BAD_ARGUMENTS }
+SELECT aiGenerate('ai_no_model', x) FROM tab; -- { serverError BAD_ARGUMENTS }
 
 DROP NAMED COLLECTION ai_no_model;
 
@@ -81,7 +81,7 @@ CREATE NAMED COLLECTION ai_no_api_key AS
     model = 'test-model';
 
 SELECT '-- Named collection missing api_key';
-SELECT aiGenerateContent('ai_no_api_key', x) FROM tab; -- { serverError BAD_ARGUMENTS }
+SELECT aiGenerate('ai_no_api_key', x) FROM tab; -- { serverError BAD_ARGUMENTS }
 
 DROP NAMED COLLECTION ai_no_api_key;
 
@@ -90,7 +90,7 @@ DROP NAMED COLLECTION ai_no_api_key;
 -- =============================================================================
 
 SELECT '-- Nonexistent named collection';
-SELECT aiGenerateContent('nonexistent_collection_xyz', 'hello'); -- { serverError NAMED_COLLECTION_DOESNT_EXIST }
+SELECT aiGenerate('nonexistent_collection_xyz', 'hello'); -- { serverError NAMED_COLLECTION_DOESNT_EXIST }
 
 -- =============================================================================
 -- 5. Test collection for remaining tests
@@ -107,10 +107,10 @@ CREATE NAMED COLLECTION ai_credentials AS
 -- 6. Return type verification
 -- =============================================================================
 
-SELECT '-- aiGenerateContent return type';
+SELECT '-- aiGenerate return type';
 DROP TABLE IF EXISTS _03300_ret_content;
 CREATE TABLE _03300_ret_content ENGINE = Memory AS
-    SELECT aiGenerateContent('ai_credentials', x) AS result FROM tab;
+    SELECT aiGenerate('ai_credentials', x) AS result FROM tab;
 SELECT name, type FROM system.columns
     WHERE database = currentDatabase() AND table = '_03300_ret_content';
 DROP TABLE IF EXISTS _03300_ret_content;
@@ -126,7 +126,7 @@ INSERT INTO _03300_null_input VALUES (NULL);
 SELECT '-- NULL input returns NULL';
 DROP TABLE IF EXISTS _03300_null_result;
 CREATE TABLE _03300_null_result ENGINE = Memory AS
-    SELECT aiGenerateContent('ai_credentials', x) AS result FROM _03300_null_input;
+    SELECT aiGenerate('ai_credentials', x) AS result FROM _03300_null_input;
 SELECT result IS NULL FROM _03300_null_result;
 DROP TABLE IF EXISTS _03300_null_result;
 DROP TABLE IF EXISTS _03300_null_input;
@@ -136,7 +136,7 @@ DROP TABLE IF EXISTS _03300_null_input;
 -- =============================================================================
 
 SELECT '-- Empty string input accepted';
-SELECT count() FROM (SELECT aiGenerateContent('ai_credentials', x) AS result FROM tab);
+SELECT count() FROM (SELECT aiGenerate('ai_credentials', x) AS result FROM tab);
 
 -- =============================================================================
 -- 9. Unknown provider name
@@ -150,7 +150,7 @@ CREATE NAMED COLLECTION ai_bad_provider AS
     api_key = 'fake-key';
 
 SELECT '-- Unknown provider name';
-SELECT aiGenerateContent('ai_bad_provider', x) FROM tab; -- { serverError BAD_ARGUMENTS }
+SELECT aiGenerate('ai_bad_provider', x) FROM tab; -- { serverError BAD_ARGUMENTS }
 
 DROP NAMED COLLECTION ai_bad_provider;
 
@@ -166,7 +166,7 @@ CREATE NAMED COLLECTION ai_anthropic AS
     api_key = 'fake-key';
 
 SELECT '-- Anthropic provider resolves';
-SELECT count() FROM (SELECT aiGenerateContent('ai_anthropic', x) AS result FROM tab);
+SELECT count() FROM (SELECT aiGenerate('ai_anthropic', x) AS result FROM tab);
 
 DROP NAMED COLLECTION ai_anthropic;
 
@@ -175,41 +175,41 @@ DROP NAMED COLLECTION ai_anthropic;
 -- =============================================================================
 
 SELECT '-- Custom system prompt accepted';
-SELECT count() FROM (SELECT aiGenerateContent('ai_credentials', x, 'You are a pirate') AS result FROM tab);
+SELECT count() FROM (SELECT aiGenerate('ai_credentials', x, 'You are a pirate') AS result FROM tab);
 
 -- =============================================================================
 -- 12. Temperature argument
 -- =============================================================================
 
 SELECT '-- Temperature: Float32';
-SELECT count() FROM (SELECT aiGenerateContent('ai_credentials', x, 'system', toFloat32(0.5)) AS result FROM tab);
+SELECT count() FROM (SELECT aiGenerate('ai_credentials', x, 'system', toFloat32(0.5)) AS result FROM tab);
 
 SELECT '-- Temperature: Float64';
-SELECT count() FROM (SELECT aiGenerateContent('ai_credentials', x, 'system', 0.5) AS result FROM tab);
+SELECT count() FROM (SELECT aiGenerate('ai_credentials', x, 'system', 0.5) AS result FROM tab);
 
 SELECT '-- Temperature: zero';
-SELECT count() FROM (SELECT aiGenerateContent('ai_credentials', x, 'system', toFloat32(0.0)) AS result FROM tab);
+SELECT count() FROM (SELECT aiGenerate('ai_credentials', x, 'system', toFloat32(0.0)) AS result FROM tab);
 
 SELECT '-- Temperature: integer literal';
-SELECT count() FROM (SELECT aiGenerateContent('ai_credentials', x, 'system', 1) AS result FROM tab);
+SELECT count() FROM (SELECT aiGenerate('ai_credentials', x, 'system', 1) AS result FROM tab);
 
 SELECT '-- Temperature without system prompt';
-SELECT aiGenerateContent('ai_credentials', x, toFloat32(0.5)) FROM tab; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT aiGenerate('ai_credentials', x, toFloat32(0.5)) FROM tab; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
 SELECT '-- Temperature without system prompt (integer)';
-SELECT aiGenerateContent('ai_credentials', x, 1) FROM tab; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT aiGenerate('ai_credentials', x, 1) FROM tab; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
 SELECT '-- Non-constant system prompt';
-SELECT aiGenerateContent('ai_credentials', x, x) FROM tab; -- { serverError ILLEGAL_COLUMN }
+SELECT aiGenerate('ai_credentials', x, x) FROM tab; -- { serverError ILLEGAL_COLUMN }
 
 SELECT '-- Non-constant temperature';
-SELECT aiGenerateContent('ai_credentials', x, 'system', toFloat32(number)) FROM (SELECT x, 0 AS number FROM tab); -- { serverError ILLEGAL_COLUMN }
+SELECT aiGenerate('ai_credentials', x, 'system', toFloat32(number)) FROM (SELECT x, 0 AS number FROM tab); -- { serverError ILLEGAL_COLUMN }
 
 SELECT '-- Wrong type for system prompt (number instead of string)';
-SELECT aiGenerateContent('ai_credentials', x, 42) FROM tab; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT aiGenerate('ai_credentials', x, 42) FROM tab; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
 SELECT '-- Wrong type for temperature (string instead of number)';
-SELECT aiGenerateContent('ai_credentials', x, 'system', 'hot') FROM tab; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT aiGenerate('ai_credentials', x, 'system', 'hot') FROM tab; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 
 -- =============================================================================
 -- 13. Setting types and defaults
@@ -354,7 +354,7 @@ SELECT count() FROM (SELECT aiTranslate('ai_credentials', x, 'French', 'keep pro
 
 SET allow_experimental_ai_functions = 0;
 SELECT '-- Re-disabled blocks function';
-SELECT aiGenerateContent('ai_credentials', 'hello'); -- { serverError SUPPORT_IS_DISABLED }
+SELECT aiGenerate('ai_credentials', 'hello'); -- { serverError SUPPORT_IS_DISABLED }
 
 SET allow_experimental_ai_functions = 1;
 

@@ -15,14 +15,14 @@ namespace
 
 constexpr auto default_system_prompt = "You are a helpful assistant. Provide a clear and concise response.";
 
-class FunctionAiGenerateContent final : public FunctionBaseAI
+class FunctionAiGenerate final : public FunctionBaseAI
 {
 public:
-    static constexpr auto name = "aiGenerateContent";
+    static constexpr auto name = "aiGenerate";
 
-    explicit FunctionAiGenerateContent(ContextPtr context) : FunctionBaseAI(context) {}
+    explicit FunctionAiGenerate(ContextPtr context) : FunctionBaseAI(context) {}
 
-    static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionAiGenerateContent>(context); }
+    static FunctionPtr create(ContextPtr context) { return std::make_shared<FunctionAiGenerate>(context); }
 
     String getName() const override { return name; }
     bool isVariadic() const override { return true; }
@@ -75,9 +75,9 @@ private:
 
 }
 
-REGISTER_FUNCTION(AiGenerateContent)
+REGISTER_FUNCTION(AiGenerate)
 {
-    factory.registerFunction<FunctionAiGenerateContent>(FunctionDocumentation{
+    factory.registerFunction<FunctionAiGenerate>(FunctionDocumentation{
         .description = R"(
 Generates free-form text content from a prompt using an LLM provider.
 
@@ -87,7 +87,7 @@ If no system prompt is given, the default system prompt is: `)" + String(default
 
 The first argument is a named collection that specifies the provider, model, endpoint, and API key.
 )",
-        .syntax = "aiGenerateContent(collection, prompt[, system_prompt[, temperature]])",
+        .syntax = "aiGenerate(collection, prompt[, system_prompt[, temperature]])",
         .arguments
         = {{"collection", "Name of a named collection containing provider credentials and configuration.", {"String"}},
            {"prompt", "The user prompt or question to send to the model.", {"String"}},
@@ -95,13 +95,13 @@ The first argument is a named collection that specifies the provider, model, end
            {"temperature", "Sampling temperature controlling randomness. Default: `0.7`.", {"Float64"}}},
         .returned_value = {"The generated text response, or the default value for the column type (empty string) if the request failed and `ai_function_throw_on_error` is disabled.", {"String"}},
         .examples
-        = {{"Simple question", "SELECT aiGenerateContent('ai_credentials', 'What is 2 + 2? Reply with just the number.')", "4"},
-           {"With system prompt", "SELECT aiGenerateContent('ai_credentials', 'Explain ClickHouse', 'You are a database expert. Be concise.')", ""},
-           {"Summarize column values", "SELECT article_title, aiGenerateContent('ai_credentials', concat('Summarize in one sentence: ', article_body)) AS summary FROM articles LIMIT 5", ""}},
+        = {{"Simple question", "SELECT aiGenerate('ai_credentials', 'What is 2 + 2? Reply with just the number.')", "4"},
+           {"With system prompt", "SELECT aiGenerate('ai_credentials', 'Explain ClickHouse', 'You are a database expert. Be concise.')", ""},
+           {"Summarize column values", "SELECT article_title, aiGenerate('ai_credentials', concat('Summarize in one sentence: ', article_body)) AS summary FROM articles LIMIT 5", ""}},
         .introduced_in = {26, 4},
         .category = FunctionDocumentation::Category::AI});
 
-        factory.registerAlias("AIGenerateContent", "aiGenerateContent");
+        factory.registerAlias("AIGenerate", "aiGenerate");
 }
 
 

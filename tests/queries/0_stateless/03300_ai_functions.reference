@@ -1,14 +1,14 @@
 -- Disabled by default
 -- Enabled after setting
-aiGenerateContent
--- aiGenerateContent: too few arguments
--- aiGenerateContent: too many arguments
+aiGenerate
+-- aiGenerate: too few arguments
+-- aiGenerate: too many arguments
 -- Named collection missing provider
 -- Named collection missing endpoint
 -- Named collection missing model
 -- Named collection missing api_key
 -- Nonexistent named collection
--- aiGenerateContent return type
+-- aiGenerate return type
 result	String
 -- NULL input returns NULL
 1

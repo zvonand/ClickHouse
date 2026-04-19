@@ -100,6 +100,9 @@ The first argument is a named collection that specifies the provider, model, end
            {"Summarize column values", "SELECT article_title, aiGenerateContent('ai_credentials', concat('Summarize in one sentence: ', article_body)) AS summary FROM articles LIMIT 5", ""}},
         .introduced_in = {26, 4},
         .category = FunctionDocumentation::Category::AI});
+
+        factory.registerAlias("AIGenerateContent", "aiGenerateContent");
 }
+
 
 }

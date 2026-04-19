@@ -109,6 +109,8 @@ The first argument is a named collection that specifies the provider, model, end
         },
         .introduced_in = {26, 4},
         .category = FunctionDocumentation::Category::AI});
+
+    factory.registerAlias("AITranslate", "aiTranslate");
 }
 
 }

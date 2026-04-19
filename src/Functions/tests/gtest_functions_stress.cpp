@@ -236,6 +236,7 @@ const std::unordered_set<std::string_view> excluded_functions = {
     /// Avoid depending on environment (e.g. current query, configuration, settings).
     "synonyms",
     "catboostEvaluate",
+    "aiGenerateContent",
     "naiveBayesClassifier",
     "transactionLatestSnapshot",
     "transactionOldestSnapshot",
@@ -1938,17 +1939,15 @@ struct FunctionsStressTestThread
 
         bool injective = resolved_function->isInjective(valid_args);
         bool resolver_injective = resolver->isInjective(valid_args);
-        /// Skip isInjective mismatch check for Dynamic/Variant/Object types: the resolver and the
-        /// resolved function can disagree here — the resolver answers based on the declared function,
-        /// while `build()` may wrap the function in `FunctionBaseVariantAdaptor`/`FunctionBaseDynamicAdaptor`,
-        /// which default `isInjective` to `false` (and rightly so: values of different variant types can
-        /// map to the same output, so injectivity is not preserved across the wrapper).
-        if (!isAnyArgumentDynamicallyTyped(valid_args))
+        if (resolver_injective != injective)
         {
-            if (resolver_injective && !injective)
-                stats.reportProblem(P_UNEXPECTED_ERROR, fmt::format("isInjective is false with arguments but true without; {}", operation.describe()));
-            else if (!resolver_injective && injective)
-                stats.reportProblem(P_UNEXPECTED_ERROR, fmt::format("isInjective mismatch between IFunctionOverloadResolver and IFunctionBase; {}", operation.describe()));
+            /// Skip isInjective mismatch for Dynamic/Variant/Object types: the adaptors intentionally
+            /// return false (conservative) because injectivity of the underlying function does not hold
+            /// on the mixed-type domain, and the resolver lacks full type information before build().
+            if (!isAnyArgumentDynamicallyTyped(valid_args))
+            {
+                stats.reportProblem(P_UNEXPECTED_ERROR, fmt::format("isInjective mismatch between IFunctionOverloadResolver ({}) and IFunctionBase ({}); {}", resolver_injective, injective, operation.describe()));
+            }
         }
 
         bool has_monotonicity = resolved_function->hasInformationAboutMonotonicity();

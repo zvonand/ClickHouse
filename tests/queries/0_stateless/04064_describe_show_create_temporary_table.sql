@@ -26,6 +26,20 @@ SHOW CREATE TEMPORARY TABLE t;
 
 -- DESCRIBE TEMPORARY TABLE with subquery or table function should be a syntax error.
 DESCRIBE TEMPORARY TABLE (SELECT 1); -- { clientError SYNTAX_ERROR }
+DESCRIBE TEMPORARY TABLE numbers(10); -- { clientError SYNTAX_ERROR }
+
+-- SHOW CREATE VIEW should still resolve a permanent view when a temporary table with the
+-- same name exists. Without this, SHOW CREATE VIEW would resolve to the temporary table and
+-- throw BAD_ARGUMENTS ("... is not a VIEW"). Use FORMAT Null to avoid printing the database
+-- name, which differs between test runs.
+DROP VIEW IF EXISTS v;
+DROP TABLE IF EXISTS v;
+CREATE TEMPORARY TABLE v (x UInt8);
+CREATE VIEW v AS SELECT 1 AS y;
+
+SELECT 'SHOW CREATE VIEW with same-named temporary table succeeds:';
+SHOW CREATE VIEW v FORMAT Null;
+SELECT 'OK';
 
 -- Regression test: a table named `temporary` should still work with DESCRIBE.
 DROP TABLE IF EXISTS temporary;

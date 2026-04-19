@@ -154,6 +154,36 @@ def test_prepared_statement_not_accessible_by_other_user():
     stmt.close()
 
 
+def test_prepared_statement_execute_without_bind():
+    """Executing a prepared statement with parameters without binding should fail."""
+    client = get_client()
+
+    stmt = client.prepare("SELECT ?")
+
+    # Execute without binding parameters — must error, not silently substitute NULLs.
+    with pytest.raises(pa.lib.ArrowInvalid, match="Parameters were not bound"):
+        client.execute(stmt)
+
+    # After binding, execution should succeed.
+    params = pa.record_batch([pa.array([42], type=pa.int32())], names=["0"])
+    stmt.bind_parameters(params)
+    result = stmt.execute()
+    assert result.column(0).to_pylist() == [42]
+
+    stmt.close()
+
+
+def test_prepared_statement_execute_without_bind_no_params():
+    """Executing a parameterless prepared statement without binding should succeed."""
+    client = get_client()
+
+    stmt = client.prepare("SELECT 1")
+    result = stmt.execute()
+    assert result.column(0).to_pylist() == [1]
+
+    stmt.close()
+
+
 @pytest.mark.parametrize("test_case", [
     # (arrow_type, arrow_value, expected_result, description)
     # Boolean

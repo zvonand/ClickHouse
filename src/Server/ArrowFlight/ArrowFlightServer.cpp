@@ -242,7 +242,11 @@ namespace
         size_t num_params = query_parts.size() - 1;
 
         if (!params || params->num_rows() == 0)
+        {
+            if (num_params > 0)
+                return arrow::Status::Invalid("Parameters were not bound before executing a prepared statement");
             return buildQueryWithNULLs(query_parts);
+        }
 
         if (params->num_rows() > 1)
             return arrow::Status::NotImplemented("Multiple parameter sets are not supported (got ", params->num_rows(), " rows)");

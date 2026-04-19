@@ -380,8 +380,7 @@ def make_query_command(query: str) -> str:
     return (
         f'clickhouse client -q "{query}" --max_untracked_memory=1Gi '
         "--memory_profiler_step=1Gi --max_memory_usage_for_user=0 --max_memory_usage_in_client=1000000000 "
-        "--enable-progress-table-toggle=0 "
-        "--database_atomic_wait_for_drop_and_detach_synchronously=0"
+        "--enable-progress-table-toggle=0"
     )
 
 

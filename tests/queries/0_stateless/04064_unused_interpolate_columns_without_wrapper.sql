@@ -1,3 +1,5 @@
+-- Tags: no-parallel-replicas
+-- ^ because EXPLAIN PLAN output contains ReadFromRemoteParallelReplicas instead of ReadFromMergeTree under parallel replicas.
 -- https://github.com/ClickHouse/ClickHouse/issues/75186
 -- RemoveUnusedProjectionColumnsPass should remove unused INTERPOLATE columns
 -- even when the interpolated expressions are bare aggregate functions (no wrapper like toFloat64).

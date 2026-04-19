@@ -1167,19 +1167,26 @@ arrow::Status ArrowFlightServer::DoPut(
                 const auto & handle = command.prepared_statement_handle();
                 LOG_DEBUG(log, "DoPut: binding parameters for prepared statement {}", handle);
 
-                /// Read parameter values from the stream.
-                auto table = reader->ToTable();
-                ARROW_RETURN_NOT_OK(table);
-
-                if (table.ValueUnsafe()->num_rows() > 1)
-                    return arrow::Status::NotImplemented(
-                        "Multiple parameter sets are not supported (got ", table.ValueUnsafe()->num_rows(), " rows)");
-
+                /// Read parameter values incrementally to detect excess data early
+                /// and avoid buffering an unbounded stream into memory.
                 std::shared_ptr<arrow::RecordBatch> params;
-                if (table.ValueUnsafe()->num_rows() > 0)
+                ARROW_ASSIGN_OR_RAISE(auto chunk, reader->Next())
+                if (chunk.data)
                 {
-                    auto batches = arrow::TableBatchReader(table.ValueUnsafe());
-                    ARROW_ASSIGN_OR_RAISE(params, batches.Next())
+                    if (chunk.data->num_rows() > 1)
+                        return arrow::Status::NotImplemented(
+                            "Multiple parameter sets are not supported (got ", chunk.data->num_rows(), "+ rows)");
+
+                    if (chunk.data->num_rows() == 1)
+                    {
+                        params = std::move(chunk.data);
+
+                        /// Reject if the client sends more data beyond the single row.
+                        ARROW_ASSIGN_OR_RAISE(auto extra, reader->Next())
+                        if (extra.data && extra.data->num_rows() > 0)
+                            return arrow::Status::NotImplemented(
+                                "Multiple parameter sets are not supported");
+                    }
                 }
 
                 ARROW_RETURN_NOT_OK(calls_data->bindParameters(handle, auth.getUsername(), std::move(params)));

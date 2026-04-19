@@ -30,4 +30,4 @@ WITH RECURSIVE
 SELECT *
 FROM subquery3
 FORMAT Null
-SETTINGS max_execution_time = 1, timeout_overflow_mode = 'break';
+SETTINGS max_execution_time = 1, timeout_overflow_mode = 'break', max_result_rows = 1000, result_overflow_mode = 'break';

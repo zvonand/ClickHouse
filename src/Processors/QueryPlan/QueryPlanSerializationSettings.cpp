@@ -110,7 +110,7 @@ namespace DB
     DECLARE(Bool, use_hash_table_stats_for_join_reordering, false, "Enable using collected hash table statistics for cardinality estimation during join reordering", 0) \
     DECLARE(Bool, enable_join_fixed_hash_table_conversion, true, R"(Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range)", 0) \
     \
-    DECLARE(UInt64, max_streams_for_union_step, 0, "Limits the number of simultaneously active data streams in a UNION ALL step via ConcatProcessors. 0 means no narrowing.", 0) \
+    DECLARE(UInt64, max_streams_for_union_step, 0, "Limits the number of simultaneously active data streams in a UNION step (both UNION ALL and UNION DISTINCT) via ConcatProcessors. 0 means no narrowing.", 0) \
 
 
 // clang-format on

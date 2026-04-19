@@ -247,6 +247,9 @@ DataTypePtr IcebergSchemaProcessor::getSimpleType(const String & type_name)
         return std::make_shared<DataTypeDateTime64>(9, "UTC");
     if (type_name == f_string || type_name == f_binary)
         return std::make_shared<DataTypeString>();
+
+    if (type_name.starts_with("f_geometry") || type_name.starts_with("f_geography"))
+        return DataTypeFactory::instance().get("Geometry");
     if (type_name == f_uuid)
         return std::make_shared<DataTypeUUID>();
 
@@ -337,7 +340,8 @@ DataTypePtr IcebergSchemaProcessor::getFieldType(
     {
         const String & type_name = type.extract<String>();
         auto data_type = getSimpleType(type_name);
-        return required ? data_type : makeNullable(data_type);
+        // Types like Geometry (Variant) cannot be inside Nullable; they carry their own null semantics.
+        return required || !data_type->canBeInsideNullable() ? data_type : makeNullable(data_type);
     }
 
     throw Exception(ErrorCodes::BAD_ARGUMENTS, "Unexpected 'type' field: {}", type.toString());

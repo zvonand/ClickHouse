@@ -1057,6 +1057,12 @@ static ColumnWithTypeAndName readNonNullableColumnFromArrowColumn(
             {
                 return readColumnWithGeoData(arrow_column, column_name, *geo_metadata);
             }
+            // Iceberg spec v3 geometry/geography columns are WKB-encoded BINARY fields.
+            // When the schema processor sets the type_hint to Geometry, parse WKB directly.
+            if (type_hint && type_hint->getName() == "Geometry" && settings.allow_geoparquet_parser)
+            {
+                return readColumnWithGeoData(arrow_column, column_name, GeoColumnMetadata{GeoEncoding::WKB, GeoType::Mixed});
+            }
             return readColumnWithStringData<arrow::BinaryArray>(arrow_column, column_name);
         }
         case arrow::Type::EXTENSION:
@@ -1568,7 +1574,8 @@ static ColumnWithTypeAndName readColumnFromArrowColumn(
     const std::optional<std::unordered_map<String, String>> & parquet_columns_to_clickhouse,
     const std::optional<std::unordered_map<String, String>> & clickhouse_columns_to_parquet)
 {
-    bool read_as_nullable_column = (arrow_column->null_count() || is_nullable_column || (type_hint && (type_hint->isNullable() || type_hint->isLowCardinalityNullable()))) && !geo_metadata && settings.allow_inferring_nullable_columns;
+    bool type_hint_not_nullable_capable = type_hint && !removeNullable(type_hint)->canBeInsideNullable();
+    bool read_as_nullable_column = (arrow_column->null_count() || is_nullable_column || (type_hint && (type_hint->isNullable() || type_hint->isLowCardinalityNullable()))) && !geo_metadata && !type_hint_not_nullable_capable && settings.allow_inferring_nullable_columns;
     if (read_as_nullable_column &&
         arrow_column->type()->id() != arrow::Type::LIST &&
         arrow_column->type()->id() != arrow::Type::LARGE_LIST &&

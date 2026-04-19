@@ -233,7 +233,7 @@ public:
     void cancel(CancelReason reason) noexcept override
     {
         /// When 2-level aggregation is being used ConvertingAggregatedToChunksTransform expects
-        /// to receve data from all sources, that is why we need not to stop processor here.
+        /// to receive data from all sources, so we do not need to stop the processor here.
         if (reason == CancelReason::PartialResult)
             return;
 

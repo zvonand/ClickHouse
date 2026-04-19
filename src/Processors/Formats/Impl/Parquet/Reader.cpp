@@ -1422,7 +1422,8 @@ void Reader::decodePrimitiveColumn(ColumnChunk & column, const PrimitiveColumnIn
     if (subchunk.null_map && !column_info.output_nullable && !options.format.null_as_default)
     {
         const auto & null_map = assert_cast<const ColumnUInt8 &>(*subchunk.null_map).getData();
-        if (memchr(null_map.data(), 0, null_map.size()) != nullptr)
+        /// null_map uses ClickHouse convention: 1 = null, 0 = valid.
+        if (memchr(null_map.data(), 1, null_map.size()) != nullptr)
             throw Exception(ErrorCodes::CANNOT_INSERT_NULL_IN_ORDINARY_COLUMN, "Cannot convert NULL value to non-Nullable type for column {}", column_info.name);
         subchunk.null_map = nullptr;
     }

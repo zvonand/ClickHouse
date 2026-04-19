@@ -994,7 +994,6 @@ RangesInDataParts MergeTreeDataSelectExecutor::filterPartsByPrimaryKeyAndSkipInd
                     if (auto index_result = can_use_index(index_and_condition.index); !index_result)
                     {
                         LOG_TRACE(log, "{}", index_result.error().text);
-                        ranges.disabled_skip_indexes.insert(index_and_condition.index->index.name);
                         continue;
                     }
 

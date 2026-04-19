@@ -114,10 +114,6 @@ struct RangesInDataPart
     /// currently done only for use_skip_indexes_if_final_exact_mode=1
     std::optional<MarkRanges> ranges_snapshot_after_pk_analysis;
 
-    /// Skip indexes that should not be applied during the data-read phase for this part,
-    /// because the part has pending ALTER mutations that change the indexed column type.
-    NameSet disabled_skip_indexes;
-
     /// Offset ranges from parent part, used during projection index reading.
     PartOffsetRanges parent_ranges;
 

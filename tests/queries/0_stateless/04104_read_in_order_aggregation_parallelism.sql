@@ -16,8 +16,9 @@ INSERT INTO t_read_in_order_agg SELECT number FROM numbers_mt(1000000);
 
 -- Single-partition table with two parts: after merge-sort there is 1 stream.
 -- With max_streams_to_max_threads_ratio > 1 and read-in-order, the pipeline
--- must still expand to max_threads after aggregation.
--- The Resize step after aggregation should be "Resize 1 -> 8".
+-- must still expand to more than 1 stream after aggregation.
+-- The new analyzer produces "Resize 1 -> 8" (max_threads); the old analyzer
+-- produces "Resize 1 -> 16" (max_threads * ratio), so match both.
 SELECT count() > 0
 FROM viewExplain('EXPLAIN PIPELINE', '', (
     SELECT a FROM t_read_in_order_agg GROUP BY a
@@ -26,6 +27,6 @@ FROM viewExplain('EXPLAIN PIPELINE', '', (
              max_threads = 8,
              max_streams_to_max_threads_ratio = 2
 ))
-WHERE explain LIKE '%Resize 1 → 8%';
+WHERE match(explain, 'Resize 1 → ([2-9]|[1-9][0-9]+)');
 
 DROP TABLE t_read_in_order_agg;

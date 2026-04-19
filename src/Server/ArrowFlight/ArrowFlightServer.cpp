@@ -251,7 +251,9 @@ namespace
         if (params->num_rows() > 1)
             return arrow::Status::NotImplemented("Multiple parameter sets are not supported (got ", params->num_rows(), " rows)");
 
-        chassert(static_cast<size_t>(params->num_columns()) == num_params);
+        if (static_cast<size_t>(params->num_columns()) != num_params)
+            return arrow::Status::Invalid(
+                "Prepared statement has ", num_params, " parameter(s) but ", params->num_columns(), " value(s) were bound");
 
         String result;
         for (size_t i = 0; i < num_params; ++i)

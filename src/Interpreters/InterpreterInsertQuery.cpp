@@ -566,7 +566,9 @@ static void applyTrivialInsertSelectOptimization(ASTInsertQuery & query, bool pr
 
         Settings new_settings = select_context->getSettingsCopy();
 
-        new_settings[Setting::max_threads] = std::max<UInt64>(1, settings[Setting::max_insert_threads]);
+        new_settings[Setting::max_threads] = getMaxThreadsForAvailableMemory(
+            std::max<UInt64>(1, settings[Setting::max_insert_threads]),
+            settings[Setting::max_insert_threads_min_free_memory_per_thread]);
 
         if (prefer_large_blocks)
         {

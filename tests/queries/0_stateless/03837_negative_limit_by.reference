@@ -24,13 +24,13 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 BY g
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -3 BY g;
 6	0
-9	0
-12	0
 7	1
-10	1
-13	1
 8	2
+9	0
+10	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -100 BY g;
 0	0
@@ -50,19 +50,19 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -100 BY
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -100 BY g;
 0	0
-3	0
-6	0
-9	0
-12	0
 1	1
-4	1
-7	1
-10	1
-13	1
 2	2
+3	0
+4	1
 5	2
+6	0
+7	1
 8	2
+9	0
+10	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -0 BY g;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -0 BY g;
@@ -84,28 +84,28 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -922337
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -9223372036854775808 BY g;
 0	0
-3	0
-6	0
-9	0
-12	0
 1	1
-4	1
-7	1
-10	1
-13	1
 2	2
+3	0
+4	1
 5	2
+6	0
+7	1
 8	2
+9	0
+10	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY g, number LIMIT -1 BY g;
 999999	0
 999997	1
 999998	2
 SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY number LIMIT -1 BY g;
-999999	0
 999997	1
 999998	2
+999999	0
 -- Negative Limit By and Negative Offset
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -1 OFFSET -2 BY g;
 6	0
@@ -127,13 +127,13 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFS
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -3 OFFSET -1 BY g;
 3	0
-6	0
-9	0
 4	1
-7	1
-10	1
 5	2
+6	0
+7	1
 8	2
+9	0
+10	1
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET -100 BY g;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 OFFSET -100 BY g;
@@ -154,21 +154,21 @@ SELECT number, number % 3 AS g FROM numbers(1000) ORDER BY g, number LIMIT -5 OF
 983	2
 986	2
 SELECT number, number % 3 AS g FROM numbers(1000) ORDER BY number LIMIT -5 OFFSET -4 BY g;
-975	0
-978	0
-981	0
-984	0
-987	0
 973	1
-976	1
-979	1
-982	1
-985	1
 974	2
+975	0
+976	1
 977	2
+978	0
+979	1
 980	2
+981	0
+982	1
 983	2
+984	0
+985	1
 986	2
+987	0
 SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY g, number LIMIT -5 OFFSET -1000 BY g;
 92967	0
 92974	0
@@ -206,41 +206,41 @@ SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY g, number LIMIT -5 
 92987	6
 92994	6
 SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY number LIMIT -5 OFFSET -1000 BY g;
-92967	0
-92974	0
-92981	0
-92988	0
-92995	0
-92968	1
-92975	1
-92982	1
-92989	1
-92996	1
-92969	2
-92976	2
-92983	2
-92990	2
-92997	2
-92970	3
-92977	3
-92984	3
-92991	3
-92998	3
-92971	4
-92978	4
-92985	4
-92992	4
-92999	4
 92965	5
-92972	5
-92979	5
-92986	5
-92993	5
 92966	6
+92967	0
+92968	1
+92969	2
+92970	3
+92971	4
+92972	5
 92973	6
+92974	0
+92975	1
+92976	2
+92977	3
+92978	4
+92979	5
 92980	6
+92981	0
+92982	1
+92983	2
+92984	3
+92985	4
+92986	5
 92987	6
+92988	0
+92989	1
+92990	2
+92991	3
+92992	4
+92993	5
 92994	6
+92995	0
+92996	1
+92997	2
+92998	3
+92999	4
 -- Negative Limit By and Positive Offset
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -1 OFFSET 2 BY g;
 12	0
@@ -259,10 +259,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFS
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -3 OFFSET 3 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -100 OFFSET 4 BY g;
 12	0
@@ -285,10 +285,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -8 OFFS
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -8 OFFSET 3 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 -- Edge Cases
 SELECT number, number % 3 AS g FROM numbers(0) ORDER BY g, number LIMIT -2 BY g;
@@ -328,15 +328,15 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g
 10	1
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g LIMIT 3;
 9	0
-12	0
 10	1
+11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g LIMIT -3;
 13	1
 11	2
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g LIMIT -3;
+12	0
 13	1
-11	2
 14	2
 -- Multiple Key Columns
 SELECT number, number % 2 AS g1, number % 3 AS g2 FROM numbers(12) ORDER BY g1, g2, number LIMIT -1 BY g1, g2;
@@ -370,9 +370,9 @@ SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY g, number LIMIT -1
 999997	1
 999998	2
 SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY number LIMIT -1 BY g;
-999999	0
 999997	1
 999998	2
+999999	0
 SELECT DISTINCT number % 5 AS g FROM numbers(1000000) ORDER BY g LIMIT -1 OFFSET -4 BY g;
 SELECT DISTINCT number % 5 AS g FROM numbers(1000000) ORDER BY toString(g) LIMIT -1 OFFSET -4 BY g;
 -- Real Table
@@ -388,10 +388,10 @@ SELECT id, val FROM neg_limit_by_tab ORDER BY id, val LIMIT -2 BY id;
 2	29
 SELECT id, val FROM neg_limit_by_tab ORDER BY val LIMIT -2 BY id;
 0	24
-0	27
 1	25
-1	28
 2	26
+0	27
+1	28
 2	29
 SELECT id, val FROM neg_limit_by_tab ORDER BY id, val LIMIT -3 OFFSET -2 BY id;
 0	15
@@ -405,13 +405,13 @@ SELECT id, val FROM neg_limit_by_tab ORDER BY id, val LIMIT -3 OFFSET -2 BY id;
 2	23
 SELECT id, val FROM neg_limit_by_tab ORDER BY val LIMIT -3 OFFSET -2 BY id;
 0	15
-0	18
-0	21
 1	16
-1	19
-1	22
 2	17
+0	18
+1	19
 2	20
+0	21
+1	22
 2	23
 SELECT id, val FROM neg_limit_by_tab ORDER BY id, val LIMIT -1 OFFSET 8 BY id;
 0	27
@@ -445,27 +445,27 @@ SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY g, number LIMIT -3 
 99987	6
 99994	6
 SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY number LIMIT -3 BY g;
-99981	0
-99988	0
-99995	0
-99982	1
-99989	1
-99996	1
-99983	2
-99990	2
-99997	2
-99984	3
-99991	3
-99998	3
-99985	4
-99992	4
-99999	4
 99979	5
-99986	5
-99993	5
 99980	6
+99981	0
+99982	1
+99983	2
+99984	3
+99985	4
+99986	5
 99987	6
+99988	0
+99989	1
+99990	2
+99991	3
+99992	4
+99993	5
 99994	6
+99995	0
+99996	1
+99997	2
+99998	3
+99999	4
 -- Positive Limit Negative Offset
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSET -1 BY g;
 0	0
@@ -476,10 +476,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSE
 5	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT 2 OFFSET -1 BY g;
 0	0
-3	0
 1	1
-4	1
 2	2
+3	0
+4	1
 5	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 1 OFFSET -3 BY g;
 0	0
@@ -504,13 +504,13 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFS
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -3 OFFSET 0 BY g;
 6	0
-9	0
-12	0
 7	1
-10	1
-13	1
 8	2
+9	0
+10	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -0 OFFSET 2 BY g;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -0 OFFSET 2 BY g;
@@ -524,10 +524,10 @@ SELECT number FROM numbers(15) ORDER BY number % 3, number LIMIT -2 BY number % 
 14
 SELECT number FROM numbers(15) ORDER BY number LIMIT -2 BY number % 3;
 9
-12
 10
-13
 11
+12
+13
 14
 SELECT number FROM numbers(15) ORDER BY number % 3, number LIMIT -2 OFFSET -1 BY number % 3;
 6
@@ -538,10 +538,10 @@ SELECT number FROM numbers(15) ORDER BY number % 3, number LIMIT -2 OFFSET -1 BY
 11
 SELECT number FROM numbers(15) ORDER BY number LIMIT -2 OFFSET -1 BY number % 3;
 6
-9
 7
-10
 8
+9
+10
 11
 -- Sparse columns
 DROP TABLE IF EXISTS test_sparse;
@@ -559,10 +559,10 @@ SELECT id, val FROM test_sparse ORDER BY id, val LIMIT -2 BY id;
 2	29
 SELECT id, val FROM test_sparse ORDER BY val LIMIT -2 BY id;
 0	24
-0	27
 1	25
-1	28
 2	26
+0	27
+1	28
 2	29
 -- Additional LIMIT -2 offset combinations
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g;
@@ -574,10 +574,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET -1 BY g;
 6	0
@@ -588,10 +588,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFS
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 OFFSET -1 BY g;
 6	0
-9	0
 7	1
-10	1
 8	2
+9	0
+10	1
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET 1 BY g;
 9	0
@@ -602,10 +602,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFS
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 OFFSET 1 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 -- INT_MIN with offsets
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -9223372036854775808 OFFSET -5 BY g;
@@ -636,13 +636,13 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 BY g
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -3 BY g;
 6	0
-9	0
-12	0
 7	1
-10	1
-13	1
 8	2
+9	0
+10	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -100 BY g;
 0	0
@@ -662,19 +662,19 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -100 BY
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -100 BY g;
 0	0
-3	0
-6	0
-9	0
-12	0
 1	1
-4	1
-7	1
-10	1
-13	1
 2	2
+3	0
+4	1
 5	2
+6	0
+7	1
 8	2
+9	0
+10	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -0 BY g;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -0 BY g;
@@ -696,28 +696,28 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -922337
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -9223372036854775808 BY g;
 0	0
-3	0
-6	0
-9	0
-12	0
 1	1
-4	1
-7	1
-10	1
-13	1
 2	2
+3	0
+4	1
 5	2
+6	0
+7	1
 8	2
+9	0
+10	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY g, number LIMIT -1 BY g;
 999999	0
 999997	1
 999998	2
 SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY number LIMIT -1 BY g;
-999999	0
 999997	1
 999998	2
+999999	0
 -- Negative Limit By and Negative Offset
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -1 OFFSET -2 BY g;
 6	0
@@ -739,13 +739,13 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFS
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -3 OFFSET -1 BY g;
 3	0
-6	0
-9	0
 4	1
-7	1
-10	1
 5	2
+6	0
+7	1
 8	2
+9	0
+10	1
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET -100 BY g;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 OFFSET -100 BY g;
@@ -766,21 +766,21 @@ SELECT number, number % 3 AS g FROM numbers(1000) ORDER BY g, number LIMIT -5 OF
 983	2
 986	2
 SELECT number, number % 3 AS g FROM numbers(1000) ORDER BY number LIMIT -5 OFFSET -4 BY g;
-975	0
-978	0
-981	0
-984	0
-987	0
 973	1
-976	1
-979	1
-982	1
-985	1
 974	2
+975	0
+976	1
 977	2
+978	0
+979	1
 980	2
+981	0
+982	1
 983	2
+984	0
+985	1
 986	2
+987	0
 SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY g, number LIMIT -5 OFFSET -1000 BY g;
 92967	0
 92974	0
@@ -818,41 +818,41 @@ SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY g, number LIMIT -5 
 92987	6
 92994	6
 SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY number LIMIT -5 OFFSET -1000 BY g;
-92967	0
-92974	0
-92981	0
-92988	0
-92995	0
-92968	1
-92975	1
-92982	1
-92989	1
-92996	1
-92969	2
-92976	2
-92983	2
-92990	2
-92997	2
-92970	3
-92977	3
-92984	3
-92991	3
-92998	3
-92971	4
-92978	4
-92985	4
-92992	4
-92999	4
 92965	5
-92972	5
-92979	5
-92986	5
-92993	5
 92966	6
+92967	0
+92968	1
+92969	2
+92970	3
+92971	4
+92972	5
 92973	6
+92974	0
+92975	1
+92976	2
+92977	3
+92978	4
+92979	5
 92980	6
+92981	0
+92982	1
+92983	2
+92984	3
+92985	4
+92986	5
 92987	6
+92988	0
+92989	1
+92990	2
+92991	3
+92992	4
+92993	5
 92994	6
+92995	0
+92996	1
+92997	2
+92998	3
+92999	4
 -- Negative Limit By and Positive Offset
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -1 OFFSET 2 BY g;
 12	0
@@ -871,10 +871,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFS
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -3 OFFSET 3 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -100 OFFSET 4 BY g;
 12	0
@@ -897,10 +897,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -8 OFFS
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -8 OFFSET 3 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 -- Edge Cases
 SELECT number, number % 3 AS g FROM numbers(0) ORDER BY g, number LIMIT -2 BY g;
@@ -940,15 +940,15 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g
 10	1
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g LIMIT 3;
 9	0
-12	0
 10	1
+11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g LIMIT -3;
 13	1
 11	2
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g LIMIT -3;
+12	0
 13	1
-11	2
 14	2
 -- Multiple Key Columns
 SELECT number, number % 2 AS g1, number % 3 AS g2 FROM numbers(12) ORDER BY g1, g2, number LIMIT -1 BY g1, g2;
@@ -982,9 +982,9 @@ SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY g, number LIMIT -1
 999997	1
 999998	2
 SELECT number, number % 3 AS g FROM numbers(1000000) ORDER BY number LIMIT -1 BY g;
-999999	0
 999997	1
 999998	2
+999999	0
 SELECT DISTINCT number % 5 AS g FROM numbers(1000000) ORDER BY g LIMIT -1 OFFSET -4 BY g;
 SELECT DISTINCT number % 5 AS g FROM numbers(1000000) ORDER BY toString(g) LIMIT -1 OFFSET -4 BY g;
 -- Real Table
@@ -1000,10 +1000,10 @@ SELECT id, val FROM neg_limit_by_tab ORDER BY id, val LIMIT -2 BY id;
 2	29
 SELECT id, val FROM neg_limit_by_tab ORDER BY val LIMIT -2 BY id;
 0	24
-0	27
 1	25
-1	28
 2	26
+0	27
+1	28
 2	29
 SELECT id, val FROM neg_limit_by_tab ORDER BY id, val LIMIT -3 OFFSET -2 BY id;
 0	15
@@ -1017,13 +1017,13 @@ SELECT id, val FROM neg_limit_by_tab ORDER BY id, val LIMIT -3 OFFSET -2 BY id;
 2	23
 SELECT id, val FROM neg_limit_by_tab ORDER BY val LIMIT -3 OFFSET -2 BY id;
 0	15
-0	18
-0	21
 1	16
-1	19
-1	22
 2	17
+0	18
+1	19
 2	20
+0	21
+1	22
 2	23
 SELECT id, val FROM neg_limit_by_tab ORDER BY id, val LIMIT -1 OFFSET 8 BY id;
 0	27
@@ -1057,27 +1057,27 @@ SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY g, number LIMIT -3 
 99987	6
 99994	6
 SELECT number, number % 7 AS g FROM numbers(100000) ORDER BY number LIMIT -3 BY g;
-99981	0
-99988	0
-99995	0
-99982	1
-99989	1
-99996	1
-99983	2
-99990	2
-99997	2
-99984	3
-99991	3
-99998	3
-99985	4
-99992	4
-99999	4
 99979	5
-99986	5
-99993	5
 99980	6
+99981	0
+99982	1
+99983	2
+99984	3
+99985	4
+99986	5
 99987	6
+99988	0
+99989	1
+99990	2
+99991	3
+99992	4
+99993	5
 99994	6
+99995	0
+99996	1
+99997	2
+99998	3
+99999	4
 -- Positive Limit Negative Offset
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSET -1 BY g;
 0	0
@@ -1088,10 +1088,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSE
 5	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT 2 OFFSET -1 BY g;
 0	0
-3	0
 1	1
-4	1
 2	2
+3	0
+4	1
 5	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 1 OFFSET -3 BY g;
 0	0
@@ -1116,13 +1116,13 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFS
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -3 OFFSET 0 BY g;
 6	0
-9	0
-12	0
 7	1
-10	1
-13	1
 8	2
+9	0
+10	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -0 OFFSET 2 BY g;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -0 OFFSET 2 BY g;
@@ -1136,10 +1136,10 @@ SELECT number FROM numbers(15) ORDER BY number % 3, number LIMIT -2 BY number % 
 14
 SELECT number FROM numbers(15) ORDER BY number LIMIT -2 BY number % 3;
 9
-12
 10
-13
 11
+12
+13
 14
 SELECT number FROM numbers(15) ORDER BY number % 3, number LIMIT -2 OFFSET -1 BY number % 3;
 6
@@ -1150,10 +1150,10 @@ SELECT number FROM numbers(15) ORDER BY number % 3, number LIMIT -2 OFFSET -1 BY
 11
 SELECT number FROM numbers(15) ORDER BY number LIMIT -2 OFFSET -1 BY number % 3;
 6
-9
 7
-10
 8
+9
+10
 11
 -- Sparse columns
 DROP TABLE IF EXISTS test_sparse;
@@ -1171,10 +1171,10 @@ SELECT id, val FROM test_sparse ORDER BY id, val LIMIT -2 BY id;
 2	29
 SELECT id, val FROM test_sparse ORDER BY val LIMIT -2 BY id;
 0	24
-0	27
 1	25
-1	28
 2	26
+0	27
+1	28
 2	29
 -- Additional LIMIT -2 offset combinations
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g;
@@ -1186,10 +1186,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET -1 BY g;
 6	0
@@ -1200,10 +1200,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFS
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 OFFSET -1 BY g;
 6	0
-9	0
 7	1
-10	1
 8	2
+9	0
+10	1
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET 1 BY g;
 9	0
@@ -1214,10 +1214,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFS
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 OFFSET 1 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 -- INT_MIN with offsets
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -9223372036854775808 OFFSET -5 BY g;

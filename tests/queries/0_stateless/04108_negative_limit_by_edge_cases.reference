@@ -16,15 +16,15 @@ SELECT number, number % 3 AS g FROM numbers(10) ORDER BY g DESC, number DESC LIM
 -- DESC, ties at group boundary (Common)
 SELECT number, number % 3 AS g FROM numbers(10) ORDER BY number DESC LIMIT -4 BY g;
 9	0
-6	0
-3	0
-0	0
 8	2
-5	2
-2	2
 7	1
+6	0
+5	2
 4	1
+3	0
+2	2
 1	1
+0	0
 -- DESC, one-per-pair (InOrder)
 SELECT intDiv(number, 2) AS g, number FROM numbers(10) ORDER BY g DESC, number DESC LIMIT -1 BY g;
 4	8
@@ -228,10 +228,10 @@ SELECT DISTINCT number % 3 AS g, number FROM numbers(15) ORDER BY g, number LIMI
 -- DISTINCT + negative LIMIT BY (Common)
 SELECT DISTINCT number % 3 AS g, number FROM numbers(15) ORDER BY number LIMIT -2 BY g;
 0	9
-0	12
 1	10
-1	13
 2	11
+0	12
+1	13
 2	14
 SET max_block_size = 1;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g;
@@ -243,10 +243,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFSET -1 BY g;
 3	0
@@ -260,13 +260,13 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFS
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -3 OFFSET -1 BY g;
 3	0
-6	0
-9	0
 4	1
-7	1
-10	1
 5	2
+6	0
+7	1
 8	2
+9	0
+10	1
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET 2 BY g;
 9	0
@@ -277,10 +277,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFS
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 OFFSET 2 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSET -2 BY g;
 0	0
@@ -291,10 +291,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSE
 5	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT 2 OFFSET -2 BY g;
 0	0
-3	0
 1	1
-4	1
 2	2
+3	0
+4	1
 5	2
 SET max_block_size = 2;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g;
@@ -306,10 +306,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFSET -1 BY g;
 3	0
@@ -323,13 +323,13 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFS
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -3 OFFSET -1 BY g;
 3	0
-6	0
-9	0
 4	1
-7	1
-10	1
 5	2
+6	0
+7	1
 8	2
+9	0
+10	1
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET 2 BY g;
 9	0
@@ -340,10 +340,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFS
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 OFFSET 2 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSET -2 BY g;
 0	0
@@ -354,10 +354,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSE
 5	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT 2 OFFSET -2 BY g;
 0	0
-3	0
 1	1
-4	1
 2	2
+3	0
+4	1
 5	2
 SET max_block_size = 3;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g;
@@ -369,10 +369,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFSET -1 BY g;
 3	0
@@ -386,13 +386,13 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -3 OFFS
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -3 OFFSET -1 BY g;
 3	0
-6	0
-9	0
 4	1
-7	1
-10	1
 5	2
+6	0
+7	1
 8	2
+9	0
+10	1
 11	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET 2 BY g;
 9	0
@@ -403,10 +403,10 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFS
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 OFFSET 2 BY g;
 9	0
-12	0
 10	1
-13	1
 11	2
+12	0
+13	1
 14	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSET -2 BY g;
 0	0
@@ -417,8 +417,8 @@ SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSE
 5	2
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT 2 OFFSET -2 BY g;
 0	0
-3	0
 1	1
-4	1
 2	2
+3	0
+4	1
 5	2

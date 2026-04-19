@@ -52,32 +52,51 @@ bool ParserKQLTop::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     if (!order_list.parse(sort_pos, order_expression_list, expected))
         return false;
 
-    /// Default to desc if no direction was explicitly specified.
-    /// We scan tokens for "asc"/"desc" keywords rather than using substring search
-    /// to avoid false positives (e.g. a column named "description").
+    /// Default to desc per key when its direction was not explicitly specified.
+    /// We re-scan the source text split by top-level commas, because `ASTOrderByElement::direction`
+    /// defaults to 1 (ASC) when omitted, so we cannot distinguish "user wrote asc" from "no direction"
+    /// by inspecting the parsed AST alone.
     {
-        bool has_explicit_dir = false;
-        Tokens check_tokens(sort_expr.data(), sort_expr.data() + sort_expr.size(), 0, true);
-        IParser::Pos check_pos(check_tokens, pos.max_depth, pos.max_backtracks);
-        while (isValidKQLPos(check_pos))
+        std::vector<bool> element_has_explicit_dir;
+        element_has_explicit_dir.reserve(order_expression_list->children.size());
+
+        Tokens split_tokens(sort_expr.data(), sort_expr.data() + sort_expr.size(), 0, true);
+        IParser::Pos split_pos(split_tokens, pos.max_depth, pos.max_backtracks);
+        int depth = 0;
+        bool seen_asc_desc = false;
+        while (isValidKQLPos(split_pos))
         {
-            String tok(check_pos->begin, check_pos->end);
-            if (check_pos->type == TokenType::BareWord && (tok == "asc" || tok == "desc"))
+            if (split_pos->type == TokenType::OpeningRoundBracket || split_pos->type == TokenType::OpeningSquareBracket)
+                ++depth;
+            else if (split_pos->type == TokenType::ClosingRoundBracket || split_pos->type == TokenType::ClosingSquareBracket)
+                --depth;
+            else if (depth == 0 && split_pos->type == TokenType::Comma)
             {
-                has_explicit_dir = true;
-                break;
+                element_has_explicit_dir.push_back(seen_asc_desc);
+                seen_asc_desc = false;
+                ++split_pos;
+                continue;
             }
-            ++check_pos;
+            else if (depth == 0 && split_pos->type == TokenType::BareWord)
+            {
+                String tok(split_pos->begin, split_pos->end);
+                if (tok == "asc" || tok == "desc")
+                    seen_asc_desc = true;
+            }
+            ++split_pos;
         }
-        if (!has_explicit_dir)
+        element_has_explicit_dir.push_back(seen_asc_desc);
+
+        /// Apply KQL default (desc) only to elements without explicit direction.
+        const auto & children = order_expression_list->children;
+        for (size_t i = 0; i < children.size(); ++i)
         {
-            for (auto & child : order_expression_list->children)
-            {
-                auto * order_expr = child->as<ASTOrderByElement>();
-                order_expr->direction = -1;
-                if (!order_expr->nulls_direction_was_explicitly_specified)
-                    order_expr->nulls_direction = -1;
-            }
+            if (i < element_has_explicit_dir.size() && element_has_explicit_dir[i])
+                continue;
+            auto * order_expr = children[i]->as<ASTOrderByElement>();
+            order_expr->direction = -1;
+            if (!order_expr->nulls_direction_was_explicitly_specified)
+                order_expr->nulls_direction = -1;
         }
     }
 

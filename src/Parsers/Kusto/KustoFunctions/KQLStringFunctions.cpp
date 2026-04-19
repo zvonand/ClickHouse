@@ -469,10 +469,11 @@ bool ParseJSON::convertImpl(String & out, IParser::Pos & pos)
     ++pos;
     if (String(pos->begin, pos->end) == "dynamic")
     {
-        --pos;
-        auto arg = getArgument(fn_name, pos);
-        auto result = kqlCallToExpression("dynamic", {arg}, pos.max_depth, pos.max_backtracks);
-        out = fmt::format("{}", result);
+        /// `parse_json(dynamic(...))` is equivalent to the `dynamic` value itself —
+        /// parse the inner `dynamic(...)` call directly instead of re-wrapping
+        /// it in another `dynamic(...)` (which would nest the SQL output inside a
+        /// fresh dynamic parser and fail on `CAST` tokens produced by the inner call).
+        out = getConvertedArgument(fn_name, pos);
     }
     else
     {

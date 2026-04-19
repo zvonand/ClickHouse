@@ -177,7 +177,7 @@ set dialect='kusto';
 --           dt=coalesce(dt,dt1),
 --           ts=coalesce(ts,ts1),
 --           s=coalesce(s,s1);
-print '-- DateTimeTests::MakeDateTime_InvalidMonth_ShouldReturnNull --';
+print '-- DateTimeTests::MakeDateTime_InvalidMonth_ReturnsDefaultDateTime --';
 print c=make_datetime(2020, 13, 1);
 print '-- DateTimeTests::DateTimeBin --';
 print bin(datetime(1970-05-11 13:45:07), 1d);

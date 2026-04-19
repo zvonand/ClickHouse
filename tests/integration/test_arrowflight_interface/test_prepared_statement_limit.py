@@ -254,3 +254,32 @@ def test_prepared_statement_parameter_types(test_case):
         assert actual == expected, f"[{name}] expected {expected!r}, got {actual!r}"
 
     stmt.close()
+
+
+def test_prepared_statement_schema_returned_on_prepare():
+    """When NULL substitution succeeds, prepare should return dataset_schema."""
+    client = get_client()
+
+    stmt = client.prepare("SELECT ? AS result")
+    assert stmt.dataset_schema is not None
+    assert len(stmt.dataset_schema) == 1
+    assert stmt.dataset_schema.field(0).name == "result"
+    stmt.close()
+
+
+def test_prepared_statement_no_schema_when_null_invalid():
+    """When NULL substitution fails (e.g. numbers(?)), prepare should still succeed
+    but dataset_schema should be None."""
+    client = get_client()
+
+    stmt = client.prepare("SELECT * FROM numbers(?)")
+    assert stmt.dataset_schema is None
+    assert stmt.parameter_schema is not None
+    assert len(stmt.parameter_schema) == 1
+
+    # Executing with a real value should work.
+    params = pa.record_batch([pa.array([5], type=pa.int64())], names=["0"])
+    stmt.bind_parameters(params)
+    result = stmt.execute()
+    assert result.column("number").to_pylist() == [0, 1, 2, 3, 4]
+    stmt.close()

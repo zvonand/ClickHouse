@@ -1502,26 +1502,39 @@ arrow::Status ArrowFlightServer::DoAction(
 
             if (dynamic_cast<const ASTQueryWithOutput *>(ast.get()))
             {
-                auto [_, block_io] = executeQuery(substituted_query, query_context, QueryFlags{}, QueryProcessingStage::Complete);
-
+                /// Try to infer the result schema by executing the NULL-substituted query.
+                /// This may fail for queries where NULL is not a valid substitute (e.g. table
+                /// function arguments like numbers(?)). In that case, we still create the
+                /// prepared statement but without dataset_schema — the client will discover
+                /// the schema at execution time.
                 try
                 {
-                    if (block_io.pipeline.pulling())
+                    auto [_, block_io] = executeQuery(substituted_query, query_context, QueryFlags{}, QueryProcessingStage::Complete);
+
+                    try
                     {
-                        /// SELECT-like query: infer result schema from the pipeline header.
-                        PullingPipelineExecutor executor{block_io.pipeline};
-                        info.dataset_schema = CHColumnToArrowColumn::calculateArrowSchema(
-                            executor.getHeader().getColumnsWithTypeAndName(),
-                            "Arrow",
-                            nullptr,
-                            {.output_string_as_string = true, .output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]});
+                        if (block_io.pipeline.pulling())
+                        {
+                            PullingPipelineExecutor executor{block_io.pipeline};
+                            info.dataset_schema = CHColumnToArrowColumn::calculateArrowSchema(
+                                executor.getHeader().getColumnsWithTypeAndName(),
+                                "Arrow",
+                                nullptr,
+                                {.output_string_as_string = true, .output_unsupported_types_as_binary = query_context->getSettingsRef()[Setting::output_format_arrow_unsupported_types_as_binary]});
+                        }
+                        block_io.onCancelOrConnectionLoss();
                     }
-                    block_io.onCancelOrConnectionLoss();
+                    catch (...)
+                    {
+                        block_io.onException();
+                        throw;
+                    }
                 }
                 catch (...)
                 {
-                    block_io.onException();
-                    throw;
+                    LOG_DEBUG(log, "CreatePreparedStatement: schema inference failed for query '{}', "
+                        "the prepared statement will be created without dataset_schema: {}",
+                        query, getCurrentExceptionMessage(/* with_stacktrace = */ false));
                 }
             }
 

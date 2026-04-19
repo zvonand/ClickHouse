@@ -40,3 +40,7 @@ FuncCity
 dictGetOrDefault with non-rewritable default
 MCountry
 MCity
+shared tupleElement across SELECT and ORDER BY ALL
+New York
+Paris
+Tokyo

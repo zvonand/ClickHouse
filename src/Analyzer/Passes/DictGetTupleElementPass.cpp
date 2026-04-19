@@ -188,23 +188,26 @@ public:
         if (is_dict_get_or_default && !new_default_arg)
             return;
 
-        /// Now apply all mutations atomically
-        dict_get_args[1] = std::move(new_attr_arg);
+        /// The outer tupleElement node (and hence its child dictGet) may be shared across
+        /// multiple parents — e.g. ORDER BY ALL referencing SELECT expressions. Mutating
+        /// dict_get_function in place would change its return type from Tuple to a scalar,
+        /// leaving the other parent's tupleElement wrapping a now-scalar dictGet. Clone
+        /// the dictGet so the original remains intact for any other parents.
+        auto new_dict_get_node = dict_get_function->clone();
+        auto & new_dict_get_function = new_dict_get_node->as<FunctionNode &>();
+        auto & new_dict_get_args = new_dict_get_function.getArguments().getNodes();
+
+        new_dict_get_args[1] = std::move(new_attr_arg);
 
         if (new_default_arg)
         {
-            size_t default_arg_idx = dict_get_args.size() - 1;
-            dict_get_args[default_arg_idx] = std::move(new_default_arg);
+            size_t default_arg_idx = new_dict_get_args.size() - 1;
+            new_dict_get_args[default_arg_idx] = std::move(new_default_arg);
         }
 
-        /// Re-resolve the dictGet function with the modified arguments
-        resolveOrdinaryFunctionNodeByName(*dict_get_function, dict_get_name, getContext());
+        resolveOrdinaryFunctionNodeByName(new_dict_get_function, dict_get_name, getContext());
 
-        /// Replace the tupleElement node with the modified dictGet node.
-        /// Use copy instead of move: the tupleElement node may be shared across
-        /// multiple parents (e.g. ORDER BY ALL referencing SELECT expressions),
-        /// and moving would leave a null child pointer that crashes on the next visit.
-        node = tuple_element_args[0];
+        node = std::move(new_dict_get_node);
     }
 };
 

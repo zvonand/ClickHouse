@@ -95,6 +95,12 @@ SELECT 'dictGetOrDefault with non-rewritable default';
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), materialize(('MCountry', 'MCity'))).1;
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), materialize(('MCountry', 'MCity'))).2;
 
+-- Test shared-parent scenario: ORDER BY ALL references the SELECT expression, so the tupleElement
+-- (and its inner dictGet) node is shared between SELECT and ORDER BY. The pass must not mutate the
+-- shared dictGet in place — that would leave the other parent's tupleElement wrapping a scalar.
+SELECT 'shared tupleElement across SELECT and ORDER BY ALL';
+SELECT DISTINCT tupleElement(dictGet(currentDatabase() || '.test_dict', ('country', 'city', 'population'), id), 'city') FROM test_keys ORDER BY ALL;
+
 DROP TABLE test_keys;
 DROP DICTIONARY test_dict;
 DROP TABLE dict_source;

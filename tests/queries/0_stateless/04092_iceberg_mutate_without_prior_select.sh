@@ -27,10 +27,11 @@ ${CLICKHOUSE_CLIENT} --allow_insert_into_iceberg=1 --query "INSERT INTO ${TABLE}
 
 # Drop and re-create the table to get a fresh storage object whose in-memory
 # metadata has no datalake_table_state loaded (simulates a server restart).
-# The Iceberg data files remain on disk.
+# The Iceberg data files remain on disk, so the second CREATE must use
+# IF NOT EXISTS to skip writing initial metadata and reuse the existing files.
 ${CLICKHOUSE_CLIENT} --query "DROP TABLE ${TABLE}"
 ${CLICKHOUSE_CLIENT} --query "
-    CREATE TABLE ${TABLE} (c0 String)
+    CREATE TABLE IF NOT EXISTS ${TABLE} (c0 String)
     ENGINE = IcebergLocal('${TABLE_PATH}', 'Parquet')
 "
 

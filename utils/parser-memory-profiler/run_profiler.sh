@@ -38,7 +38,7 @@ usage() {
     echo "  -q, --queries FILE    Input queries file (default: test_queries.txt)"
     echo "  -o, --output DIR      Output directory name (default: profiler_output)"
     echo "  -b, --build DIR       ClickHouse build directory (default: ../../build)"
-    echo "  -p, --profiler PATH   Path to parser_memory_profiler binary"
+    echo "  -p, --profiler PATH   Path to clickhouse-examples binary"
     echo "  -j, --jeprof PATH     Path to jeprof binary"
     echo "  -f, --flamegraph PATH Path to flamegraph.pl"
     echo "  -h, --help            Show this help"

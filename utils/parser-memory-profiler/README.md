@@ -173,7 +173,7 @@ Shows side-by-side comparison:
 
 2. **run_profiler.sh**:
    - Iterates through queries in the input file
-   - Runs `parser_memory_profiler` with `MALLOC_CONF=prof:true,prof_active:true,lg_prof_sample:0`
+   - Runs `clickhouse-examples parser_memory_profiler` with `MALLOC_CONF=prof:true,prof_active:true,lg_prof_sample:0`
    - Uses `jeprof` to analyze heap profile diffs
    - Generates text reports, collapsed stacks, and SVGs
    - Collects everything into `results.json`

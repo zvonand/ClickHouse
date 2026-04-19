@@ -577,7 +577,7 @@ void registerDatabasePostgreSQL(DatabaseFactory & factory)
             use_table_cache,
             args.uuid);
     };
-    factory.registerDatabase("PostgreSQL", create_fn, {.supports_arguments = true});
+    factory.registerDatabase("PostgreSQL", create_fn, {.supports_arguments = true, .is_external = true});
 }
 }
 

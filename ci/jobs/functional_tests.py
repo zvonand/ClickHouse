@@ -719,7 +719,7 @@ def main():
     if is_bugfix_validation and test_result and (Labels.PR_BUGFIX in info.pr_labels or Labels.PR_CRITICAL_BUGFIX in info.pr_labels):
         has_failure = False
         for r in test_result.results:
-            r.set_label("xfail")
+            r.set_label(Result.Label.XFAIL)
             if r.status == Result.Status.FAIL:
                 r.status = Result.Status.OK
                 has_failure = True

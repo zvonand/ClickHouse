@@ -132,50 +132,106 @@ namespace
         return result;
     }
 
+    /// Escapes a string value for use as a ClickHouse SQL literal: wraps in single quotes,
+    /// escapes embedded quotes and backslashes.
+    String escapeForSQL(const String & value)
+    {
+        String escaped;
+        escaped.reserve(value.size() + 2);
+        escaped.push_back('\'');
+        for (char c : value)
+        {
+            if (c == '\'')
+                escaped.push_back('\'');
+            else if (c == '\\')
+                escaped.push_back('\\');
+            escaped.push_back(c);
+        }
+        escaped.push_back('\'');
+        return escaped;
+    }
+
+    /// Converts binary data to a ClickHouse SQL expression using unhex().
+    /// This ensures the column name in the result schema is valid UTF-8
+    /// (e.g. "unhex('AABB')"), because ClickHouse uses the expression text as the column name
+    /// and Arrow requires field names to be valid UTF-8.
+    String binaryToSQLExpression(const String & value)
+    {
+        static constexpr char hex_digits[] = "0123456789ABCDEF";
+        String result = "unhex('";
+        result.reserve(7 + value.size() * 2 + 2);
+        for (unsigned char c : value)
+        {
+            result.push_back(hex_digits[c >> 4]);
+            result.push_back(hex_digits[c & 0x0F]);
+        }
+        result += "')";
+        return result;
+    }
+
     /// Converts an Arrow scalar value to a ClickHouse SQL literal string.
     String arrowScalarToSQLLiteral(const std::shared_ptr<arrow::Scalar> & scalar)
     {
         if (!scalar || !scalar->is_valid)
             return "NULL";
 
+        auto buffer_value = [](const std::shared_ptr<arrow::Buffer> & buf) -> String
+        {
+            return buf ? buf->ToString() : String{};
+        };
+
         switch (scalar->type->id())
         {
-            case arrow::Type::STRING:
-            case arrow::Type::LARGE_STRING:
-            case arrow::Type::BINARY:
-            case arrow::Type::LARGE_BINARY:
-            {
-                /// Need to escape single quotes for SQL literals.
-                String value;
-                if (scalar->type->id() == arrow::Type::STRING)
-                    value = std::static_pointer_cast<arrow::StringScalar>(scalar)->value->ToString();
-                else if (scalar->type->id() == arrow::Type::LARGE_STRING)
-                    value = std::static_pointer_cast<arrow::LargeStringScalar>(scalar)->value->ToString();
-                else if (scalar->type->id() == arrow::Type::BINARY)
-                    value = std::static_pointer_cast<arrow::BinaryScalar>(scalar)->value->ToString();
-                else
-                    value = std::static_pointer_cast<arrow::LargeBinaryScalar>(scalar)->value->ToString();
+            case arrow::Type::NA:
+                return "NULL";
 
-                String escaped;
-                escaped.reserve(value.size() + 2);
-                escaped.push_back('\'');
-                for (char c : value)
-                {
-                    if (c == '\'')
-                        escaped.push_back('\'');
-                    else if (c == '\\')
-                        escaped.push_back('\\');
-                    escaped.push_back(c);
-                }
-                escaped.push_back('\'');
-                return escaped;
-            }
             case arrow::Type::BOOL:
                 return std::static_pointer_cast<arrow::BooleanScalar>(scalar)->value ? "1" : "0";
-            default:
-                /// For numeric, date, timestamp, decimal types, Arrow's ToString produces
-                /// a representation that ClickHouse can parse directly as a literal.
+
+            /// Integer types: ToString() produces valid numeric literals.
+            case arrow::Type::INT8:
+            case arrow::Type::INT16:
+            case arrow::Type::INT32:
+            case arrow::Type::INT64:
+            case arrow::Type::UINT8:
+            case arrow::Type::UINT16:
+            case arrow::Type::UINT32:
+            case arrow::Type::UINT64:
+            /// Floating-point types: ToString() produces valid numeric literals.
+            case arrow::Type::HALF_FLOAT:
+            case arrow::Type::FLOAT:
+            case arrow::Type::DOUBLE:
+            /// Decimal types: ToString() produces numeric literals like "123.45".
+            case arrow::Type::DECIMAL128:
+            case arrow::Type::DECIMAL256:
                 return scalar->ToString();
+
+            /// String types: extract raw content from the buffer and escape.
+            case arrow::Type::STRING:
+                return escapeForSQL(buffer_value(std::static_pointer_cast<arrow::StringScalar>(scalar)->value));
+            case arrow::Type::LARGE_STRING:
+                return escapeForSQL(buffer_value(std::static_pointer_cast<arrow::LargeStringScalar>(scalar)->value));
+
+            /// Binary types: use unhex() so the column name in the result stays valid UTF-8.
+            case arrow::Type::BINARY:
+                return binaryToSQLExpression(buffer_value(std::static_pointer_cast<arrow::BinaryScalar>(scalar)->value));
+            case arrow::Type::LARGE_BINARY:
+                return binaryToSQLExpression(buffer_value(std::static_pointer_cast<arrow::LargeBinaryScalar>(scalar)->value));
+            case arrow::Type::FIXED_SIZE_BINARY:
+                return binaryToSQLExpression(buffer_value(std::static_pointer_cast<arrow::FixedSizeBinaryScalar>(scalar)->value));
+
+            /// Date/time types: ToString() produces human-readable strings like "2021-01-01"
+            /// that must be quoted — otherwise ClickHouse parses "2021-01-01" as 2021 - 1 - 1 = 2019.
+            case arrow::Type::DATE32:
+            case arrow::Type::DATE64:
+            case arrow::Type::TIMESTAMP:
+            case arrow::Type::TIME32:
+            case arrow::Type::TIME64:
+            case arrow::Type::DURATION:
+            default:
+                /// For any remaining types (LIST, STRUCT, MAP, DICTIONARY, etc.),
+                /// quote the string representation as a best-effort fallback.
+                return escapeForSQL(scalar->ToString());
         }
     }
 

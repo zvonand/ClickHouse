@@ -5,6 +5,8 @@ import pyarrow as pa
 import pyarrow.flight as flight
 import random
 import string
+import decimal
+import datetime
 
 from .flight_sql_client import FlightSQLClient
 
@@ -149,4 +151,76 @@ def test_prepared_statement_not_accessible_by_other_user():
     assert result.column(0).to_pylist() == [1]
 
     # The owner can still use and close it.
+    stmt.close()
+
+
+@pytest.mark.parametrize("test_case", [
+    # (arrow_type, arrow_value, expected_result, description)
+    # Boolean
+    ("bool_true", pa.array([True], type=pa.bool_()), 1),
+    ("bool_false", pa.array([False], type=pa.bool_()), 0),
+    # Integer types
+    ("int8", pa.array([42], type=pa.int8()), 42),
+    ("int16", pa.array([1000], type=pa.int16()), 1000),
+    ("int32", pa.array([100000], type=pa.int32()), 100000),
+    ("int64", pa.array([2**40], type=pa.int64()), 2**40),
+    ("uint8", pa.array([200], type=pa.uint8()), 200),
+    ("uint16", pa.array([60000], type=pa.uint16()), 60000),
+    ("uint32", pa.array([3000000000], type=pa.uint32()), 3000000000),
+    ("uint64", pa.array([2**50], type=pa.uint64()), 2**50),
+    # Floating-point types
+    ("float32", pa.array([3.14], type=pa.float32()), pytest.approx(3.14, abs=1e-5)),
+    ("float64", pa.array([2.718281828], type=pa.float64()), pytest.approx(2.718281828, abs=1e-9)),
+    # String types
+    ("string", pa.array(["hello"], type=pa.string()), "hello"),
+    ("string_with_quotes", pa.array(["it's a \"test\""], type=pa.string()), "it's a \"test\""),
+    ("string_with_backslash", pa.array(["path\\to\\file"], type=pa.string()), "path\\to\\file"),
+    ("large_string", pa.array(["large"], type=pa.large_string()), "large"),
+    # Binary types
+    ("binary", pa.array([b"\x01\x02\x03"], type=pa.binary()), b"\x01\x02\x03"),
+    ("large_binary", pa.array([b"\xaa\xbb"], type=pa.large_binary()), b"\xaa\xbb"),
+    # Date types — Arrow date32 ToString produces "YYYY-MM-DD" which must be quoted
+    ("date32", pa.array([datetime.date(2021, 6, 15)], type=pa.date32()), datetime.date(2021, 6, 15)),
+    # Timestamp
+    ("timestamp_us", pa.array([datetime.datetime(2023, 3, 14, 12, 30, 45)], type=pa.timestamp("us")), datetime.datetime(2023, 3, 14, 12, 30, 45)),
+    # Decimal
+    ("decimal128", pa.array([decimal.Decimal("123.45")], type=pa.decimal128(10, 2)), decimal.Decimal("123.45")),
+    # NULL
+    ("null_int", pa.array([None], type=pa.int32()), None),
+    ("null_string", pa.array([None], type=pa.string()), None),
+], ids=lambda x: x if isinstance(x, str) else "")
+def test_prepared_statement_parameter_types(test_case):
+    """Verify that all Arrow parameter types are correctly converted to SQL literals."""
+    name, arr, expected = test_case
+    client = get_client()
+
+    stmt = client.prepare("SELECT ? AS result")
+    params = pa.record_batch([arr], names=["0"])
+    stmt.bind_parameters(params)
+    result = stmt.execute()
+
+    if isinstance(expected, bytes):
+        # ClickHouse returns binary data in a String column, which Arrow maps to utf8.
+        # Cast to binary to avoid pyarrow's UTF-8 decoding.
+        actual = result.column("result").cast(pa.binary()).to_pylist()[0]
+    else:
+        actual = result.column("result").to_pylist()[0]
+
+    if isinstance(expected, bytes):
+        assert actual == expected, f"[{name}] expected {expected!r}, got {actual!r}"
+    elif expected is None:
+        assert actual is None, f"[{name}] expected None, got {actual!r}"
+    elif isinstance(expected, datetime.datetime):
+        if isinstance(actual, str):
+            actual = datetime.datetime.fromisoformat(actual)
+        assert actual == expected, f"[{name}] expected {expected}, got {actual}"
+    elif isinstance(expected, datetime.date):
+        if isinstance(actual, str):
+            actual = datetime.date.fromisoformat(actual)
+        assert actual == expected, f"[{name}] expected {expected}, got {actual}"
+    elif isinstance(expected, decimal.Decimal):
+        assert decimal.Decimal(str(actual)) == expected, f"[{name}] expected {expected}, got {actual}"
+    else:
+        assert actual == expected, f"[{name}] expected {expected!r}, got {actual!r}"
+
     stmt.close()

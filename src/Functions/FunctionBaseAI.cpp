@@ -122,6 +122,8 @@ float FunctionBaseAI::resolveTemperature(const ColumnsWithTypeAndName & argument
 
 ColumnPtr FunctionBaseAI::executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const
 {
+    checkSanityBeforeExecuteImpl(arguments, result_type, input_rows_count);
+
     /// A Nullable prompt can arrive as `ColumnNullable` or as `ColumnConst(ColumnNullable)` (e.g. `NULL::Nullable(String)`).
     /// `convertToFullColumnIfConst` unwraps the latter into the former, so a single null-map path handles both.
     size_t prompt_idx = promptArgumentIndex();

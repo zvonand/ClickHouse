@@ -58,11 +58,14 @@ protected:
     /// a higher value is useful for creative tasks, such as chatting or text generation.
     virtual float defaultTemperature() const = 0;
 
+    /// Performs additional validation of the input arguments.
+    virtual void checkSanityBeforeExecuteImpl(const ColumnsWithTypeAndName & /*arguments*/, const DataTypePtr & /*result_type*/, size_t /*input_rows_count*/) const {}
+
     /// A system prompt  applies to each request. AI funcs will probably want to provide a default on a per-function basis.
     virtual String buildSystemPrompt(const ColumnsWithTypeAndName & arguments) const = 0;
 
     /// The user prompt is appended to the system prompt, this is usually what is contained in each row.
-    virtual std::string_view buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const = 0;
+    virtual String buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const = 0;
 
     /// How the response should be formatted. Different AI providers treat this differently. OpenAI-like providers have a specific field
     /// for the response format, while Anthropic does not but it can be approximated with a tool-use pattern, see AnthropicProvider.h/cpp

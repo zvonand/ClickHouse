@@ -67,9 +67,9 @@ private:
         return default_system_prompt;
     }
 
-    std::string_view buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const override
+    String buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const override
     {
-        return arguments[prompt_arg_index].column->getDataAt(row);
+        return String(arguments[prompt_arg_index].column->getDataAt(row));
     }
 };
 
@@ -97,9 +97,7 @@ The first argument is a named collection that specifies the provider, model, end
         .examples
         = {{"Simple question", "SELECT aiGenerateContent('ai_credentials', 'What is 2 + 2? Reply with just the number.')", "4"},
            {"With system prompt", "SELECT aiGenerateContent('ai_credentials', 'Explain ClickHouse', 'You are a database expert. Be concise.')", ""},
-           {"Summarize column values",
-            "SELECT article_title, aiGenerateContent('ai_credentials', concat('Summarize in one sentence: ', article_body)) AS summary FROM articles LIMIT 5",
-            ""}},
+           {"Summarize column values", "SELECT article_title, aiGenerateContent('ai_credentials', concat('Summarize in one sentence: ', article_body)) AS summary FROM articles LIMIT 5", ""}},
         .introduced_in = {26, 4},
         .category = FunctionDocumentation::Category::AI});
 }

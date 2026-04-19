@@ -29,6 +29,8 @@ bool isArrayOfStrings(const IDataType & type)
     return (array_type && isString(array_type->getNestedType()));
 }
 
+}
+
 class FunctionAiClassify final : public FunctionBaseAI
 {
 public:
@@ -54,11 +56,6 @@ public:
         };
         validateFunctionArguments(*this, arguments, mandatory_args, optional_args);
 
-        /// An empty category list would produce `"enum": []` in the response-format schema, which no provider can
-        /// satisfy. Fail early with a deterministic local exception instead of waiting for a provider-side error.
-        if (getCategories(arguments).empty())
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "aiClassify: 'categories' must contain at least one label");
-
         return wrapReturnTypeForNullablePrompt(arguments, prompt_arg_index, std::make_shared<DataTypeString>());
     }
 
@@ -74,24 +71,32 @@ private:
     size_t promptArgumentIndex() const override { return prompt_arg_index; }
     size_t temperatureArgumentIndex() const override { return temp_arg_idx; }
 
-    Array getCategories(const ColumnsWithTypeAndName & arguments) const
+    void checkSanityBeforeExecuteImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & /*result_type*/, size_t input_rows_count) const override
     {
-        const auto & col_const = assert_cast<const ColumnConst &>(*arguments[categories_arg_index].column);
-        return (*col_const.getDataColumnPtr())[0].safeGet<Array>();
+        /// An empty category list would produce `"enum": []` in the response-format schema, which no provider can
+        /// satisfy. Fail early with a deterministic local exception instead of waiting for a provider-side error.
+        if (input_rows_count)
+        {
+            const auto & col_categories = assert_cast<const ColumnConst &>(*arguments[categories_arg_index].column);
+            auto categories = (*col_categories.getDataColumnPtr())[0].safeGet<Array>();
+            if (categories.empty())
+                throw Exception(ErrorCodes::BAD_ARGUMENTS, "aiClassify: 'categories' must contain at least one label");
+        }
     }
 
     String buildSystemPrompt(const ColumnsWithTypeAndName & arguments) const override
     {
-        const auto categories = getCategories(arguments);
+        const auto & col_categories = assert_cast<const ColumnConst &>(*arguments[categories_arg_index].column);
+        auto categories = (*col_categories.getDataColumnPtr())[0].safeGet<Array>();
 
         String labels;
         bool first = true;
-        for (const auto & elem : categories)
+        for (const auto & category : categories)
         {
             if (!first)
                 labels += ", ";
             first = false;
-            labels += elem.safeGet<String>();
+            labels += category.safeGet<String>();
         }
 
         return "You are a text classifier. Classify the given text into exactly one of these categories: "
@@ -99,36 +104,36 @@ private:
             + ". Respond with ONLY the category label, nothing else.";
     }
 
-    std::string_view buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const override
+    String buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const override
     {
-        return arguments[prompt_arg_index].column->getDataAt(row);
+        return String(arguments[prompt_arg_index].column->getDataAt(row));
     }
 
-    /** Builds the OpenAI `response_format` schema object constraining the model to output one of the
-      * provided category labels. Given `categories = ['positive', 'negative', 'neutral']`:
-      *   {
-      *     "type": "json_schema",
-      *     "json_schema": {
-      *       "name": "classification",
-      *       "strict": true,
-      *       "schema": {
-      *         "type": "object",
-      *         "properties": {
-      *           "category": {"type": "string", "enum": ["positive", "negative", "neutral"]}
-      *         },
-      *         "required": ["category"],
-      *         "additionalProperties": false
-      *       }
-      *     }
-      *   }
-      */
+    /// Builds the OpenAI `response_format` schema object constraining the model to output one of the
+    /// provided category labels. Given `categories = ['positive', 'negative', 'neutral']`:
+    ///   {
+    ///     "type": "json_schema",
+    ///     "json_schema": {
+    ///       "name": "classification",
+    ///       "strict": true,
+    ///       "schema": {
+    ///         "type": "object",
+    ///         "properties": {
+    ///           "category": {"type": "string", "enum": ["positive", "negative", "neutral"]}
+    ///         },
+    ///         "required": ["category"],
+    ///         "additionalProperties": false
+    ///       }
+    ///     }
+    ///   }
     Poco::JSON::Object::Ptr buildResponseFormat(const ColumnsWithTypeAndName & arguments) const override
     {
-        const auto categories = getCategories(arguments);
-
         Poco::JSON::Array::Ptr enum_array = new Poco::JSON::Array;
-        for (const auto & elem : categories)
-            enum_array->add(elem.safeGet<String>());
+
+        const auto & col_categories = assert_cast<const ColumnConst &>(*arguments[categories_arg_index].column);
+        auto categories = (*col_categories.getDataColumnPtr())[0].safeGet<Array>();
+        for (const auto & category : categories)
+            enum_array->add(category.safeGet<String>());
 
         Poco::JSON::Object::Ptr category_prop = new Poco::JSON::Object;
         category_prop->set("type", "string");
@@ -179,8 +184,6 @@ private:
         return raw_response;
     }
 };
-
-}
 
 REGISTER_FUNCTION(AiClassify)
 {

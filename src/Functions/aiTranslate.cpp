@@ -12,9 +12,6 @@ namespace ErrorCodes
     extern const int BAD_ARGUMENTS;
 }
 
-namespace
-{
-
 class FunctionAiTranslate final : public FunctionBaseAI
 {
 public:
@@ -41,10 +38,6 @@ public:
         };
         validateFunctionArguments(*this, arguments, mandatory_args, optional_args);
 
-        std::string_view target_language = arguments[target_language_arg_index].column->getDataAt(0);
-        if (target_language.find_first_not_of(" \t\n\r") == std::string_view::npos)
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "aiTranslate: 'target_language' must not be empty");
-
         return wrapReturnTypeForNullablePrompt(arguments, prompt_arg_index, std::make_shared<DataTypeString>());
     }
 
@@ -61,27 +54,35 @@ private:
     size_t promptArgumentIndex() const override { return prompt_arg_index; }
     size_t temperatureArgumentIndex() const override { return temp_arg_idx; }
 
+    void checkSanityBeforeExecuteImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & /*result_type*/, size_t input_rows_count) const override
+    {
+        if (input_rows_count)
+        {
+            auto target_language = arguments[target_language_arg_index].column->getDataAt(0);
+            if (target_language.find_first_not_of(" \t\n\r") == std::string_view::npos)
+                throw Exception(ErrorCodes::BAD_ARGUMENTS, "aiTranslate: 'target_language' must not be empty");
+        }
+    }
+
     String buildSystemPrompt(const ColumnsWithTypeAndName & arguments) const override
     {
-        String target_language(arguments[target_language_arg_index].column->getDataAt(0));
-        String prompt = "Translate the following text into " + target_language + ". Return only the translation, nothing else.";
+        auto target_language = String(arguments[target_language_arg_index].column->getDataAt(0));
+        auto prompt = "Translate the following text into " + target_language + ". Return only the translation, nothing else.";
 
         if (arguments.size() > instructions_arg_index)
         {
-            String instructions(arguments[instructions_arg_index].column->getDataAt(0));
+            auto instructions = String(arguments[instructions_arg_index].column->getDataAt(0));
             if (!instructions.empty())
                 prompt += " Additional instructions: " + instructions;
         }
         return prompt;
     }
 
-    std::string_view buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const override
+    String buildUserMessage(const ColumnsWithTypeAndName & arguments, size_t row) const override
     {
-        return arguments[prompt_arg_index].column->getDataAt(row);
+        return String(arguments[prompt_arg_index].column->getDataAt(row));
     }
 };
-
-}
 
 REGISTER_FUNCTION(AiTranslate)
 {
@@ -103,8 +104,8 @@ The first argument is a named collection that specifies the provider, model, end
         },
         .returned_value = {"The translated text, or the default value for the column type (empty string) if the request failed and `ai_function_throw_on_error` is disabled.", {"String"}},
         .examples = {
-            {"Translate to French", "SELECT aiTranslate('ai_credentials', 'Hello, world!', 'French')", "Bonjour le monde !"},
-            {"With style instructions", "SELECT aiTranslate('ai_credentials', body, 'Japanese', 'Use polite form (desu/masu)') FROM articles LIMIT 5", ""},
+            {"Translate to French", "SELECT aiTranslate('ai_credentials', 'Hello, world!', 'French')", "Bonjour le monde!"},
+            {"Translate to Japanese with style instructions", "SELECT aiTranslate('ai_credentials', body, 'Japanese', 'Use polite form (desu/masu)') FROM articles LIMIT 5", ""},
         },
         .introduced_in = {26, 4},
         .category = FunctionDocumentation::Category::AI});

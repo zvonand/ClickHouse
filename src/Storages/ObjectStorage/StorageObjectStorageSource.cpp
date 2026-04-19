@@ -15,9 +15,9 @@
 #include <IO/Archives/createArchiveReader.h>
 #include <IO/ReadBufferFromFileBase.h>
 #include <IO/CachedInMemoryReadBufferFromFile.h>
-#include <Interpreters/Cache/FileCache.h>
-#include <Interpreters/Cache/FileCacheFactory.h>
-#include <Interpreters/Cache/FileCacheKey.h>
+#include <Interpreters/FileCache/FileCache.h>
+#include <Interpreters/FileCache/FileCacheFactory.h>
+#include <Interpreters/FileCache/FileCacheKey.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/ExpressionActions.h>
 #include <Interpreters/convertFieldToType.h>
@@ -38,6 +38,7 @@
 #include <Storages/ObjectStorage/Utils.h>
 #include <Storages/VirtualColumnUtils.h>
 #include <boost/operators.hpp>
+#include <Poco/String.h>
 #include <Common/SipHash.h>
 #include <Common/parseGlobs.h>
 #include <Storages/ObjectStorage/IObjectIterator.h>
@@ -691,7 +692,7 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
 
         InputFormatPtr input_format;
         if (context_->getSettingsRef()[Setting::use_parquet_metadata_cache]
-            && (object_info->getFileFormat().value_or(configuration->format) == "Parquet")
+            && (Poco::toLower(object_info->getFileFormat().value_or(configuration->format)) == "parquet")
             && !object_info->getObjectMetadata()->etag.empty())
         {
             const std::optional<RelativePathWithMetadata> object_with_metadata = object_info->relative_path_with_metadata;

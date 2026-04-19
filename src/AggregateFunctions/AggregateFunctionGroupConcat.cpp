@@ -173,14 +173,14 @@ void GroupConcatImpl<has_limit>::deserialize(AggregateDataPtr __restrict place, 
     UInt64 temp_size = 0;
     readVarUInt(temp_size, buf);
 
-    /// Prevent reaching Allocator::checkSize which throws LOGICAL_ERROR (fatal in
-    /// sanitizer builds) for sizes >= 0x8000000000000000. Values below that threshold
-    /// will fail naturally with OOM if actually too large to allocate.
-    if (temp_size >= 0x8000000000000000ULL)
+    /// Prevent the allocator's "Too large size passed to allocator" `LOGICAL_ERROR`.
+    static constexpr UInt64 max_data_size = UInt64{1} << 48;
+    if (temp_size > max_data_size)
         throw Exception(
             ErrorCodes::BAD_ARGUMENTS,
-            "Invalid groupConcat state: data size {} is too large",
-            temp_size);
+            "Invalid groupConcat state: data size {} is too large (maximum: {})",
+            temp_size,
+            max_data_size);
 
     cur_data.checkAndUpdateSize(temp_size, arena);
 

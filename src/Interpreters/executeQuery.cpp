@@ -596,9 +596,20 @@ static ResultProgress flushQueryProgress(const QueryPipeline & pipeline, bool pu
 QueryPipelineFinalizedInfo finalizeQueryPipelineBeforeLogging(QueryPipeline && query_pipeline, QueryResultCacheUsage query_result_cache_usage, bool pulling_pipeline)
 {
     if (query_result_cache_usage == QueryResultCacheUsage::Write)
+    {
         /// Trigger the actual write of the buffered query result into the query result cache. This is done explicitly to
         /// prevent partial/garbage results in case of exceptions during query execution.
-        query_pipeline.finalizeWriteInQueryResultCache();
+        /// A failure to finalize the cache write must not prevent collecting profile counters or resetting the
+        /// pipeline, otherwise the `QueryFinish` entry would be lost from `query_log`.
+        try
+        {
+            query_pipeline.finalizeWriteInQueryResultCache();
+        }
+        catch (...)
+        {
+            tryLogCurrentException(getLogger("executeQuery"), "Failed to finalize query result cache write");
+        }
+    }
 
     std::vector<IProcessor::ProcessorsProfileLogInfo> processors_profile_infos = getProcessorsProfileLogInfo(query_pipeline.getProcessors());
 

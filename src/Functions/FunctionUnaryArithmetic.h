@@ -208,7 +208,7 @@ public:
     static constexpr auto name = Name::name;
     static FunctionPtr create(ContextPtr context_) { return std::make_shared<FunctionUnaryArithmetic>(context_); }
 
-    explicit FunctionUnaryArithmetic(ContextPtr context_ = nullptr) : context(context_) {}
+    explicit FunctionUnaryArithmetic(ContextPtr context_) : context(context_) {}
 
     String getName() const override
     {

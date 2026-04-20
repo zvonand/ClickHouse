@@ -4095,12 +4095,20 @@ def run_diagnose_from_artifacts(args, server_died):
             else:
                 diagnosis = ""
 
-            # Classify the diagnosis for CI labeling
+            # Classify the diagnosis for CI labeling. Leave label empty for
+            # inconclusive/unrecognized outcomes so they don't get mislabeled.
             label = ""
-            if "Culprit settings:" in diagnosis or "Culprit MergeTree settings:" in diagnosis:
+            if "Inconclusive" in diagnosis:
+                label = ""
+            elif "Culprit settings:" in diagnosis or "Culprit MergeTree settings:" in diagnosis:
                 label = "setting"
             elif "Failure is flaky" in diagnosis or "not reproducible" in diagnosis.lower():
                 label = "flaky"
+            elif (
+                "not a randomization issue" in diagnosis
+                or "Could not isolate" in diagnosis
+            ):
+                label = "reproducible"
             else:
                 # Match "Failed N out of M reruns." for the no-random-settings path
                 m = re.search(r"Failed (\d+) out of (\d+) reruns", diagnosis)
@@ -4110,8 +4118,6 @@ def run_diagnose_from_artifacts(args, server_died):
                         label = "flaky"
                     else:
                         label = "reproducible"
-                elif diagnosis:
-                    label = "reproducible"
 
             result_entry = {"test_name": test_name, "diagnosis": diagnosis, "label": label}
             results_file.write(json.dumps(result_entry, ensure_ascii=False) + "\n")

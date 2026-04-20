@@ -292,11 +292,29 @@ class _Environment(MetaClasses.Serializable):
 
         return cls.from_dict(env_dict)
 
-    def add_report_message(self, message, kind, job_name=""):
+    def _add_report_message(self, message, kind, source=""):
+        """
+        Accumulate a structured report message in the environment.
+
+        Messages are collected during job execution and later written to both
+        the job and workflow ``Result.ext`` as ``{"message": str, "from": str}``
+        entries.  Grouping of duplicate messages is done at the rendering level
+        in ``json.html``.
+        Prefer the typed wrappers ``add_workflow_warning/error/note``.
+        """
         self.REPORT_MESSAGES.append(
-            {"message": message, "kind": kind, "job": job_name or self.JOB_NAME}
+            {"message": message, "kind": kind, "from": source or self.JOB_NAME}
         )
         self.dump()
+
+    def add_workflow_warning(self, message, source=""):
+        self._add_report_message(message, kind="warning", source=source)
+
+    def add_workflow_error(self, message, source=""):
+        self._add_report_message(message, kind="error", source=source)
+
+    def add_workflow_note(self, message, source=""):
+        self._add_report_message(message, kind="note", source=source)
 
     @classmethod
     def get(cls):

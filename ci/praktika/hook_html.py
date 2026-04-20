@@ -240,7 +240,9 @@ class HtmlRunnerHooks:
         kind_to_key = {"warning": "warnings", "error": "errors", "note": "notes"}
         for msg in report_messages:
             key = kind_to_key.get(msg.get("kind"), "notes")
-            result.ext.setdefault(key, []).append(msg["message"])
+            result.ext.setdefault(key, []).append(
+                {"message": msg["message"], "from": msg["from"]}
+            )
         _ResultS3.copy_result_to_s3(result)
 
         new_sub_results = [result]

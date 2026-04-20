@@ -864,8 +864,8 @@ def _finish_workflow(workflow, job_name):
                 # dump workflow result after update - to have an updated result in post
                 workflow_result.dump()
                 # add error into env - should appear in the report on the main page
-                env.add_report_message(
-                    ResultInfo.NOT_FINALIZED, kind="error", job_name=result.name
+                env.add_workflow_error(
+                    ResultInfo.NOT_FINALIZED, source=result.name
                 )
                 # add error to job result as well
                 result.add_error(ResultInfo.NOT_FINALIZED)
@@ -908,7 +908,7 @@ def _finish_workflow(workflow, job_name):
             url="",
         ):
             print(f"ERROR: failed to set ReadyForMerge status")
-            env.add_report_message(ResultInfo.GH_STATUS_ERROR, kind="error")
+            env.add_workflow_error(ResultInfo.GH_STATUS_ERROR)
 
     if update_final_report:
         _ResultS3.copy_result_to_s3_with_version(workflow_result, version + 1)

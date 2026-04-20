@@ -330,17 +330,43 @@ class Result(MetaClasses.Serializable):
         return self
 
     def add_warning(self, message: str) -> "Result":
-        self.ext.setdefault("warnings", []).append(message)
+        """
+        Add a warning message to this result only.
+
+        The message is stored in ``self.ext["warnings"]`` as
+        ``{"message": str, "from": str}`` and rendered as a notification panel
+        on the report page for this specific result (workflow, job, sub-task,
+        or test).  It is **not** propagated to parent or child results — use
+        ``Info.add_workflow_warning`` when the message should appear on the job
+        level and be propagated to the top (workflow) level.
+        """
+        self.ext.setdefault("warnings", []).append(
+            {"message": message, "from": self.name}
+        )
         self._dump_if_persisted()
         return self
 
     def add_error(self, message: str) -> "Result":
-        self.ext.setdefault("errors", []).append(message)
+        """
+        Add an error message to this result only.
+
+        See ``add_warning`` for propagation semantics.
+        """
+        self.ext.setdefault("errors", []).append(
+            {"message": message, "from": self.name}
+        )
         self._dump_if_persisted()
         return self
 
     def add_note(self, message: str) -> "Result":
-        self.ext.setdefault("notes", []).append(message)
+        """
+        Add a note message to this result only.
+
+        See ``add_warning`` for propagation semantics.
+        """
+        self.ext.setdefault("notes", []).append(
+            {"message": message, "from": self.name}
+        )
         self._dump_if_persisted()
         return self
 
@@ -1299,34 +1325,6 @@ class _ResultS3:
                 )
         return result
 
-    @staticmethod
-    def _merge_report_messages(ext, new_messages):
-        """
-        Merge structured report messages into Result.ext.
-
-        Each message is ``{"message": str, "kind": str, "job": str}``.
-        Messages are stored in ``ext["warnings"]``, ``ext["errors"]``, and
-        ``ext["notes"]`` as lists of ``{"message": str, "jobs": [str]}``.
-        Duplicate messages (same text) are grouped, accumulating job names.
-        """
-        kind_to_key = {"warning": "warnings", "error": "errors", "note": "notes"}
-        for msg in new_messages:
-            key = kind_to_key.get(msg.get("kind"), "notes")
-            items = ext.setdefault(key, [])
-            text = msg.get("message", "")
-            job = msg.get("job", "")
-            # find existing entry with same message text
-            existing = None
-            for item in items:
-                if item["message"] == text:
-                    existing = item
-                    break
-            if existing:
-                if job and job not in existing["jobs"]:
-                    existing["jobs"].append(job)
-            else:
-                items.append({"message": text, "jobs": [job] if job else []})
-
     @classmethod
     def update_workflow_results(
         cls,
@@ -1370,7 +1368,12 @@ class _ResultS3:
                 workflow_result.ext["compute_usage"] = workflow_compute_usage
 
             if report_messages:
-                cls._merge_report_messages(workflow_result.ext, report_messages)
+                kind_to_key = {"warning": "warnings", "error": "errors", "note": "notes"}
+                for msg in report_messages:
+                    key = kind_to_key.get(msg.get("kind"), "notes")
+                    workflow_result.ext.setdefault(key, []).append(
+                        {"message": msg["message"], "from": msg["from"]}
+                    )
 
             new_status = workflow_result.status
             if cls.copy_result_to_s3_with_version(

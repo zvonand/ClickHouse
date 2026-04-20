@@ -14,12 +14,10 @@ def check():
 
     ok = True
     for item in errors:
-        jobs = ", ".join(item.get("jobs", []))
-        print(f"ERROR: {item['message']} ({jobs})")
+        print(f"ERROR: {item.get('message', '')} (from: {item.get('from', '')})")
         ok = False
     for item in warnings:
-        jobs = ", ".join(item.get("jobs", []))
-        print(f"WARNING: {item['message']} ({jobs})")
+        print(f"WARNING: {item.get('message', '')} (from: {item.get('from', '')})")
         ok = False
 
     return ok

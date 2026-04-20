@@ -1898,6 +1898,20 @@
             const items = ext?.[key];
             if (!Array.isArray(items) || items.length === 0) continue;
 
+            // Group entries by message text, collecting unique "from" sources
+            const grouped = new Map();
+            for (const item of items) {
+                const text = item.message || '';
+                const source = item.from || '';
+                if (!grouped.has(text)) {
+                    grouped.set(text, []);
+                }
+                const sources = grouped.get(text);
+                if (source && !sources.includes(source)) {
+                    sources.push(source);
+                }
+            }
+
             const panel = document.createElement('div');
             panel.className = `notification-panel ${cssClass}`;
 
@@ -1906,27 +1920,22 @@
             titleEl.textContent = title;
             panel.appendChild(titleEl);
 
-            for (const item of items) {
+            for (const [message, sources] of grouped) {
                 const row = document.createElement('div');
                 row.className = 'notification-item';
+                row.textContent = message;
 
-                if (typeof item === 'string') {
-                    // Job level: simple string list
-                    row.textContent = item;
-                } else {
-                    // Workflow level: grouped {message, jobs}
-                    row.textContent = item.message || '';
-                    if (Array.isArray(item.jobs) && item.jobs.length > 0) {
-                        const jobsSpan = document.createElement('span');
-                        jobsSpan.className = 'notification-jobs';
-                        if (item.jobs.length === 1) {
-                            jobsSpan.textContent = `(${item.jobs[0]})`;
-                        } else {
-                            jobsSpan.textContent = `(${item.jobs.length} jobs)`;
-                            jobsSpan.title = item.jobs.join('\n');
-                        }
-                        row.appendChild(jobsSpan);
-                    }
+                if (sources.length === 1) {
+                    const span = document.createElement('span');
+                    span.className = 'notification-jobs';
+                    span.textContent = `(${sources[0]})`;
+                    row.appendChild(span);
+                } else if (sources.length > 1) {
+                    const span = document.createElement('span');
+                    span.className = 'notification-jobs';
+                    span.textContent = `(${sources.length} jobs)`;
+                    span.title = sources.join('\n');
+                    row.appendChild(span);
                 }
 
                 panel.appendChild(row);

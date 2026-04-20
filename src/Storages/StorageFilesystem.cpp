@@ -620,8 +620,16 @@ void registerStorageFilesystem(StorageFactory & factory)
                 path = checkAndGetLiteralArgument<String>(ast_literal, "path");
         }
 
-        String user_files_absolute_path_string = fs::canonical(fs::path(args.getContext()->getUserFilesPath()).string());
         bool local_mode = args.getContext()->getApplicationType() == Context::ApplicationType::LOCAL;
+
+        /// `fs::canonical` requires the path to exist. In `clickhouse-local` mode,
+        /// `user_files_path` may not exist, so fall back to a lexically-normalized absolute path.
+        fs::path user_files_path(args.getContext()->getUserFilesPath());
+        std::error_code ec;
+        auto canonical_user_files_path = fs::canonical(user_files_path, ec);
+        String user_files_absolute_path_string = ec
+            ? fs::absolute(user_files_path).lexically_normal().string()
+            : canonical_user_files_path.string();
 
         return std::make_shared<StorageFilesystem>(
             args.table_id, args.columns, args.constraints, args.comment, local_mode, path,

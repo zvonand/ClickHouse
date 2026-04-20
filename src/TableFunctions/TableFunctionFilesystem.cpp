@@ -162,9 +162,20 @@ ColumnsDescription TableFunctionFilesystem::getActualTableStructure(ContextPtr /
 
 StoragePtr TableFunctionFilesystem::executeImpl(const ASTPtr &, ContextPtr context, const std::string & table_name, ColumnsDescription, bool is_insert_query) const
 {
+    bool local_mode = context->getApplicationType() == Context::ApplicationType::LOCAL;
+
+    /// `fs::canonical` requires the path to exist. In `clickhouse-local` mode,
+    /// `user_files_path` may not exist, so fall back to a lexically-normalized absolute path.
+    fs::path user_files_path(context->getUserFilesPath());
+    std::error_code ec;
+    auto canonical_user_files_path = fs::canonical(user_files_path, ec);
+    String user_files_absolute_path_string = ec
+        ? fs::absolute(user_files_path).lexically_normal().string()
+        : canonical_user_files_path.string();
+
     StoragePtr res = std::make_shared<StorageFilesystem>(
         StorageID(getDatabaseName(), table_name), getActualTableStructure(context, is_insert_query), ConstraintsDescription(), String{},
-             context->getApplicationType() == Context::ApplicationType::LOCAL, path, fs::canonical(fs::path(context->getUserFilesPath()).string()));
+        local_mode, path, user_files_absolute_path_string);
     res->startup();
     return res;
 }

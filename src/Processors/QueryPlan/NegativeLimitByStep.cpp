@@ -1,5 +1,6 @@
 #include <Processors/Port.h>
 #include <Processors/QueryPlan/NegativeLimitByStep.h>
+#include <Processors/QueryPlan/QueryPlanFormat.h>
 #include <Processors/QueryPlan/QueryPlanStepRegistry.h>
 #include <Processors/QueryPlan/Serialization.h>
 #include <Processors/Transforms/NegativeLimitByTransform.h>
@@ -45,13 +46,16 @@ void NegativeLimitByStep::transformPipeline(QueryPipelineBuilder & pipeline, con
         if (stream_type != QueryPipelineBuilder::StreamType::Main)
             return nullptr;
 
-        return std::make_shared<NegativeLimitByTransform>(header, group_length, group_offset, in_order, columns);
+        if (in_order)
+            return std::make_shared<NegativeLimitByInOrderTransform>(header, group_length, group_offset, columns);
+
+        return std::make_shared<NegativeLimitByTransform>(header, group_length, group_offset, columns);
     });
 }
 
 void NegativeLimitByStep::describeActions(FormatSettings & settings) const
 {
-    String prefix(settings.offset, ' ');
+    const String & prefix = settings.detail_prefix;
 
     settings.out << prefix << "Columns: ";
 
@@ -66,7 +70,7 @@ void NegativeLimitByStep::describeActions(FormatSettings & settings) const
                 settings.out << ", ";
             first = false;
 
-            settings.out << column;
+            settings.out << (settings.pretty ? QueryPlanFormat::formatColumnPretty(column, settings.pretty_names) : column);
         }
         settings.out << '\n';
     }

@@ -203,6 +203,17 @@ std::string TableMetadata::constructLocation(const std::string & endpoint_, DB::
         return std::filesystem::path(vhosted_base) / path / "";
     }
 
+    if (uri_style == DB::S3UriStyle::PATH)
+    {
+        Poco::URI endpoint_uri(location);
+        if (endpoint_uri.getHost().starts_with(bucket + "."))
+            throw DB::Exception(
+                DB::ErrorCodes::BAD_ARGUMENTS,
+                "Cannot use PATH addressing style with endpoint '{}': "
+                "the hostname already embeds bucket '{}' in virtual-hosted form",
+                endpoint_uri.getHost(), bucket);
+    }
+
     if (location.ends_with(bucket))
         return std::filesystem::path(location) / path / "";
     return std::filesystem::path(location) / bucket / path / "";

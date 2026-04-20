@@ -318,4 +318,25 @@ TEST_F(AzureAbfssParsingTest, TableMetadataContainerNamedDirStrippedWithPolarisF
     EXPECT_EQ(metadata.getMetadataLocation(metadata_file), "metadata/v1.metadata.json");
 }
 
+TEST_F(AzureAbfssParsingTest, TableMetadataGetLocationWithEndpointPathStyleRejectedForVirtualHostedEndpoint)
+{
+    TableMetadata metadata;
+    metadata.withLocation();
+    metadata.setLocation("s3://mybucket/path/to/table");
+
+    EXPECT_THROW(
+        metadata.getLocationWithEndpoint("https://mybucket.s3.mycompany.com", DB::S3UriStyle::PATH),
+        DB::Exception);
+}
+
+TEST_F(AzureAbfssParsingTest, TableMetadataGetLocationWithEndpointVirtualHostedDottedBucketName)
+{
+    TableMetadata metadata;
+    metadata.withLocation();
+    metadata.setLocation("s3://my.dotted.bucket/path/to/table");
+
+    std::string location = metadata.getLocationWithEndpoint("https://s3.mycompany.com", DB::S3UriStyle::VIRTUAL_HOSTED);
+    EXPECT_EQ(location, "https://my.dotted.bucket.s3.mycompany.com/path/to/table/");
+}
+
 }

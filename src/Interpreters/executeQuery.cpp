@@ -43,7 +43,6 @@
 
 #include <Formats/FormatFactory.h>
 #include <Storages/StorageInput.h>
-#include <Storages/ColumnsDescription.h>
 
 #include <Access/ContextAccess.h>
 #include <Access/EnabledQuota.h>
@@ -56,7 +55,6 @@
 #include <Interpreters/InterpreterSetQuery.h>
 #include <Interpreters/InterpreterTransactionControlQuery.h>
 #include <Interpreters/NormalizeSelectWithUnionQueryVisitor.h>
-#include <Interpreters/processColumnTransformers.h>
 #include <Interpreters/ProcessList.h>
 #include <Interpreters/ProcessorsProfileLog.h>
 #include <Interpreters/QueryLog.h>
@@ -1508,6 +1506,7 @@ static BlockIO executeQueryImpl(
         bool async_insert_enabled = settings[Setting::async_insert];
 
         /// Resolve database before trying to use async insert feature - to properly hash the query.
+        StoragePtr insert_table;
         if (insert_query)
         {
             if (insert_query->table_id)
@@ -1516,31 +1515,10 @@ static BlockIO executeQueryImpl(
                 insert_query->table_id = context->resolveStorageID(StorageID{insert_query->getDatabase(), table});
 
             if (insert_query->table_id)
-                if (auto table = DatabaseCatalog::instance().tryGetTable(insert_query->table_id, context))
-                    async_insert_enabled |= table->areAsynchronousInsertsEnabled();
-        }
-
-        /// For HTTP path: set insertion table info early so that input('auto') can
-        /// derive its structure from the INSERT target table's columns.
-        if (insert_query && insert_query->table_id && !context->hasInsertionTableColumnsDescription())
-        {
-            if (const auto & storage = DatabaseCatalog::instance().tryGetTable(insert_query->table_id, context))
             {
-                auto metadata_snapshot = storage->getInMemoryMetadataPtr(context, false);
-                std::optional<Names> insert_column_names;
-                if (insert_query->columns)
-                {
-                    const auto columns_ast = processColumnTransformers(context->getCurrentDatabase(), storage, metadata_snapshot, insert_query->columns);
-                    Names names;
-                    names.reserve(columns_ast->children.size());
-                    for (const auto & identifier : columns_ast->children)
-                        names.emplace_back(identifier->getColumnName());
-                    insert_column_names = std::move(names);
-                }
-                context->setInsertionTable(
-                    insert_query->table_id,
-                    insert_column_names,
-                    std::make_shared<ColumnsDescription>(metadata_snapshot->columns));
+                insert_table = DatabaseCatalog::instance().tryGetTable(insert_query->table_id, context);
+                if (insert_table)
+                    async_insert_enabled |= insert_table->areAsynchronousInsertsEnabled();
             }
         }
 
@@ -1553,6 +1531,10 @@ static BlockIO executeQueryImpl(
                 insert_query->tryFindInputFunction(input_function);
                 if (input_function)
                 {
+                    /// For input('auto'), make sure that Context::insertion_table_info is set.
+                    if (insert_table && !context->hasInsertionTableColumnsDescription())
+                        InterpreterInsertQuery::setInsertContextValues(context, *insert_query, insert_table);
+
                     const ASTSelectQuery * select_query_hint = insert_query->select->as<ASTSelectQuery>();
                     if (!select_query_hint)
                     {

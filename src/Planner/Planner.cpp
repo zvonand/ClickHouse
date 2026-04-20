@@ -1855,22 +1855,12 @@ void Planner::buildPlanForUnionNode()
     if (union_mode == SelectUnionMode::UNION_ALL || union_mode == SelectUnionMode::UNION_DISTINCT)
     {
         size_t max_streams = settings[Setting::max_streams_for_union_step];
-        auto streams_from_ratio = static_cast<double>(max_threads) * settings[Setting::max_streams_for_union_step_to_max_threads_ratio];
-        if (!canConvertTo<size_t>(streams_from_ratio))
+        double max_streams_ratio = settings[Setting::max_streams_for_union_step_to_max_threads_ratio];
+        if (max_streams_ratio < 0)
             throw Exception(ErrorCodes::PARAMETER_OUT_OF_BOUND,
-                "Invalid value for `max_streams_for_union_step_to_max_threads_ratio`. "
-                "Make sure that `max_threads * max_streams_for_union_step_to_max_threads_ratio` is in some reasonable boundaries, current value: {}",
-                streams_from_ratio);
-        size_t max_streams_from_ratio = static_cast<size_t>(streams_from_ratio);
-        /// Clamp positive products to at least 1 so that a small but nonzero ratio
-        /// (e.g. 0.1 * 8 threads = 0.8) does not silently disable the limit.
-        if (max_streams_from_ratio == 0 && streams_from_ratio > 0)
-            max_streams_from_ratio = 1;
-        if (max_streams && max_streams_from_ratio)
-            max_streams = std::min(max_streams, max_streams_from_ratio);
-        else if (!max_streams)
-            max_streams = max_streams_from_ratio;
-        auto union_step = std::make_unique<UnionStep>(std::move(query_plans_headers), max_threads, max_streams);
+                "Invalid value for `max_streams_for_union_step_to_max_threads_ratio`: {}. Must be non-negative.",
+                max_streams_ratio);
+        auto union_step = std::make_unique<UnionStep>(std::move(query_plans_headers), max_threads, max_streams, max_streams_ratio);
         query_plan.unitePlans(std::move(union_step), std::move(query_plans));
     }
     else if (union_mode == SelectUnionMode::INTERSECT_ALL || union_mode == SelectUnionMode::INTERSECT_DISTINCT

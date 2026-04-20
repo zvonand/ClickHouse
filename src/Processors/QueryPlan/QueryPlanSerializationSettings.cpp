@@ -111,6 +111,7 @@ namespace DB
     DECLARE(Bool, enable_join_fixed_hash_table_conversion, true, R"(Enable converting the hash table to a flat array for joins when the key is a single integer with a small value range)", 0) \
     \
     DECLARE(UInt64, max_streams_for_union_step, 0, "Limits the number of simultaneously active data streams in a UNION step (both UNION ALL and UNION DISTINCT) via ConcatProcessors. 0 means no narrowing.", 0) \
+    DECLARE(Float, max_streams_for_union_step_to_max_threads_ratio, 8, "This ratio multiplied by max_threads determines a limit on simultaneously active streams in a UNION step (both UNION ALL and UNION DISTINCT). 0 disables the ratio-based limit.", 0) \
 
 
 // clang-format on

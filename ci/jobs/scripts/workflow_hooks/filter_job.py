@@ -38,7 +38,12 @@ PRELIMINARY_JOBS = [
     "Build (arm_tidy)",
 ]
 
-BUILDS_FOR_TESTS = [j.name for j in JobConfigs.build_jobs]
+BUILDS_FOR_TESTS = [
+    j.name
+    for j in JobConfigs.build_jobs
+    + JobConfigs.coverage_build_jobs
+    + JobConfigs.release_build_jobs
+]
 
 INTEGRATION_TEST_FLAKY_CHECK_JOBS = [
     "Build (amd_asan_ubsan)",

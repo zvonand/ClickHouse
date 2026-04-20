@@ -5363,7 +5363,11 @@ ORDER BY (test_name, callee_offset)
 
     if args.diagnose_random_settings:
         diag_exit_code = run_diagnose_from_artifacts(args, server_died)
-        exit_code.value = diag_exit_code
+        # Exit immediately: post-run checks below (hung check, coverage export,
+        # log stats, etc.) assume a completed test run and would surface spurious
+        # failures in diagnose mode. Any real diagnostics error is already in
+        # diag_exit_code.
+        sys.exit(diag_exit_code)
     else:
         diagnostics_dir = args.random_settings_diagnostics_dir
         os.makedirs(diagnostics_dir, exist_ok=True)

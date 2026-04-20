@@ -55,18 +55,19 @@ void MergedData::insertRow(const ColumnRawPtrs & raw_columns, size_t row, size_t
     chassert(columns.size() == num_columns);
     for (size_t i = 0; i < num_columns; ++i)
     {
-        const IColumn * src = raw_columns[i];
-        /// If the source is ColumnReplicated but the destination is not, materialize the source
-        /// to avoid type mismatch in insertFrom. This can happen when some merge inputs were null
-        /// at initialization time (their ColumnReplicated status was unknown), and later arrive
-        /// via consume() with ColumnReplicated non-sort columns.
-        ColumnPtr materialized;
-        if (src->isReplicated() && !columns[i]->isReplicated())
-        {
-            materialized = src->convertToFullColumnIfReplicated();
-            src = materialized.get();
-        }
-        columns[i]->insertFrom(*src, row);
+        /// If the source is `ColumnReplicated` but the destination is not, wrap the destination
+        /// in `ColumnReplicated` so its `insertFrom` can consume both regular and replicated
+        /// sources through the same optimized path. This preserves the lazy replication
+        /// optimization instead of eagerly materializing the source.
+        ///
+        /// This can happen when `initialize` set the destination type based on the initial
+        /// inputs (none of which were `ColumnReplicated`), but a later chunk arrives via
+        /// `consume` with non-sort `ColumnReplicated` columns (for example, from a JOIN
+        /// with `enable_lazy_columns_replication = 1`).
+        if (raw_columns[i]->isReplicated() && !columns[i]->isReplicated())
+            columns[i] = ColumnReplicated::create(std::move(columns[i]));
+
+        columns[i]->insertFrom(*raw_columns[i], row);
     }
 
     ++total_merged_rows;
@@ -80,19 +81,14 @@ void MergedData::insertRows(const ColumnRawPtrs & raw_columns, size_t start_inde
     chassert(columns.size() == num_columns);
     for (size_t i = 0; i < num_columns; ++i)
     {
-        const IColumn * src = raw_columns[i];
-        /// See comment in insertRow for why this materialization is needed.
-        ColumnPtr materialized;
-        if (src->isReplicated() && !columns[i]->isReplicated())
-        {
-            materialized = src->convertToFullColumnIfReplicated();
-            src = materialized.get();
-        }
+        /// See comment in `insertRow` for why this wrapping is needed.
+        if (raw_columns[i]->isReplicated() && !columns[i]->isReplicated())
+            columns[i] = ColumnReplicated::create(std::move(columns[i]));
 
         if (length == 1)
-            columns[i]->insertFrom(*src, start_index);
+            columns[i]->insertFrom(*raw_columns[i], start_index);
         else
-            columns[i]->insertRangeFrom(*src, start_index, length);
+            columns[i]->insertRangeFrom(*raw_columns[i], start_index, length);
     }
 
     total_merged_rows += length;
@@ -115,13 +111,6 @@ void MergedData::insertChunk(Chunk && chunk, size_t rows_size)
     /// We want to keep constants in the result, so just re-create them carefully.
     for (size_t i = 0; i < num_columns; ++i)
     {
-        /// Materialize ColumnReplicated sources up front, before any type-specific branches.
-        /// Without this, the hasDynamicStructure/hasStatistics branches would receive a
-        /// ColumnReplicated source when they expect the concrete column type (e.g., ColumnObject),
-        /// causing assert_cast failures in debug/sanitizer builds and UB in release.
-        if (chunk_columns[i]->isReplicated())
-            chunk_columns[i] = chunk_columns[i]->convertToFullColumnIfReplicated()->assumeMutable();
-
         if (isColumnConst(*columns[i]))
         {
             columns[i] = columns[i]->cloneResized(num_rows);
@@ -130,13 +119,21 @@ void MergedData::insertChunk(Chunk && chunk, size_t rows_size)
         /// the input chunk because the resulting column may have different dynamic structure
         /// (after calling `chooseDynamicStructureForMerge`).
         /// We need to use `cloneEmpty` + `insertRangeFrom` to properly re-insert data.
+        ///
+        /// If `chunk_columns[i]` is `ColumnReplicated`, wrap the empty destination in
+        /// `ColumnReplicated` so `insertRangeFrom` consumes the source via the optimized path
+        /// without eagerly materializing it. This preserves the lazy replication optimization.
         else if (columns[i]->hasDynamicStructure())
         {
             columns[i] = columns[i]->cloneEmpty();
+            if (chunk_columns[i]->isReplicated() && !columns[i]->isReplicated())
+                columns[i] = ColumnReplicated::create(std::move(columns[i]));
             columns[i]->insertRangeFrom(*chunk_columns[i], 0, num_rows);
         }
         /// For columns with statistics (like Map with adaptive buckets) we can reuse the column
         /// from the input chunk, but need to preserve the merged statistics computed during `initialize`.
+        /// `takeOrCalculateStatisticsFrom` is delegated through `ColumnReplicated` to the nested
+        /// column, so no special handling is needed when `chunk_columns[i]` is `ColumnReplicated`.
         else if (columns[i]->hasStatistics())
         {
             chunk_columns[i]->takeOrCalculateStatisticsFrom({columns[i]->getPtr()});
@@ -144,11 +141,18 @@ void MergedData::insertChunk(Chunk && chunk, size_t rows_size)
         }
         else if (columns[i]->isReplicated())
         {
-            /// Destination is ColumnReplicated (set during initialize), wrap the regular chunk column.
-            columns[i] = ColumnReplicated::create(std::move(chunk_columns[i]));
+            /// Destination is `ColumnReplicated` (set during `initialize`). If the chunk is also
+            /// `ColumnReplicated` move it through; otherwise wrap the regular chunk column.
+            if (chunk_columns[i]->isReplicated())
+                columns[i] = std::move(chunk_columns[i]);
+            else
+                columns[i] = ColumnReplicated::create(std::move(chunk_columns[i]));
         }
         else
         {
+            /// Simple case: move the chunk column into the destination. If the chunk is
+            /// `ColumnReplicated`, the destination becomes `ColumnReplicated` — this preserves
+            /// the lazy replication optimization.
             columns[i] = std::move(chunk_columns[i]);
         }
     }

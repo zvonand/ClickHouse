@@ -116,7 +116,7 @@ void MergingSortedAlgorithm::consume(Input & input, size_t source_num)
         input.skip_last_row = true;
     }
 
-    removeReplicatedFromAllColumns(input);
+    removeReplicatedFromSortingColumns(header, input, description);
     removeConstAndSparse(input);
     current_inputs[source_num].swap(input);
     cursors[source_num].reset(current_inputs[source_num].chunk.getColumns(), *header, current_inputs[source_num].chunk.getNumRows());

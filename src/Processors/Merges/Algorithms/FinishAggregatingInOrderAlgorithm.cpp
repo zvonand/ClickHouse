@@ -50,7 +50,7 @@ void FinishAggregatingInOrderAlgorithm::initialize(Inputs inputs)
 
 void FinishAggregatingInOrderAlgorithm::consume(Input & input, size_t source_num)
 {
-    removeReplicatedFromAllColumns(input);
+    removeReplicatedFromSortingColumns(input, description);
     removeConstAndSparse(input);
     if (!input.chunk.hasRows())
         return;

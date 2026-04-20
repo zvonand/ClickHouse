@@ -46,7 +46,7 @@ void IMergingAlgorithmWithSharedChunks::initialize(Inputs inputs)
 
 void IMergingAlgorithmWithSharedChunks::consume(Input & input, size_t source_num)
 {
-    removeReplicatedFromAllColumns(input);
+    removeReplicatedFromSortingColumns(header, input, description);
     removeConstAndSparse(input);
 
     auto & source = sources[source_num];

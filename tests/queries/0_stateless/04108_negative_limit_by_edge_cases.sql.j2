@@ -90,6 +90,9 @@ SELECT DISTINCT number % 3 AS g, number FROM numbers(15) ORDER BY g, number LIMI
 -- DISTINCT + negative LIMIT BY (Common)
 SELECT DISTINCT number % 3 AS g, number FROM numbers(15) ORDER BY number LIMIT -2 BY g;
 
+-- Constant grouping key
+SELECT 'const' AS c, number FROM numbers(10) ORDER BY number LIMIT -2 BY c;
+
 {% for block_size in [1, 2, 3] -%}
 SET max_block_size = {{ block_size }};
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g;

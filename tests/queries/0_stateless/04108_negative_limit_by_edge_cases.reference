@@ -233,6 +233,10 @@ SELECT DISTINCT number % 3 AS g, number FROM numbers(15) ORDER BY number LIMIT -
 0	12
 1	13
 2	14
+-- Constant grouping key
+SELECT 'const' AS c, number FROM numbers(10) ORDER BY number LIMIT -2 BY c;
+const	8
+const	9
 SET max_block_size = 1;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g;
 9	0

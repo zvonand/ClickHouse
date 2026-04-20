@@ -1082,12 +1082,15 @@ void addLimitByStep(
     }
     else if (is_limit_negative && !is_offset_negative)
     {
-        /// LIMIT -N OFFSET M BY cols -> two steps:
-        ///   1. LimitByStep(limit=MAX, offset=M) - skip first M per group
+        /// LIMIT -N [OFFSET M] BY cols -> up to two steps:
+        ///   1. LimitByStep(limit=MAX, offset=M) - skip first M per group (only if M > 0)
         ///   2. NegativeLimitByStep(limit=N, offset=0) - take last N from remainder
-        auto step1 = std::make_unique<LimitByStep>(
-            query_plan.getCurrentHeader(), std::numeric_limits<UInt64>::max(), limit_by_offset, column_names);
-        query_plan.addStep(std::move(step1));
+        if (limit_by_offset > 0)
+        {
+            auto step1 = std::make_unique<LimitByStep>(
+                query_plan.getCurrentHeader(), std::numeric_limits<UInt64>::max(), limit_by_offset, column_names);
+            query_plan.addStep(std::move(step1));
+        }
         auto step2 = std::make_unique<NegativeLimitByStep>(query_plan.getCurrentHeader(), limit_by_length, 0, column_names);
         query_plan.addStep(std::move(step2));
     }
@@ -1096,6 +1099,7 @@ void addLimitByStep(
         /// LIMIT N OFFSET -M BY cols -> two steps:
         ///   1. NegativeLimitByStep(limit=MAX, offset=M) - strip last M per group
         ///   2. LimitByStep(limit=N, offset=0) - take first N from remainder
+        ///      (N==0 is not a no-op here: it means "keep 0 per group" -> empty result)
         auto step1 = std::make_unique<NegativeLimitByStep>(
             query_plan.getCurrentHeader(), std::numeric_limits<UInt64>::max(), limit_by_offset, column_names);
         query_plan.addStep(std::move(step1));

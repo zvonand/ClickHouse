@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Tags: no-shared-merge-tree
-# Test for https://github.com/ClickHouse/ClickHouse/issues/102259
-# Verifies that ALTER TABLE RENAME COLUMN on a Wide part produces correct
-# substream names in columns_substreams.txt.
+# Tags: no-shared-merge-tree, no-object-storage
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh

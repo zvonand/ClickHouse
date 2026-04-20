@@ -3,6 +3,7 @@
 #include <Core/Block_fwd.h>
 #include <Processors/IProcessor.h>
 
+#include <unordered_map>
 #include <vector>
 
 namespace DB
@@ -20,7 +21,7 @@ public:
 
     String getName() const override { return "DelayedPorts"; }
 
-    Status prepare(const PortNumbers &, const PortNumbers &) override;
+    Status prepare(const UpdatedInputPorts &, const UpdatedOutputPorts &) override;
 
 private:
 
@@ -38,7 +39,8 @@ private:
     size_t num_finished_outputs = 0;
     size_t num_finished_main_inputs = 0;
 
-    std::vector<size_t> output_to_pair;
+    std::unordered_map<const InputPort *, size_t> input_port_to_pair;
+    std::unordered_map<const OutputPort *, size_t> output_port_to_pair;
     bool are_inputs_initialized = false;
 
     bool processPair(PortsPair & pair);

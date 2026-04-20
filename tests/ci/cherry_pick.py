@@ -252,13 +252,21 @@ close it.
         # other actions are required. It's possible when changes are backported
         # manually to the release branch already
         try:
-            output = git_runner(
+            git_runner(
                 f"{GIT_PREFIX} -c merge.renameLimit=999999 "
                 f"merge --no-ff --no-edit {self.pr.merge_commit_sha}"
             )
-            # 'up-to-date', 'up to date', who knows what else (╯°v°)╯ ^┻━┻
-            if output.startswith("Already up") and output.endswith("date."):
-                # The changes are already in the release branch, we are done here
+            # The merge succeeded. If it produced no tree change vs
+            # backport_branch, the PR is effectively already backported to
+            # the release branch - either "Already up to date" (no merge
+            # commit at all) or an empty merge commit whose resolution
+            # collapsed onto backport_branch's tree (e.g. the PR was
+            # manually applied with equivalent content). In either case,
+            # skip creating an empty cherry-pick PR.
+            if not git_runner(
+                f"{GIT_PREFIX} diff --name-only "
+                f"{self.backport_branch} {self.cherrypick_branch}"
+            ):
                 logging.info(
                     "Release branch %s already contain changes from %s",
                     self.name,

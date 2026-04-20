@@ -863,12 +863,11 @@ def _finish_workflow(workflow, job_name):
                 result.status = Result.Status.ERROR
                 # dump workflow result after update - to have an updated result in post
                 workflow_result.dump()
-                # add error into env - should appear in the report on the main page
+                # Attribute the error to the failed job (not Finish Workflow)
+                # so it appears under the correct source on the workflow report page.
                 env.add_workflow_error(
                     ResultInfo.NOT_FINALIZED, source=result.name
                 )
-                # add error to job result as well
-                result.add_error(ResultInfo.NOT_FINALIZED)
                 update_final_report = True
         job = workflow.get_job(result.name)
         if not job or not job.allow_merge_on_failure:

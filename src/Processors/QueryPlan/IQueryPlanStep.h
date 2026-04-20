@@ -2,9 +2,11 @@
 
 #include <Core/Block_fwd.h>
 #include <Core/SortDescription.h>
+#include <Interpreters/ActionsDAG.h>
 #include <Processors/QueryPlan/BuildQueryPipelineSettings.h>
 #include <string_view>
 #include <variant>
+
 
 namespace DB
 {
@@ -31,6 +33,8 @@ struct ExplainPlanOptions;
 
 class IQueryPlanStep;
 using QueryPlanStepPtr = std::unique_ptr<IQueryPlanStep>;
+
+struct ExplainFormatSettings;
 
 /// Single step of query plan.
 class IQueryPlanStep
@@ -78,18 +82,7 @@ public:
 
     virtual const SortDescription & getSortDescription() const;
 
-    struct FormatSettings
-    {
-        WriteBuffer & out;
-        std::string header_prefix;
-        std::string detail_prefix;
-        size_t offset = 0;
-        const size_t base_indent = 2;
-        const char indent_char = ' ';
-        const bool write_header = false;
-        bool compact = false;
-        bool pretty = false;
-    };
+    using FormatSettings = ExplainFormatSettings;
 
     /// Get detailed description of step actions. This is shown in EXPLAIN query with options `actions = 1`.
     virtual void describeActions(JSONBuilder::JSONMap & /*map*/) const {}

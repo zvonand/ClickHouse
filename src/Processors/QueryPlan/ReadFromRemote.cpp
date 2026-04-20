@@ -1,4 +1,5 @@
 #include <Processors/QueryPlan/ReadFromRemote.h>
+#include <DataTypes/DataTypeString.h>
 
 #include <Analyzer/QueryNode.h>
 #include <Analyzer/TableNode.h>
@@ -45,6 +46,7 @@
 #include <QueryPipeline/QueryPipelineBuilder.h>
 #include <Storages/StorageReplicatedMergeTree.h>
 #include <Storages/MergeTree/ParallelReplicasReadingCoordinator.h>
+#include <Processors/QueryPlan/QueryPlanFormat.h>
 
 #include <fmt/format.h>
 
@@ -390,6 +392,16 @@ ASTPtr tryBuildAdditionalFilterAST(
                 if (auto * set_from_subquery = typeid_cast<FutureSetFromSubquery *>(future_set.get());
                     set_from_subquery && set_from_subquery->getSourceAST())
                 {
+                    /// If the set has already been built without explicit elements
+                    /// (e.g. use_index_for_in_with_subqueries_max_values was exceeded),
+                    /// we cannot populate an external table from it. Skip this GLOBAL IN
+                    /// predicate — the distributed filter will simply omit it.
+                    if (auto existing_set = set_from_subquery->get();
+                        existing_set && !existing_set->hasExplicitSetElements())
+                    {
+                        continue;
+                    }
+
                     auto temporary_table_name = fmt::format("_data_{}", toString(set_from_subquery->getHash()));
 
                     /// Support running optimization multiple times
@@ -522,6 +534,28 @@ void ReadFromRemote::addLazyPipe(
 
     std::shared_ptr<const ActionsDAG> pushed_down_filters = filter_actions_dag;
 
+    /// Override cluster_for_parallel_replicas to match the distributed table's cluster,
+    /// same as addPipe() does. Without this, the _shard_num scalar from the distributed
+    /// execution can mismatch the parallel replicas cluster shard count, causing a crash
+    /// in prepareClusterForParallelReplicas (STID 5066).
+    if (context->canUseTaskBasedParallelReplicas())
+    {
+        if (context->getSettingsRef()[Setting::cluster_for_parallel_replicas].changed)
+        {
+            const String cluster_for_parallel_replicas = context->getSettingsRef()[Setting::cluster_for_parallel_replicas];
+            if (cluster_for_parallel_replicas != cluster_name)
+                LOG_INFO(
+                    log,
+                    "cluster_for_parallel_replicas has been set for the query but has no effect: {}. Distributed table cluster is "
+                    "used: {}",
+                    cluster_for_parallel_replicas,
+                    cluster_name);
+        }
+
+        LOG_TRACE(log, "Setting `cluster_for_parallel_replicas` to {}", cluster_name);
+        context->setSetting("cluster_for_parallel_replicas", cluster_name);
+    }
+
     const StorageID resolved_id = context->resolveStorageID(shard.main_table ? shard.main_table : main_table);
     const StoragePtr storage = DatabaseCatalog::instance().tryGetTable(resolved_id, context);
     if (!storage)
@@ -633,7 +667,8 @@ void ReadFromRemote::addLazyPipe(
         my_scalars["_shard_num"] = Block{
             {DataTypeUInt32().createColumnConst(1, my_shard.shard_info.shard_num), std::make_shared<DataTypeUInt32>(), "_shard_num"}};
         auto remote_query_executor = std::make_shared<RemoteQueryExecutor>(
-            std::move(connections), query_string, header, my_context, my_throttler, my_scalars, my_external_tables, stage_to_use, my_shard.query_plan);
+            std::move(connections), query_string, header, my_context, my_throttler, my_scalars, my_external_tables, stage_to_use,
+            my_shard.query_plan, /*extension=*/std::nullopt, my_shard.shard_info.pool);
         remote_query_executor->setDistributedFanout(my_distributed_fanout);
 
         auto pipe = createRemoteSourcePipe(

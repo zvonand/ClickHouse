@@ -277,7 +277,7 @@ public:
         AggregatedChunks & chunks,
         bool final,
         std::atomic<bool> & is_cancelled,
-        const RuntimeDataflowStatisticsCacheUpdaterPtr & dataflow_cache_updater = nullptr);
+        const RuntimeDataflowStatisticsCacheUpdaterPtr & dataflow_cache_updater);
 
     /** Split block with partially-aggregated data to many blocks, as if two-level method of aggregation was used.
       * This is needed to simplify merging of that data with other results, that are already two-level.

@@ -25,18 +25,25 @@ struct ChunkInfoWithAllocatedBytes : public ChunkInfoCloneable<ChunkInfoWithAllo
 class AggregatingInOrderTransform : public IProcessor
 {
 public:
-    AggregatingInOrderTransform(SharedHeader header, AggregatingTransformParamsPtr params,
-                                const SortDescription & sort_description_for_merging,
-                                const SortDescription & group_by_description_,
-                                size_t max_block_size_, size_t max_block_bytes_,
-                                ManyAggregatedDataPtr many_data, size_t current_variant,
-                                RuntimeDataflowStatisticsCacheUpdaterPtr dataflow_cache_updater_ = nullptr);
+    AggregatingInOrderTransform(
+        SharedHeader header,
+        AggregatingTransformParamsPtr params,
+        const SortDescription & sort_description_for_merging,
+        const SortDescription & group_by_description_,
+        size_t max_block_size_,
+        size_t max_block_bytes_,
+        ManyAggregatedDataPtr many_data,
+        size_t current_variant,
+        RuntimeDataflowStatisticsCacheUpdaterPtr dataflow_cache_updater_);
 
-    AggregatingInOrderTransform(SharedHeader header, AggregatingTransformParamsPtr params,
-                                const SortDescription & sort_description_for_merging,
-                                const SortDescription & group_by_description_,
-                                size_t max_block_size_, size_t max_block_bytes_,
-                                RuntimeDataflowStatisticsCacheUpdaterPtr dataflow_cache_updater_ = nullptr);
+    AggregatingInOrderTransform(
+        SharedHeader header,
+        AggregatingTransformParamsPtr params,
+        const SortDescription & sort_description_for_merging,
+        const SortDescription & group_by_description_,
+        size_t max_block_size_,
+        size_t max_block_bytes_,
+        RuntimeDataflowStatisticsCacheUpdaterPtr dataflow_cache_updater_);
 
     ~AggregatingInOrderTransform() override;
 

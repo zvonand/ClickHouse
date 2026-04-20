@@ -438,10 +438,16 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
                 /// not greater than 'aggregation_in_order_max_block_bytes'.
                 /// So, we reduce 'max_bytes' value for aggregation in 'merge_threads' times.
                 return std::make_shared<AggregatingInOrderTransform>(
-                    header, transform_params,
-                    sort_description_for_merging, group_by_sort_description,
-                    max_block_size, aggregation_in_order_max_block_bytes / new_merge_threads,
-                    many_data, counter++);
+                    header,
+                    transform_params,
+                    sort_description_for_merging,
+                    group_by_sort_description,
+                    max_block_size,
+                    aggregation_in_order_max_block_bytes / new_merge_threads,
+                    many_data,
+                    counter++,
+                    nullptr // `dataflow_cache_updater` will be passed to `MergingAggregatedBucketTransform` below
+                );
             });
 
             if (skip_merging)

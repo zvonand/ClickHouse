@@ -187,6 +187,7 @@ std::atomic<bool> runner_stack_printed{false};
 /// SIGUSR1 handler installed on the runner thread — prints its own stack trace.
 void runnerStackTraceHandler(int /*sig*/, siginfo_t * /*info*/, void * /*context*/)
 {
+    signalSafeWrite("[fuzzer] SIGUSR1 handler entered on runner thread\n");
     signalSafeWrite("\n=== Runner thread stack trace (where the query is stuck) ===\n");
     __sanitizer_print_stack_trace();
     signalSafeWrite("=== End runner thread stack trace ===\n\n");
@@ -198,15 +199,26 @@ void runnerStackTraceHandler(int /*sig*/, siginfo_t * /*info*/, void * /*context
 /// libfuzzer's original handler which will print the main thread stack and _Exit.
 void fuzzerSigalrmHandler(int /*sig*/, siginfo_t * /*info*/, void * /*context*/)
 {
+    signalSafeWrite("[fuzzer] SIGALRM handler: sending SIGUSR1 to runner thread\n");
+
     /// Send SIGUSR1 to the runner thread to print its stack trace.
     runner_stack_printed.store(false, std::memory_order_release);
-    (void)pthread_kill(runner_thread_id, SIGUSR1);
+    int rc = pthread_kill(runner_thread_id, SIGUSR1);
 
-    /// Spin-wait for the runner thread to print its stack (with a timeout).
-    for (int i = 0; i < 1000000 && !runner_stack_printed.load(std::memory_order_acquire); ++i)
-    {
-        // busy wait
-    }
+    if (rc != 0)
+        signalSafeWrite("[fuzzer] pthread_kill failed\n");
+
+    /// Wait for the runner thread to print its stack, with nanosleep to yield CPU.
+    constexpr int max_iterations = 3000;
+    const struct timespec ts = {0, 1000000}; /// 1ms
+    int i = 0;
+    for (; i < max_iterations && !runner_stack_printed.load(std::memory_order_acquire); ++i)
+        nanosleep(&ts, nullptr);
+
+    if (i == max_iterations)
+        signalSafeWrite("[fuzzer] Timed out waiting for runner thread stack trace\n");
+    else
+        signalSafeWrite("[fuzzer] Runner thread stack trace printed successfully\n");
 
     /// Restore and call libfuzzer's original SIGALRM handler.
     /// It will print the main thread's stack and call _Exit.

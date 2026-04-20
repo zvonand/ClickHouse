@@ -350,7 +350,7 @@ void DB::ClientBase::runLibFuzzer()
             }
             catch (...)
             {
-                /// Ignore any exceptions to keep the runner thread alive.
+                // Ok
             }
             state = FuzzerState::WAITING_FOR_INPUT;
         }

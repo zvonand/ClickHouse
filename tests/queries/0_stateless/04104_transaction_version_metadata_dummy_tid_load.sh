@@ -21,14 +21,20 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
-${CLICKHOUSE_CLIENT} -q "
+# The `ATTACH TABLE` below triggers `VersionMetadataOnDisk::removeTmpMetadataFile`, which
+# emits a `LOG_WARNING` about the bogus `txn_version.txt.tmp` left on disk. This is
+# exactly the code path this regression test exercises — suppress the expected warning
+# so the Fast test runner does not flag the stderr as a failure.
+CH_CLIENT="${CLICKHOUSE_CLIENT} --send_logs_level=error"
+
+${CH_CLIENT} -q "
     DROP TABLE IF EXISTS t_txn_tmp_leftover;
     CREATE TABLE t_txn_tmp_leftover (n Int64) ENGINE = MergeTree ORDER BY n;
     SYSTEM STOP MERGES t_txn_tmp_leftover;
     INSERT INTO t_txn_tmp_leftover VALUES (42);
 "
 
-PART_PATH=$(${CLICKHOUSE_CLIENT} -q "
+PART_PATH=$(${CH_CLIENT} -q "
     SELECT path FROM system.parts
     WHERE database = currentDatabase() AND table = 't_txn_tmp_leftover' AND active
     LIMIT 1
@@ -44,17 +50,17 @@ fi
 echo "incomplete" > "${PART_PATH}/txn_version.txt.tmp"
 
 # Trigger part reload. Before the fix this aborted the server with signal 6.
-${CLICKHOUSE_CLIENT} -q "DETACH TABLE t_txn_tmp_leftover"
-${CLICKHOUSE_CLIENT} -q "ATTACH TABLE t_txn_tmp_leftover"
+${CH_CLIENT} -q "DETACH TABLE t_txn_tmp_leftover"
+${CH_CLIENT} -q "ATTACH TABLE t_txn_tmp_leftover"
 
 # Server must still be alive. The rolled-back part is marked `Outdated` by
 # `MergeTreeData::loadDataPart` (creation_csn == RolledBackCSN branch) so the
 # table is now empty.
-${CLICKHOUSE_CLIENT} -q "SELECT 'select_ok', count() FROM t_txn_tmp_leftover"
+${CH_CLIENT} -q "SELECT 'select_ok', count() FROM t_txn_tmp_leftover"
 
 # The rolled-back part still appears in system.parts as inactive with
 # DummyTID / RolledBackCSN. Its visibility flag is exactly what we expect.
-${CLICKHOUSE_CLIENT} -q "
+${CH_CLIENT} -q "
     SELECT
         'rolled_back_part',
         active,
@@ -66,4 +72,4 @@ ${CLICKHOUSE_CLIENT} -q "
         AND creation_csn = 18446744073709551615
 "
 
-${CLICKHOUSE_CLIENT} -q "DROP TABLE t_txn_tmp_leftover"
+${CH_CLIENT} -q "DROP TABLE t_txn_tmp_leftover"

@@ -584,11 +584,6 @@ class Runner:
         is_final_job = job.name == Settings.FINISH_WORKFLOW_JOB_NAME
         is_initial_job = job.name == Settings.CI_CONFIG_JOB_NAME
 
-        # TODO: remove after testing notification panels
-        env.add_workflow_error("Test error message")
-        env.add_workflow_warning("Test warning message")
-        env.add_workflow_note("Test note message")
-
         if run_exit_code == 0 or result.do_not_block_pipeline_on_failure():
             providing_artifacts = []
             if job.provides and workflow.artifacts:

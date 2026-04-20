@@ -326,16 +326,18 @@ Pipe Pipe::unitePipes(Pipes pipes, Processors * collected_processors, bool allow
             extremes.emplace_back(pipe.extremes_port);
     }
 
-    auto last_existing = res.processors->empty() ? res.processors->end() : std::prev(res.processors->end());
+    Processors totals_processors;
+    res.totals_port = uniteTotals(totals, res.header, totals_processors);
+    res.processors->append_range(totals_processors);
 
-    res.totals_port = uniteTotals(totals, res.header, *res.processors);
-    res.extremes_port = uniteExtremes(extremes, res.header, *res.processors);
+    Processors extremes_processors;
+    res.extremes_port = uniteExtremes(extremes, res.header, extremes_processors);
+    res.processors->append_range(extremes_processors);
 
     if (res.collected_processors)
     {
-        auto new_begin = last_existing == res.processors->end() ? res.processors->begin() : std::next(last_existing);
-        for (auto it = new_begin; it != res.processors->end(); ++it)
-            res.collected_processors->emplace_back(*it);
+        res.collected_processors->append_range(std::move(totals_processors));
+        res.collected_processors->append_range(std::move(extremes_processors));
     }
 
     return res;

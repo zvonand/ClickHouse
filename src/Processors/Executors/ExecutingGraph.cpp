@@ -30,9 +30,13 @@ ExecutingGraph::ExecutingGraph(std::shared_ptr<Processors> processors_, bool pro
 
 ExecutingGraph::Node & ExecutingGraph::addNode(Processors::iterator processor_iter)
 {
-    IProcessor * raw_processor = processor_iter->get();
+    IProcessor * processor = processor_iter->get();
     auto & new_node = nodes.emplace_back(processor_iter, next_node_id++);
-    processors_map[raw_processor] = &new_node;
+
+    const auto [_, inserted] = processors_map.emplace(processor, &new_node);
+    if (!inserted)
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Processor {} was already added to pipeline", processor->getName());
+
     return new_node;
 }
 

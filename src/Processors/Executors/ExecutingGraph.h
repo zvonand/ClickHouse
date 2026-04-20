@@ -158,8 +158,7 @@ private:
     /// Add single edge to edges list. Check processor is known.
     Edge & addEdge(Edges & edges, Edge edge, const IProcessor * from, const IProcessor * to);
 
-    /// Edges newly appended for a node by a call to addEdges. Pointers are stable because edges
-    /// live in std::list.
+    /// Edges newly appended for a node by a call to addEdges.
     struct NewEdges
     {
         std::vector<Edge *> back;    // back edges added (inputs side of this node)

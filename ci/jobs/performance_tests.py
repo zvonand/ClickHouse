@@ -1029,16 +1029,11 @@ def main():
                 tests_result = r
                 break
         if tests_result:
-            # Build a check_name pattern from the job name for the history query.
-            # The CIDB check_name for perf jobs looks like
+            # Always use master_head runs for the history query — they are
+            # the stable baseline.  The CIDB check_name looks like
             # "Performance Comparison (arm_release, master_head, 1/6)".
-            # We use just the arch + baseline_kind part for the LIKE filter so
-            # it matches all shards.
             arch = get_perf_arch()
-            baseline_kind = (
-                "master_head" if compare_against_master else "release_base"
-            )
-            check_name_pattern = f"%Performance%{arch}%"
+            check_name_pattern = f"%Performance%{arch}%master_head%"
             for tr in tests_result.results:
                 if tr.status in ("slower", "unstable"):
                     sub = Result(

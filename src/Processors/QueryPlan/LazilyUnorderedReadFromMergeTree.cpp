@@ -1,5 +1,6 @@
 #include <Processors/Port.h>
 #include <Processors/QueryPlan/LazilyUnorderedReadFromMergeTree.h>
+#include <Processors/QueryPlan/QueryPlanFormat.h>
 #include <Processors/Sources/LazyUnorderedReadFromMergeTreeSource.h>
 #include <Interpreters/Context.h>
 #include <Core/Settings.h>

@@ -264,10 +264,10 @@ class Info:
         Add a warning visible on both the job report page and the workflow
         report page.
 
-        The message is written to the current job's ``Result.ext["warnings"]``
-        (as a plain string) and propagated to the workflow ``Result.ext``
-        (grouped with job attribution).  If the same message is posted by
-        multiple jobs, the workflow page groups them into a single entry.
+        The message is stored as ``{"message": str, "from": str}`` in both the
+        current job's ``Result.ext["warnings"]`` and the workflow-level
+        ``Result.ext["warnings"]``.  If the same message is posted by multiple
+        jobs, the report page groups them into a single entry at render time.
 
         Unlike ``Result.add_warning``, which only affects the specific result
         it is called on, this method ensures the message appears at both levels.

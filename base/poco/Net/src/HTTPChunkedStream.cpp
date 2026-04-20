@@ -52,7 +52,8 @@ void HTTPChunkedStreamBuf::close()
 	if (_mode & std::ios::out && _chunk != std::char_traits<char>::eof())
 	{
 		sync();
-		writeToDevice("", 0);
+		if (writeToDevice("", 0) < 0)
+			throw MessageException("Failed to write terminating chunk");
 		_chunk = std::char_traits<char>::eof();
 	}
 }
@@ -173,7 +174,7 @@ int HTTPChunkedStreamBuf::writeToDevice(const char* buffer, std::streamsize leng
 	{
 		int written = _session.write(_chunkBuffer.data() + offset, chunkSize - offset);
 		if (written <= 0)
-			return 0;
+			return -1;
 		offset += written;
 	}
 	return static_cast<int>(length);

@@ -36,6 +36,9 @@ static bool canUseLazyMaterializationForReadingStep(ReadFromMergeTree * reading)
     if (reading->isQueryWithSampling())
         return false;
 
+    if (reading->getMutationsSnapshot()->hasPatchParts())
+        return false;
+
     return true;
 }
 

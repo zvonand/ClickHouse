@@ -400,6 +400,9 @@ public:
 
     void deferFiltersAfterFinalIfNeeded();
 
+    const FilterDAGInfoPtr & getDeferredRowLevelFilter() const { return deferred_row_level_filter; }
+    const PrewhereInfoPtr & getDeferredPrewhereInfo() const { return deferred_prewhere_info; }
+
 private:
     MergeTreeSettingsPtr data_settings;
     MergeTreeReaderSettings reader_settings;

@@ -206,7 +206,21 @@ void fuzzerSigalrmHandler(int /*sig*/, siginfo_t * /*info*/, void * /*context*/)
     int rc = pthread_kill(runner_thread_id, SIGUSR1);
 
     if (rc != 0)
-        signalSafeWrite("[fuzzer] pthread_kill failed\n");
+    {
+        signalSafeWrite("[fuzzer] pthread_kill failed with error ");
+        /// Signal-safe integer-to-string for small error codes.
+        char err_buf[16];
+        int pos = 14;
+        err_buf[15] = '\0';
+        err_buf[14] = '\n';
+        int tmp = rc;
+        do
+        {
+            err_buf[--pos] = '0' + (tmp % 10);
+            tmp /= 10;
+        } while (tmp > 0 && pos > 0);
+        signalSafeWrite(err_buf + pos);
+    }
 
     /// Wait for the runner thread to print its stack, with nanosleep to yield CPU.
     constexpr int max_iterations = 3000;
@@ -330,7 +344,14 @@ void DB::ClientBase::runLibFuzzer()
             if (state == FuzzerState::FINISHED)
                 break;
 
-            processQueryText(query);
+            try
+            {
+                processQueryText(query);
+            }
+            catch (...)
+            {
+                /// Ignore any exceptions to keep the runner thread alive.
+            }
             state = FuzzerState::WAITING_FOR_INPUT;
         }
         cv.notify_one();

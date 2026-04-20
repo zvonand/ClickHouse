@@ -725,7 +725,7 @@ class Result(MetaClasses.Serializable):
             # assertion triggered after the test body returned. This is a test failure,
             # not an infrastructure error.
             result.set_info("gtest binary run has non-zero exit code - see logs")
-            result.set_status(Result.Status.FAILED)
+            result.set_status(Result.Status.FAIL)
         if result.is_error():
             # gtest.json is missing — the binary was killed before it could write results
             # (e.g. by a sanitizer or OOM). Note: gdb returns 0 even when the inferior
@@ -739,7 +739,7 @@ class Result(MetaClasses.Serializable):
                         sanitizer_info = line
                         break
             result.info = sanitizer_info or info
-            result.set_status(Result.Status.FAILED)
+            result.set_status(Result.Status.FAIL)
         return result
 
     @classmethod

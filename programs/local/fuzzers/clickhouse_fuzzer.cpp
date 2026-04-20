@@ -348,9 +348,22 @@ void DB::ClientBase::runLibFuzzer()
             {
                 processQueryText(query);
             }
+            catch (const Exception &)
+            {
+                /// Normal query errors (syntax, runtime, etc.) — ignore, same as
+                /// interactive mode in runInteractive. The bulk of query exceptions
+                /// are already caught inside executeMultiQuery and never reach here.
+            }
             catch (...)
             {
-                // Ok
+                /// Non-DB exception indicates a real bug. Log it and abort so that
+                /// libfuzzer registers a crash with a meaningful message.
+                /// (We can't rely on std::terminate because the stack is already
+                /// unwound by then, losing the exception info.)
+                signalSafeWrite("[fuzzer] Non-DB::Exception caught in runner thread: ");
+                signalSafeWrite(getCurrentExceptionMessage(true).c_str());
+                signalSafeWrite("\n");
+                abort();
             }
             state = FuzzerState::WAITING_FOR_INPUT;
         }

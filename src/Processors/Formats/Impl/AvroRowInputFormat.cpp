@@ -924,20 +924,30 @@ AvroDeserializer::Action AvroDeserializer::createAction(const Block & header, co
 {
     if (node->type() == avro::AVRO_SYMBOLIC)
     {
-        const auto & sym_name = node->name().fullname();
-        if (!symbolic_deserialize_guard.insert(sym_name).second)
-            throw Exception(ErrorCodes::BAD_ARGUMENTS,
-                "Recursive Avro schema is not supported: type '{}' references itself", sym_name);
-
         /// continue traversal only if some column name starts with current_path
         auto keep_going = std::any_of(header.begin(), header.end(), [&current_path](const ColumnWithTypeAndName & col)
         {
             return col.name.starts_with(current_path);
         });
         auto resolved_node = avro::resolveSymbol(node);
-        Action result = keep_going
-            ? createAction(header, resolved_node, current_path)
-            : AvroDeserializer::Action(createSkipFn(resolved_node));
+
+        /// When we do not need to descend into the referenced type, take the safe skip path.
+        /// `createSkipFn` handles cyclic symbolic references via `symbolic_skip_fn_map` (lazy
+        /// placeholder that is filled in on first resolution). So legitimately recursive
+        /// schemas (e.g. a LinkedList with optional self-reference) are still readable when
+        /// the requested columns do not traverse into the cycle.
+        if (!keep_going)
+            return AvroDeserializer::Action(createSkipFn(resolved_node));
+
+        /// If we do need to descend, we cannot build a finite deserializer when the same
+        /// symbolic reference appears on the current path — that would require infinite
+        /// unrolling. Guard with a path-stack (insert on entry, erase on exit) so sibling
+        /// re-uses of the same named type are allowed, and only back-edges are rejected.
+        const auto & sym_name = node->name().fullname();
+        if (!symbolic_deserialize_guard.insert(sym_name).second)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                "Recursive Avro schema is not supported: type '{}' references itself", sym_name);
+        Action result = createAction(header, resolved_node, current_path);
         symbolic_deserialize_guard.erase(sym_name);
         return result;
     }

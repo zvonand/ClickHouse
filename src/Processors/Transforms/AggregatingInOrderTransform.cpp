@@ -340,8 +340,6 @@ void AggregatingInOrderTransform::generate()
     {
         dataflow_cache_updater->recordAggregationKeySizes(
             to_push_chunk, params->aggregator.getKeysPositions(), params->aggregator.getKeyTypes());
-        /// res_header uses final_=false which matches the non-finalized output of AggregatingInOrderTransform.
-        /// params->getHeader() may be finalized, causing type mismatches.
         dataflow_cache_updater->recordAggregationStateColumnSizes(
             to_push_chunk, params->aggregator.getKeysPositions(), res_header);
     }

@@ -114,7 +114,7 @@ public:
     void markUnsupportedCase() { unsupported_case.store(true, std::memory_order_relaxed); }
 
 private:
-    bool shouldSampleBlock(Statistics & statistics, size_t block_rows) const;
+    static bool shouldSampleBlock(Statistics & statistics, size_t block_rows);
 
     const size_t cache_key = 0;
     const size_t total_rows_to_read = 0;
@@ -137,6 +137,8 @@ private:
         MaxOutputType = 3,
     };
     std::array<Statistics, 3> output_bytes_statistics;
+
+    static void recordColumns(Statistics & statistics, size_t num_rows, const ColumnsWithTypeAndName & cols);
 };
 
 using RuntimeDataflowStatisticsCacheUpdaterPtr = std::shared_ptr<RuntimeDataflowStatisticsCacheUpdater>;

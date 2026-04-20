@@ -20,7 +20,10 @@ function cleanup()
 trap cleanup EXIT
 cleanup
 
-${CLICKHOUSE_CLIENT} -nm -q "
+# Use --send_logs_level=error: the RESTORE emits expected Warning messages from
+# BackupMetadataFinder because the view's referenced tables are not in the backup
+# (only the view itself is) and have been truncated from the database.
+${CLICKHOUSE_CLIENT} --send_logs_level=error -nm -q "
     CREATE DATABASE ${DB} ENGINE = Memory;
     CREATE TABLE ${DB}.src1 (c0 Int) ENGINE = Memory;
     CREATE TABLE ${DB}.src2 (c0 Int) ENGINE = Memory;

@@ -8,5 +8,5 @@ SELECT CAST('2024 April 4' AS DateTime('UTC'));
 SELECT CAST('Apr 15, 2020 10:30:00' AS DateTime('UTC'));
 
 -- Verify basic mode rejects these formats
-SELECT toDateTime('2024 April 4', 'UTC') SETTINGS date_time_input_format = 'basic'; -- { serverError CANNOT_PARSE_DATETIME }
+SELECT toDateTime('2024 April 4', 'UTC') SETTINGS cast_string_to_date_time_mode = 'basic'; -- { serverError CANNOT_PARSE_DATETIME }
 SELECT CAST('2024 April 4' AS DateTime('UTC')) SETTINGS cast_string_to_date_time_mode = 'basic'; -- { serverError CANNOT_PARSE_DATETIME }

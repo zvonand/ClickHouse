@@ -1,4 +1,4 @@
-SET date_time_input_format = 'basic';
+SET date_time_input_format = 'basic', cast_string_to_date_time_mode = 'basic';
 
 DROP TABLE IF EXISTS test_tbl;
 CREATE TABLE test_tbl (x UInt32, y DateTime, z DateTime64) engine=MergeTree ORDER BY x;

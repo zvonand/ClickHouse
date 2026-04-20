@@ -1,4 +1,4 @@
-SET date_time_input_format = 'basic';
+SET date_time_input_format = 'basic', cast_string_to_date_time_mode = 'basic';
 
 -- Error cases:
 -- non-const string column

@@ -66,7 +66,7 @@ FROM (
 WHERE ratio > 2;
 
 -- Check output bytes estimation accuracy against known-good values (ratio should be within 2x).
--- Expected output bytes were measured with default settings on 2e7 rows:
+-- Expected output bytes were measured with default settings on 2e6 rows:
 -- execute queries with parallel replicas and with local plan disabled, then take the network received bytes metric as estimation.
 SELECT format('{}: output estimation off by {}x (expected~{}, estimated={})', log_comment, round(ratio, 2), expected, statistics_output_bytes)
 FROM (

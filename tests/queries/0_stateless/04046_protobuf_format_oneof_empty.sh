@@ -41,6 +41,7 @@ INSERT INTO records_04046 from INFILE '$CURDIR/data_protobuf/RecordEmpty' SETTIN
 INSERT INTO records_04046 from INFILE '$CURDIR/data_protobuf/RecordInfo' SETTINGS format_schema='$SCHEMADIR/04046_record.proto:Record' FORMAT ProtobufSingle;
 INSERT INTO records_04046 from INFILE '$CURDIR/data_protobuf/RecordClear' SETTINGS format_schema='$SCHEMADIR/04046_record.proto:Record' FORMAT ProtobufSingle;
 SELECT * FROM records_04046 ORDER BY id Format PrettyMonoBlock;
+DROP TABLE records_04046;
 EOF
 
 # syntax = "proto3";
@@ -62,6 +63,7 @@ CREATE TABLE empty_records_04046
 ENGINE = MergeTree;
 INSERT INTO empty_records_04046 from INFILE '$CURDIR/data_protobuf/RecordTotallyEmpty' SETTINGS format_schema='$SCHEMADIR/04046_empty_record.proto:Record' FORMAT ProtobufSingle;
 SELECT * FROM empty_records_04046 ORDER BY type Format PrettyMonoBlock;
+DROP TABLE empty_records_04046;
 EOF
 
 # syntax = "proto3";
@@ -88,4 +90,5 @@ CREATE TABLE empty_inner_records_04046
 ENGINE = MergeTree;
 INSERT INTO empty_inner_records_04046 from INFILE '$CURDIR/data_protobuf/RecordInnerEmpty' SETTINGS format_schema='$SCHEMADIR/04046_inner_record.proto:Record' FORMAT ProtobufSingle;
 SELECT * FROM empty_inner_records_04046 ORDER BY id Format PrettyMonoBlock;
+DROP TABLE empty_inner_records_04046;
 EOF

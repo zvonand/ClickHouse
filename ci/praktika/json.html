@@ -1888,7 +1888,7 @@
         fillInNavigationBar(nameParams.slice(0, i + 1))
     }
 
-    function renderNotificationPanels(container, ext) {
+    function renderNotificationPanels(container, ext, resultName) {
         const kinds = [
             { key: 'errors', cssClass: 'notification-errors', title: 'Errors' },
             { key: 'warnings', cssClass: 'notification-warnings', title: 'Warnings' },
@@ -1925,16 +1925,20 @@
                 row.className = 'notification-item';
                 row.textContent = message;
 
-                if (sources.length === 1) {
+                // Hide source when all sources match the current result name
+                const externalSources = sources.filter(s => s !== resultName);
+                if (externalSources.length === 0) {
+                    // all from this result — no label needed
+                } else if (externalSources.length === 1) {
                     const span = document.createElement('span');
                     span.className = 'notification-jobs';
-                    span.textContent = `(${sources[0]})`;
+                    span.textContent = `(${externalSources[0]})`;
                     row.appendChild(span);
-                } else if (sources.length > 1) {
+                } else {
                     const span = document.createElement('span');
                     span.className = 'notification-jobs';
-                    span.textContent = `(${sources.length} jobs)`;
-                    span.title = sources.join('\n');
+                    span.textContent = `(${externalSources.length} jobs)`;
+                    span.title = externalSources.join('\n');
                     row.appendChild(span);
                 }
 
@@ -1957,7 +1961,7 @@
 
         const resultsDiv = document.getElementById('result-container');
 
-        renderNotificationPanels(resultsDiv, result.ext);
+        renderNotificationPanels(resultsDiv, result.ext, result.name);
 
         if (result.info) {
             const textDiv = document.createElement('div');

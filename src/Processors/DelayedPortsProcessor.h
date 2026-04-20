@@ -17,7 +17,7 @@ class Block;
 class DelayedPortsProcessor final : public IProcessor
 {
 public:
-    DelayedPortsProcessor(SharedHeader header, size_t num_ports, const PortNumbers & delayed_ports, bool assert_main_ports_empty = false);
+    DelayedPortsProcessor(SharedHeader header, size_t num_ports, const std::vector<UInt64> & delayed_ports, bool assert_main_ports_empty = false);
 
     String getName() const override { return "DelayedPorts"; }
 

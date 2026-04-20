@@ -182,11 +182,6 @@ public:
       */
     virtual Status prepare();
 
-    /// Historical numeric port-index list, kept for construction-time callers
-    /// (e.g. DelayedPortsProcessor ctor, QueryPipelineBuilder). Not used for runtime
-    /// change notifications — port positions are not stable under port removal.
-    using PortNumbers = std::vector<UInt64>;
-
     /// Optimization for prepare in case we know ports were updated.
     using UpdatedInputPorts  = std::vector<InputPort *>;
     using UpdatedOutputPorts = std::vector<OutputPort *>;

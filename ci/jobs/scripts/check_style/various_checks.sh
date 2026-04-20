@@ -148,6 +148,9 @@ FUNCTIONS_WITH_CONTEXT_EXCEPTIONS=(
     -e /getSetting.cpp
     -e /hasColumnInTable.cpp
     -e /initializeAggregation.cpp
+    # Diagnostic helper, the file is disabled via `#if 0` in production builds;
+    # `WithContext` is required so `trap('access context')` exercises runtime context access.
+    -e /trap.cpp
 )
 find $ROOT_PATH/src/Functions -type f | xargs grep -l 'WithContext(' | grep -v "${FUNCTIONS_WITH_CONTEXT_EXCEPTIONS[@]}" | grep -P '.' && echo "Avoid using WithContext in Functions"
 

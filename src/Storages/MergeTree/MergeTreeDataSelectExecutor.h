@@ -1,7 +1,6 @@
 #pragma once
 
 #include <expected>
-#include <Common/LoggingFormatStringHelpers.h>
 #include <Storages/MergeTree/MergeTreeReadTask.h>
 #include <Storages/SelectQueryInfo.h>
 #include <Storages/MergeTree/MergeTreeData.h>
@@ -12,6 +11,8 @@
 #include <Storages/MergeTree/MergeTreeIndexMinMax.h>
 
 #include <boost/dynamic_bitset.hpp>
+
+struct PreformattedMessage;
 
 namespace DB
 {

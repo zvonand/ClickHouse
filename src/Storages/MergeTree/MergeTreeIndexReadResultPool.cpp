@@ -1,5 +1,6 @@
 #include <Storages/MergeTree/MergeTreeIndexReadResultPool.h>
 
+#include <Common/logger_useful.h>
 #include <Storages/MergeTree/MergeTreeDataSelectExecutor.h>
 #include <Storages/MergeTree/MergeTreeReadPoolProjectionIndex.h>
 #include <Storages/MergeTree/MergeTreeSelectProcessor.h>

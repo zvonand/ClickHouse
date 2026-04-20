@@ -16,7 +16,7 @@ CREATE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.distributed_data (name String) E
 CREATE TABLE {CLICKHOUSE_DATABASE_1:Identifier}.local_merged_data (name String) ENGINE = Merge({CLICKHOUSE_DATABASE_1:Identifier}, '^distributed_data$');
 
 -- `prefer_localhost_replica = 0` forces the Distributed query to go through the network layer
--- (and  through the remote-parse path  that was broken), even though the shard is on localhost.
+-- (and through the remote-parse path that was broken), even though the shard is on localhost.
 SET prefer_localhost_replica = 0;
 
 SELECT '-- enable_analyzer=1 --';

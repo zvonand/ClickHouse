@@ -1355,7 +1355,7 @@ protected:
         if (!is_tuple && elements.size() == 1)
         {
             node = std::move(elements[0]);
-            node->parenthesized = true;
+            node->setParenthesized(true);
         }
         else if (elements.size() >= 2 && allElementsAreCompatibleLiterals(elements, Field::Types::Tuple))
         {

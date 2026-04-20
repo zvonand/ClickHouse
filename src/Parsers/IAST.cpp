@@ -100,7 +100,6 @@ IAST::IAST(const IAST & other)
     , children(other.children)
     , ref_counter(0)
     , flags_storage(other.flags_storage)
-    , parenthesized(other.parenthesized)
 {
 }
 
@@ -110,7 +109,6 @@ IAST & IAST::operator=(const IAST & other)
         return *this;
     children = other.children;
     flags_storage = other.flags_storage;
-    parenthesized = other.parenthesized;
     return *this;
 }
 
@@ -367,37 +365,41 @@ void IAST::format(WriteBuffer & ostr, const FormatSettings & settings) const
 {
     FormatState state;
     FormatStateStacked frame;
-    if (parenthesized)
+    const bool parens = isParenthesized();
+    if (parens)
         ostr.write('(');
     formatImpl(ostr, settings, state, std::move(frame));
-    if (parenthesized)
+    if (parens)
         ostr.write(')');
 }
 
 void IAST::format(WriteBuffer & ostr, const FormatSettings & settings, FormatState & state, FormatStateStacked frame) const
 {
-    if (parenthesized)
+    const bool parens = isParenthesized();
+    if (parens)
         ostr.write('(');
     formatImpl(ostr, settings, state, std::move(frame));
-    if (parenthesized)
+    if (parens)
         ostr.write(')');
 }
 
 void IAST::format(FormattingBuffer out) const
 {
-    if (parenthesized)
+    const bool parens = isParenthesized();
+    if (parens)
         out.ostr.write('(');
     formatImpl(out.ostr, out.settings, out.state, out.frame);
-    if (parenthesized)
+    if (parens)
         out.ostr.write(')');
 }
 
 void IAST::formatImpl(WriteBuffer & ostr, const FormatSettings & settings, FormatState & state, FormatStateStacked frame) const
 {
-    if (parenthesized)
+    const bool parens = isParenthesized();
+    if (parens)
         ostr.write('(');
     formatImpl(FormattingBuffer{ostr, settings, state, std::move(frame)});
-    if (parenthesized)
+    if (parens)
         ostr.write(')');
 }
 

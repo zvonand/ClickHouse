@@ -51,8 +51,16 @@ private:
 
 public:
 
+    /// Bit 31 of `flags_storage` is reserved for the `parenthesized` flag — see accessors below.
+    /// Derived `BitfieldStruct` definitions must keep `RESERVED_BITS <= 31`.
+    static constexpr UInt32 PARENTHESIZED_BIT_MASK = UInt32{1} << 31;
+
     /// If the element has extra parentheses around it, e.g., in "a + (b)", b has extra parentheses.
-    bool parenthesized = false;
+    bool isParenthesized() const { return (flags_storage & PARENTHESIZED_BIT_MASK) != 0; }
+    void setParenthesized(bool value)
+    {
+        flags_storage = (flags_storage & ~PARENTHESIZED_BIT_MASK) | (value ? PARENTHESIZED_BIT_MASK : 0);
+    }
 
     virtual ~IAST();
     IAST() = default;
@@ -64,12 +72,13 @@ public:
     ///   - using ParentFlags = <parent's flags struct or void for root>;
     ///   - static constexpr UInt32 RESERVED_BITS = <total bits used including parent>;
     ///   - UInt32 _parent_reserved : ParentFlags::RESERVED_BITS; (if ParentFlags is not void)
+    /// The high bit (31) is reserved for IAST's `parenthesized` flag, so RESERVED_BITS must be <= 31.
     template <typename BitfieldStruct>
     BitfieldStruct & flags()
     {
         static_assert(std::is_standard_layout_v<BitfieldStruct>);
         static_assert(sizeof(BitfieldStruct) == sizeof(flags_storage), "Bitfield struct must be the same size as flags_storage");
-        static_assert(BitfieldStruct::RESERVED_BITS <= 32, "RESERVED_BITS exceeds 32");
+        static_assert(BitfieldStruct::RESERVED_BITS <= 31, "RESERVED_BITS exceeds 31 (bit 31 is reserved for parenthesized)");
 
         if constexpr (!std::is_void_v<typename BitfieldStruct::ParentFlags>)
         {
@@ -87,7 +96,7 @@ public:
     {
         static_assert(std::is_standard_layout_v<BitfieldStruct>);
         static_assert(sizeof(BitfieldStruct) == sizeof(flags_storage), "Bitfield struct must be the same size as flags_storage");
-        static_assert(BitfieldStruct::RESERVED_BITS <= 32, "RESERVED_BITS exceeds 32");
+        static_assert(BitfieldStruct::RESERVED_BITS <= 31, "RESERVED_BITS exceeds 31 (bit 31 is reserved for parenthesized)");
 
         if constexpr (!std::is_void_v<typename BitfieldStruct::ParentFlags>)
         {

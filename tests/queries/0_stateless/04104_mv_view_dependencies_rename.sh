@@ -21,7 +21,7 @@ trap cleanup EXIT
 cleanup
 
 ${CLICKHOUSE_CLIENT} -nm -q "
-    CREATE DATABASE ${DB} ENGINE = Memory;
+    CREATE DATABASE ${DB} ENGINE = Atomic;
     CREATE TABLE ${DB}.src (c0 Int) ENGINE = Memory;
     CREATE TABLE ${DB}.target (c0 Int) ENGINE = Memory;
     CREATE MATERIALIZED VIEW ${DB}.mv TO ${DB}.target AS SELECT c0 FROM ${DB}.src;

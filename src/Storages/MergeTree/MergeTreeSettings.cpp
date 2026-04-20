@@ -2218,7 +2218,7 @@ struct MergeTreeSettingsImpl : public BaseSettings<MergeTreeSettingsTraits>
     void loadFromQuery(ASTStorage & storage_def, ContextPtr context, bool is_attach);
 
     /// Check that the values are sane taking also query-level settings into account.
-    void sanityCheck(size_t background_pool_tasks, bool allow_experimental, bool allow_beta) const;
+    void sanityCheck(size_t background_pool_tasks, bool allow_experimental, bool allow_beta, bool background_pool_auto_lowered) const;
 };
 
 static void validateTableDisk(const DiskPtr & disk)
@@ -2317,7 +2317,7 @@ void MergeTreeSettingsImpl::loadFromQuery(ASTStorage & storage_def, ContextPtr c
 #undef ADD_IF_ABSENT
 }
 
-void MergeTreeSettingsImpl::sanityCheck(size_t background_pool_tasks, bool allow_experimental, bool allow_beta) const
+void MergeTreeSettingsImpl::sanityCheck(size_t background_pool_tasks, bool allow_experimental, bool allow_beta, bool background_pool_auto_lowered) const
 {
     if (!allow_experimental || !allow_beta)
     {
@@ -2346,8 +2346,12 @@ void MergeTreeSettingsImpl::sanityCheck(size_t background_pool_tasks, bool allow
     }
 
 
+    /// Skip these checks when the background pool was auto-lowered by the low-memory heuristic:
+    /// on small systems the pool may be tuned below the default thresholds, and we do not want
+    /// to fail table creation in that mode. For all other cases (including explicit operator
+    /// configuration of a small pool), the checks still fire so misconfigurations are caught early.
     if (number_of_free_entries_in_pool_to_execute_mutation > background_pool_tasks
-        && number_of_free_entries_in_pool_to_execute_mutation.changed)
+        && !background_pool_auto_lowered)
     {
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "The value of 'number_of_free_entries_in_pool_to_execute_mutation' setting"
             " ({}) (default values are defined in <merge_tree> section of config.xml"
@@ -2360,7 +2364,7 @@ void MergeTreeSettingsImpl::sanityCheck(size_t background_pool_tasks, bool allow
     }
 
     if (number_of_free_entries_in_pool_to_lower_max_size_of_merge > background_pool_tasks
-        && number_of_free_entries_in_pool_to_lower_max_size_of_merge.changed)
+        && !background_pool_auto_lowered)
     {
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "The value of 'number_of_free_entries_in_pool_to_lower_max_size_of_merge' setting"
             " ({}) (default values are defined in <merge_tree> section of config.xml"
@@ -2373,7 +2377,7 @@ void MergeTreeSettingsImpl::sanityCheck(size_t background_pool_tasks, bool allow
     }
 
     if (number_of_free_entries_in_pool_to_execute_optimize_entire_partition > background_pool_tasks
-        && number_of_free_entries_in_pool_to_execute_optimize_entire_partition.changed)
+        && !background_pool_auto_lowered)
     {
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "The value of 'number_of_free_entries_in_pool_to_execute_optimize_entire_partition' setting"
             " ({}) (default values are defined in <merge_tree> section of config.xml"
@@ -2649,9 +2653,9 @@ bool MergeTreeSettings::needSyncPart(size_t input_rows, size_t input_bytes) cons
         || (impl->min_compressed_bytes_to_fsync_after_merge && input_bytes >= impl->min_compressed_bytes_to_fsync_after_merge));
 }
 
-void MergeTreeSettings::sanityCheck(size_t background_pool_tasks, bool allow_experimental, bool allow_beta) const
+void MergeTreeSettings::sanityCheck(size_t background_pool_tasks, bool allow_experimental, bool allow_beta, bool background_pool_auto_lowered) const
 {
-    impl->sanityCheck(background_pool_tasks, allow_experimental, allow_beta);
+    impl->sanityCheck(background_pool_tasks, allow_experimental, allow_beta, background_pool_auto_lowered);
 }
 
 void MergeTreeSettings::dumpToSystemMergeTreeSettingsColumns(MutableColumnsAndConstraints & params) const

@@ -678,6 +678,12 @@ struct ContextSharedPart : boost::noncopyable
     OrdinaryBackgroundExecutorPtr fetch_executor TSA_GUARDED_BY(background_executors_mutex);
     OrdinaryBackgroundExecutorPtr common_executor TSA_GUARDED_BY(background_executors_mutex);
 
+    /// Set to true when the low-memory auto-tuning heuristic lowered background_pool_size
+    /// at server startup. Used by MergeTreeSettings::sanityCheck to allow default thresholds
+    /// (e.g. number_of_free_entries_in_pool_to_execute_mutation) to stay above the lowered
+    /// max_tasks_count without failing table creation.
+    bool background_pool_auto_lowered TSA_GUARDED_BY(mutex) = false;
+
     RemoteHostFilter remote_host_filter;                    /// Allowed URL from config.xml
     HTTPHeaderFilter http_header_filter;                    /// Forbidden HTTP headers from config.xml
 
@@ -7365,8 +7371,13 @@ void Context::initializeBackgroundExecutorsIfNeeded()
             if (!server_settings[ServerSetting::background_merges_mutations_concurrency_ratio].changed)
                 background_merges_mutations_concurrency_ratio = std::min(static_cast<float>(background_merges_mutations_concurrency_ratio), 1.0f);
             /// Update shared settings so the MergeTree sanity check sees the lowered values.
-            shared->server_settings.set("background_pool_size", max_pool);
-            shared->server_settings.set("background_merges_mutations_concurrency_ratio", static_cast<double>(background_merges_mutations_concurrency_ratio));
+            /// Writes to shared->server_settings must be synchronized with other readers via shared->mutex.
+            {
+                std::lock_guard shared_lock(shared->mutex);
+                shared->server_settings.set("background_pool_size", max_pool);
+                shared->server_settings.set("background_merges_mutations_concurrency_ratio", static_cast<double>(background_merges_mutations_concurrency_ratio));
+                shared->background_pool_auto_lowered = true;
+            }
         }
     }
     size_t background_pool_max_tasks_count = static_cast<size_t>(static_cast<double>(background_pool_size) * background_merges_mutations_concurrency_ratio);
@@ -7441,6 +7452,12 @@ bool Context::areBackgroundExecutorsInitialized() const
 {
     SharedLockGuard lock(shared->background_executors_mutex);
     return shared->are_background_executors_initialized;
+}
+
+bool Context::wasBackgroundPoolAutoLowered() const
+{
+    SharedLockGuard lock(shared->mutex);
+    return shared->background_pool_auto_lowered;
 }
 
 MergeMutateBackgroundExecutorPtr Context::getMergeMutateExecutor() const

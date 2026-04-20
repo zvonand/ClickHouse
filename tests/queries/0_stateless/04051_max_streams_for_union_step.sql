@@ -92,3 +92,11 @@ SETTINGS max_threads = 1, max_streams_for_union_step = 0, max_streams_for_union_
 -- 9. Negative ratio must be rejected
 SELECT 1 UNION ALL SELECT 2
 SETTINGS max_streams_for_union_step_to_max_threads_ratio = -1; -- { serverError PARAMETER_OUT_OF_BOUND }
+
+-- 10. Non-finite ratio (infinity) must be rejected
+SELECT 1 UNION ALL SELECT 2
+SETTINGS max_streams_for_union_step_to_max_threads_ratio = inf; -- { serverError PARAMETER_OUT_OF_BOUND }
+
+-- 11. Non-finite ratio (NaN) must be rejected
+SELECT 1 UNION ALL SELECT 2
+SETTINGS max_streams_for_union_step_to_max_threads_ratio = nan; -- { serverError PARAMETER_OUT_OF_BOUND }

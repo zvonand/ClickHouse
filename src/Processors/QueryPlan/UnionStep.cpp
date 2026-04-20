@@ -1,3 +1,4 @@
+#include <Common/NaNUtils.h>
 #include <Interpreters/ExpressionActions.h>
 #include <Processors/QueryPlan/UnionStep.h>
 #include <Processors/QueryPlan/QueryPlanStepRegistry.h>
@@ -20,6 +21,7 @@ namespace QueryPlanSerializationSetting
 namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
+    extern const int PARAMETER_OUT_OF_BOUND;
 }
 
 static SharedHeader checkHeaders(const SharedHeaders & input_headers)
@@ -99,7 +101,13 @@ QueryPipelineBuilderPtr UnionStep::updatePipeline(QueryPipelineBuilders pipeline
     size_t effective_max_streams = max_streams;
     if (max_streams_ratio > 0 && new_max_threads > 0)
     {
-        size_t max_streams_from_ratio = static_cast<size_t>(static_cast<double>(new_max_threads) * max_streams_ratio);
+        double streams_with_ratio = static_cast<double>(new_max_threads) * max_streams_ratio;
+        if (!canConvertTo<size_t>(streams_with_ratio))
+            throw Exception(ErrorCodes::PARAMETER_OUT_OF_BOUND,
+                "`max_streams_for_union_step_to_max_threads_ratio` produces an out-of-range stream limit "
+                "(max_threads={}, ratio={}, product={}). Make sure the product fits in size_t.",
+                new_max_threads, max_streams_ratio, streams_with_ratio);
+        size_t max_streams_from_ratio = static_cast<size_t>(streams_with_ratio);
         if (max_streams_from_ratio == 0)
             max_streams_from_ratio = 1;
         if (effective_max_streams)

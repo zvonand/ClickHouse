@@ -1856,9 +1856,9 @@ void Planner::buildPlanForUnionNode()
     {
         size_t max_streams = settings[Setting::max_streams_for_union_step];
         double max_streams_ratio = settings[Setting::max_streams_for_union_step_to_max_threads_ratio];
-        if (max_streams_ratio < 0)
+        if (!isFinite(max_streams_ratio) || max_streams_ratio < 0)
             throw Exception(ErrorCodes::PARAMETER_OUT_OF_BOUND,
-                "Invalid value for `max_streams_for_union_step_to_max_threads_ratio`: {}. Must be non-negative.",
+                "Invalid value for `max_streams_for_union_step_to_max_threads_ratio`: {}. Must be a finite non-negative number.",
                 max_streams_ratio);
         auto union_step = std::make_unique<UnionStep>(std::move(query_plans_headers), max_threads, max_streams, max_streams_ratio);
         query_plan.unitePlans(std::move(union_step), std::move(query_plans));

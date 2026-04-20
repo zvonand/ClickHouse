@@ -21,11 +21,13 @@ SELECT replaceRegexpAll(explain, '^\s*', '') FROM (EXPLAIN actions=1 SELECT numb
 
 SELECT explain LIKE '%"Node Type": "NegativeLimitBy"%' AND explain LIKE '%"Negative Length": 2%' AND explain LIKE '%"Negative Offset": 3%' FROM (EXPLAIN json=1, actions=1 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET -3 BY g);
 
-SELECT explain LIKE '%"Node Type": "NegativeLimitBy"%' AND explain LIKE '%"Negative Length": 2%' AND explain LIKE '%"Negative Offset": 0%' AND explain LIKE '%"Node Type": "LimitBy"%' FROM (EXPLAIN json=1, actions=1 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g);
+SELECT explain LIKE '%"Node Type": "NegativeLimitBy"%' AND explain LIKE '%"Negative Length": 2%' AND explain LIKE '%"Negative Offset": 0%' AND explain NOT LIKE '%"Node Type": "LimitBy"%' FROM (EXPLAIN json=1, actions=1 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g);
 
 SELECT explain LIKE '%"Node Type": "NegativeLimitBy"%' AND explain LIKE '%"Negative Length": 2%' AND explain LIKE '%"Node Type": "LimitBy"%' AND explain LIKE '%"Offset": 3%' FROM (EXPLAIN json=1, actions=1 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 OFFSET 3 BY g);
 
 SELECT explain LIKE '%"Node Type": "NegativeLimitBy"%' AND explain LIKE '%"Negative Offset": 3%' AND explain LIKE '%"Node Type": "LimitBy"%' AND explain LIKE '%"Length": 2%' FROM (EXPLAIN json=1, actions=1 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 2 OFFSET -3 BY g);
+
+SELECT explain LIKE '%"Node Type": "NegativeLimitBy"%' AND explain LIKE '%"Negative Offset": 3%' AND explain LIKE '%"Node Type": "LimitBy"%' AND explain LIKE '%"Length": 0%' FROM (EXPLAIN json=1, actions=1 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT 0 OFFSET -3 BY g);
 
 SELECT explain LIKE '%"Node Type": "NegativeLimitBy"%' AND explain LIKE '%"Negative Length": 2%' FROM (EXPLAIN json=1, actions=1 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -2 BY g);
 

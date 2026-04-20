@@ -12,6 +12,7 @@
 #include <boost/algorithm/string/split.hpp>
 
 
+#include <csignal>
 #include <unistd.h>
 
 #include <new>
@@ -194,6 +195,16 @@ int LLVMFuzzerInitialize(const int *argc, char ***argv)
         runner = std::thread(clickhouseMain, clickhouse_args.size(), clickhouse_args.data());
         if (!cv.wait_for(lock, std::chrono::seconds(30), []{ return state == FuzzerState::WAITING_FOR_INPUT; }))
             abort();
+    }
+
+    // Block SIGALRM on the main (fuzzer) thread so that libfuzzer's timeout signal
+    // gets delivered to the worker thread where query execution actually happens,
+    // producing a useful stack trace instead of just showing cv.wait.
+    {
+        sigset_t set;
+        sigemptyset(&set);
+        sigaddset(&set, SIGALRM);
+        pthread_sigmask(SIG_BLOCK, &set, nullptr);
     }
 
     int ret = std::atexit([]()

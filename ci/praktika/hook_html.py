@@ -236,13 +236,8 @@ class HtmlRunnerHooks:
             print("Storage usage data found - add to Result")
             storage_usage = StorageUsage.from_fs()
             result.ext["storage_usage"] = storage_usage
-        report_messages = env.REPORT_MESSAGES or []
-        kind_to_key = {"warning": "warnings", "error": "errors", "note": "notes"}
-        for msg in report_messages:
-            key = kind_to_key.get(msg.get("kind"), "notes")
-            result.ext.setdefault(key, []).append(
-                {"message": msg["message"], "from": msg["from"]}
-            )
+        report_messages = env.REPORT_MESSAGES
+        _ResultS3.append_report_messages(result, report_messages)
         _ResultS3.copy_result_to_s3(result)
 
         new_sub_results = [result]

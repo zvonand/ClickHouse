@@ -511,10 +511,10 @@ def main():
 
                 if not Info().is_local_run:
                     if not CH.start_log_exports(stop_watch.start_time):
-                        info.add_warning("Failed to start log export")
+                        info.add_workflow_warning("Failed to start log export")
                         print("Failed to start log export")
                 if not CH.create_minio_log_tables():
-                    info.add_warning("Failed to create minio log tables")
+                    info.add_workflow_warning("Failed to create minio log tables")
                     print("Failed to create minio log tables")
 
                 if has_stateful_tests:

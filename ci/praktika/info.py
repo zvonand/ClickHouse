@@ -259,14 +259,36 @@ class Info:
         self.env.TRACEBACKS.append(traceback.format_exc())
         self.env.dump()
 
-    def add_warning(self, message):
-        self.env.add_report_message(message, kind="warning")
+    def add_workflow_warning(self, message):
+        """
+        Add a warning visible on both the job report page and the workflow
+        report page.
 
-    def add_error(self, message):
-        self.env.add_report_message(message, kind="error")
+        The message is written to the current job's ``Result.ext["warnings"]``
+        (as a plain string) and propagated to the workflow ``Result.ext``
+        (grouped with job attribution).  If the same message is posted by
+        multiple jobs, the workflow page groups them into a single entry.
 
-    def add_note(self, message):
-        self.env.add_report_message(message, kind="note")
+        Unlike ``Result.add_warning``, which only affects the specific result
+        it is called on, this method ensures the message appears at both levels.
+        """
+        self.env.add_workflow_warning(message)
+
+    def add_workflow_error(self, message):
+        """
+        Add an error visible on both the job and workflow report pages.
+
+        See ``add_workflow_warning`` for propagation semantics.
+        """
+        self.env.add_workflow_error(message)
+
+    def add_workflow_note(self, message):
+        """
+        Add a note visible on both the job and workflow report pages.
+
+        See ``add_workflow_warning`` for propagation semantics.
+        """
+        self.env.add_workflow_note(message)
 
     def is_workflow_ok(self):
         """

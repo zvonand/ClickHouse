@@ -581,7 +581,6 @@ class Runner:
         env = _Environment.get()
         is_ok = True
 
-
         is_final_job = job.name == Settings.FINISH_WORKFLOW_JOB_NAME
         is_initial_job = job.name == Settings.CI_CONFIG_JOB_NAME
 

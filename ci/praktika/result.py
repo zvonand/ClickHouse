@@ -1169,6 +1169,27 @@ class ResultInfo:
 
 class _ResultS3:
 
+    # Map the ``kind`` field used in ``_Environment.REPORT_MESSAGES`` to the
+    # ``ext`` bucket rendered by ``json.html``. Unknown kinds fall into notes.
+    _REPORT_MESSAGE_KIND_TO_EXT_KEY = {
+        "warning": "warnings",
+        "error": "errors",
+        "note": "notes",
+    }
+
+    @classmethod
+    def append_report_messages(cls, result, messages):
+        """
+        Append ``{"message", "kind", "from"}`` dicts from
+        ``_Environment.REPORT_MESSAGES`` into ``result.ext`` under the
+        matching ``warnings``/``errors``/``notes`` bucket.
+        """
+        for msg in messages:
+            key = cls._REPORT_MESSAGE_KIND_TO_EXT_KEY.get(msg.get("kind"), "notes")
+            result.ext.setdefault(key, []).append(
+                {"message": msg["message"], "from": msg["from"]}
+            )
+
     @classmethod
     def copy_result_to_s3(cls, result, clean=False):
         result.dump()
@@ -1368,12 +1389,7 @@ class _ResultS3:
                 workflow_result.ext["compute_usage"] = workflow_compute_usage
 
             if report_messages:
-                kind_to_key = {"warning": "warnings", "error": "errors", "note": "notes"}
-                for msg in report_messages:
-                    key = kind_to_key.get(msg.get("kind"), "notes")
-                    workflow_result.ext.setdefault(key, []).append(
-                        {"message": msg["message"], "from": msg["from"]}
-                    )
+                cls.append_report_messages(workflow_result, report_messages)
 
             new_status = workflow_result.status
             if cls.copy_result_to_s3_with_version(

@@ -147,7 +147,7 @@ CommandSegments parseAlterCommandSegments(const ASTAlterQuery & alter, const Sto
             {
                 const auto & source_ast = *mutation_command->ast->as<ASTAlterCommand>();
                 auto tz_rewritten_ast = rewriteDateTimeLiteralsWithTimezone(
-                    source_ast, table->getInMemoryMetadata().columns, session_tz);
+                    source_ast, table->getInMemoryMetadataPtr(context, true)->columns, session_tz);
                 if (tz_rewritten_ast)
                 {
                     auto * tz_alter_command = tz_rewritten_ast->as<ASTAlterCommand>();
@@ -293,7 +293,7 @@ BlockIO runCommandSegments(CommandSegments & segments, const StoragePtr & table,
         if (auto * alter_commands = std::get_if<AlterCommands>(&segment))
         {
             auto alter_lock = table->lockForAlter(settings[Setting::lock_acquire_timeout]);
-            auto metadata_snapshot = table->getInMemoryMetadataPtr(/*bypass_metadata_cache=*/true);
+            auto metadata_snapshot = table->getInMemoryMetadataPtr(context, true);
             alter_commands->validate(table, context);
 
             bool share_nested = true;
@@ -308,7 +308,7 @@ BlockIO runCommandSegments(CommandSegments & segments, const StoragePtr & table,
         {
             if (mutation_commands->hasNonEmptyMutationCommands())
             {
-                auto metadata_snapshot = table->getInMemoryMetadataPtr(/*bypass_metadata_cache=*/true);
+                auto metadata_snapshot = table->getInMemoryMetadataPtr(context, true);
                 table->checkMutationIsPossible(*mutation_commands, settings);
                 MutationsInterpreter::Settings mutation_settings(false);
                 MutationsInterpreter(table, metadata_snapshot, *mutation_commands, context, mutation_settings).validate();
@@ -317,7 +317,7 @@ BlockIO runCommandSegments(CommandSegments & segments, const StoragePtr & table,
         }
         else if (auto * partition_commands = std::get_if<PartitionCommands>(&segment))
         {
-            auto metadata_snapshot = table->getInMemoryMetadataPtr(/*bypass_metadata_cache=*/true);
+            auto metadata_snapshot = table->getInMemoryMetadataPtr(context, true);
             table->checkAlterPartitionIsPossible(*partition_commands, metadata_snapshot, settings, context);
             auto partition_commands_pipe = table->alterPartition(metadata_snapshot, *partition_commands, context);
             if (!partition_commands_pipe.empty())

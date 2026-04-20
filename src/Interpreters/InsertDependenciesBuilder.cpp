@@ -605,7 +605,7 @@ private:
             source_id,
             source_metadata->getColumns(),
             std::move(data_block),
-            *source_storage->getVirtualsPtr()));
+            source_metadata->virtuals));
 
         QueryPipelineBuilder pipeline;
 
@@ -1093,7 +1093,7 @@ bool InsertDependenciesBuilder::observePath(const DependencyPath & path)
     }
 
     chassert(storage);
-    auto metadata = storage->getInMemoryMetadataPtr();
+    auto metadata = storage->getInMemoryMetadataPtr(init_context, false);
 
     storages[current] = storage;
     metadata_snapshots[current] = metadata;

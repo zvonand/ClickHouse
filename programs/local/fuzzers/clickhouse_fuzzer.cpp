@@ -13,6 +13,8 @@
 
 
 #include <csignal>
+#include <pthread.h>
+#include <sanitizer/common_interface_defs.h>
 #include <unistd.h>
 
 #include <new>
@@ -167,8 +169,50 @@ std::atomic<FuzzerState> state{FuzzerState::NONE};
 String query;
 
 std::optional<std::thread> runner;
+pthread_t runner_thread_id{};
+struct sigaction original_sigalrm_action{};
+
 String clickhouse{"clickhouse"};
 std::vector<char *> clickhouse_args{clickhouse.data()};
+
+/// Signal-safe stderr print helper.
+void signalSafeWrite(const char * msg)
+{
+    (void)write(STDERR_FILENO, msg, __builtin_strlen(msg));
+}
+
+/// Flag set by the SIGUSR1 handler on the runner thread after printing its stack.
+std::atomic<bool> runner_stack_printed{false};
+
+/// SIGUSR1 handler installed on the runner thread — prints its own stack trace.
+void runnerStackTraceHandler(int /*sig*/, siginfo_t * /*info*/, void * /*context*/)
+{
+    signalSafeWrite("\n=== Runner thread stack trace (where the query is stuck) ===\n");
+    __sanitizer_print_stack_trace();
+    signalSafeWrite("=== End runner thread stack trace ===\n\n");
+    runner_stack_printed.store(true, std::memory_order_release);
+}
+
+/// When libfuzzer's timeout fires SIGALRM, it lands on the main thread.
+/// We first dump the runner thread's stack trace (via SIGUSR1), then call
+/// libfuzzer's original handler which will print the main thread stack and _Exit.
+void fuzzerSigalrmHandler(int /*sig*/, siginfo_t * /*info*/, void * /*context*/)
+{
+    /// Send SIGUSR1 to the runner thread to print its stack trace.
+    runner_stack_printed.store(false, std::memory_order_release);
+    (void)pthread_kill(runner_thread_id, SIGUSR1);
+
+    /// Spin-wait for the runner thread to print its stack (with a timeout).
+    for (int i = 0; i < 1000000 && !runner_stack_printed.load(std::memory_order_acquire); ++i)
+    {
+        // busy wait
+    }
+
+    /// Restore and call libfuzzer's original SIGALRM handler.
+    /// It will print the main thread's stack and call _Exit.
+    (void)sigaction(SIGALRM, &original_sigalrm_action, nullptr);
+    (void)raise(SIGALRM);
+}
 
 extern "C"
 int LLVMFuzzerInitialize(const int *argc, char ***argv)
@@ -193,18 +237,9 @@ int LLVMFuzzerInitialize(const int *argc, char ***argv)
         // Start clickhouse local
         std::unique_lock lock(mutex);
         runner = std::thread(clickhouseMain, clickhouse_args.size(), clickhouse_args.data());
+        runner_thread_id = runner->native_handle();
         if (!cv.wait_for(lock, std::chrono::seconds(30), []{ return state == FuzzerState::WAITING_FOR_INPUT; }))
             abort();
-    }
-
-    // Block SIGALRM on the main (fuzzer) thread so that libfuzzer's timeout signal
-    // gets delivered to the worker thread where query execution actually happens,
-    // producing a useful stack trace instead of just showing cv.wait.
-    {
-        sigset_t set;
-        sigemptyset(&set);
-        sigaddset(&set, SIGALRM);
-        pthread_sigmask(SIG_BLOCK, &set, nullptr);
     }
 
     int ret = std::atexit([]()
@@ -227,13 +262,31 @@ int LLVMFuzzerInitialize(const int *argc, char ***argv)
 extern "C"
 int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size)
 {
+    /// Install our SIGALRM forwarder on the first call, after libfuzzer
+    /// has already set up its own handler (which we save as original).
+    static bool handler_installed = false;
+    if (!handler_installed)
+    {
+        struct sigaction sa = {};
+        sa.sa_sigaction = fuzzerSigalrmHandler;
+        sa.sa_flags = SA_SIGINFO;
+        sigaction(SIGALRM, &sa, &original_sigalrm_action);
+        handler_installed = true;
+    }
+
     {
         std::unique_lock lock(mutex);
         cv.wait(lock, []{ return state == FuzzerState::WAITING_FOR_INPUT; });
         query = {reinterpret_cast<const char *>(data), size};
         state = FuzzerState::DATA_READY;
+        cv.notify_one();
+
+        /// Wait for the runner to finish processing, so that libfuzzer's
+        /// SIGALRM fires while we are inside the callback (RunningUserCallback=true).
+        /// This way the timeout mechanism works correctly, and our handler
+        /// can dump the runner thread's stack before libfuzzer exits.
+        cv.wait(lock, []{ return state == FuzzerState::WAITING_FOR_INPUT || state == FuzzerState::FINISHED; });
     }
-    cv.notify_one();
 
     return 0;
 }
@@ -242,6 +295,14 @@ void DB::ClientBase::runLibFuzzer()
 {
     // Initialize thread_status
     ThreadStatus thread_status;
+
+    /// Install SIGUSR1 handler on the runner thread for stack trace dumping.
+    {
+        struct sigaction sa = {};
+        sa.sa_sigaction = runnerStackTraceHandler;
+        sa.sa_flags = SA_SIGINFO;
+        (void)sigaction(SIGUSR1, &sa, nullptr);
+    }
 
     {
         std::lock_guard lock(mutex);

@@ -1354,6 +1354,7 @@ class _ResultS3:
         storage_usage=None,
         compute_usage=None,
         report_messages=None,
+        clear_report_sources=None,
     ):
         assert new_sub_results
 
@@ -1387,6 +1388,14 @@ class _ResultS3:
                     workflow_result.ext.get("compute_usage", {})
                 ).merge_with(compute_usage)
                 workflow_result.ext["compute_usage"] = workflow_compute_usage
+
+            if clear_report_sources:
+                for key in cls._REPORT_MESSAGE_KIND_TO_EXT_KEY.values():
+                    if key in workflow_result.ext:
+                        workflow_result.ext[key] = [
+                            e for e in workflow_result.ext[key]
+                            if e.get("from") not in clear_report_sources
+                        ]
 
             if report_messages:
                 cls.append_report_messages(workflow_result, report_messages)

@@ -210,8 +210,12 @@ class HtmlRunnerHooks:
     @classmethod
     def pre_run(cls, _workflow, _job):
         result = Result.from_fs(_job.name)
+        # Clear stale workflow-level report messages from this job's previous
+        # run so that resolved warnings/errors don't persist after a rerun.
         _ResultS3.update_workflow_results(
-            workflow_name=_workflow.name, new_sub_results=result
+            workflow_name=_workflow.name,
+            new_sub_results=result,
+            clear_report_sources=[_job.name],
         )
 
     @classmethod

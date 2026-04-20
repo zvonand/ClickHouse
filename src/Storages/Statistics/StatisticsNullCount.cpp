@@ -23,14 +23,17 @@ StatisticsNullCount::StatisticsNullCount(const SingleStatisticsDescription & des
 
 void StatisticsNullCount::build(const ColumnPtr & column)
 {
-    if (const auto * nullable_col = typeid_cast<const ColumnNullable *>(column.get()))
+    /// Unwrap Sparse columns (e.g. ColumnSparse(ColumnNullable(...)))
+    auto full_column = column->convertToFullColumnIfSparse();
+
+    if (const auto * nullable_col = typeid_cast<const ColumnNullable *>(full_column.get()))
     {
         const auto & null_map = nullable_col->getNullMapData();
         null_count += std::count(null_map.begin(), null_map.end(), 1);
         return;
     }
 
-    if (const auto * lc_col = typeid_cast<const ColumnLowCardinality *>(column.get()))
+    if (const auto * lc_col = typeid_cast<const ColumnLowCardinality *>(full_column.get()))
     {
         if (!lc_col->nestedIsNullable())
             return;
@@ -44,7 +47,7 @@ void StatisticsNullCount::build(const ColumnPtr & column)
         return;
     }
 
-    chassert(false && "Unexpected column type in NullCount::build");
+    /// Column is not nullable, so null_count stays 0.
 }
 
 void StatisticsNullCount::merge(const StatisticsPtr & other_stats)

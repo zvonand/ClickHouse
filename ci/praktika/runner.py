@@ -741,6 +741,24 @@ class Runner:
                 if is_final_job:
                     env.add_workflow_error(ResultInfo.OPEN_ISSUES_CHECK_ERROR)
 
+        info = Info()
+        report_url = info.get_job_report_url(latest=False)
+
+        if (
+            workflow.enable_commit_status_on_failure and not result.is_ok()
+        ) or job.enable_commit_status:
+            if _GH_Auth():
+                if not GH.post_commit_status(
+                    name=job.name,
+                    status=result.status,
+                    description=result.info.splitlines()[0] if result.info else "",
+                    url=report_url,
+                ):
+                    env.add_workflow_error(
+                        "Failed to post GH commit status for the job"
+                    )
+                    print(f"ERROR: Failed to post commit status for the job")
+
         # Always run report generation at the end to finalize workflow status with latest job result
         if workflow.enable_report:
             print(f"Run html report hook")
@@ -775,9 +793,6 @@ class Runner:
                     )
                     ci_db.insert_compute_usage(workflow_compute_usage)
 
-        info = Info()
-        report_url = info.get_job_report_url(latest=False)
-
         if workflow.enable_gh_summary_comment and (
             job.name == Settings.FINISH_WORKFLOW_JOB_NAME or not result.is_ok()
         ) and _GH_Auth():
@@ -794,21 +809,6 @@ class Runner:
             except Exception as e:
                 print(f"ERROR: failed to post CI summary, ex: {e}")
                 traceback.print_exc()
-
-        if (
-            workflow.enable_commit_status_on_failure and not result.is_ok()
-        ) or job.enable_commit_status:
-            if _GH_Auth():
-                if not GH.post_commit_status(
-                    name=job.name,
-                    status=result.status,
-                    description=result.info.splitlines()[0] if result.info else "",
-                    url=report_url,
-                ):
-                    env.add_workflow_error(
-                        "Failed to post GH commit status for the job"
-                    )
-                    print(f"ERROR: Failed to post commit status for the job")
 
         if workflow.enable_report:
             # to make it visible in GH Actions annotations

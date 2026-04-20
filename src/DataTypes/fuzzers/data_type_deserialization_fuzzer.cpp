@@ -193,12 +193,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size)
             /// Now get the DataType from the parsed AST
             type = DataTypeFactory::instance().get(ast);
         }
-        catch (const Exception & e)
+        catch (const Exception &)
         {
             /// If parsing fails due to depth limits or other parsing errors,
             /// this is the expected behavior - ClickHouse will throw proper exceptions
-            std::cerr << "Exception during DataType parsing: " << e.what()
-                      << " (data_type: " << data_type << ")" << std::endl;
             return 0;
         }
 

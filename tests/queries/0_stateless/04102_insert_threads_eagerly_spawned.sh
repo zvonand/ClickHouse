@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Tags: no-parallel
+# Tags: no-parallel, no-replicated-database, no-async-insert
 # no-parallel: checks thread count, which can be affected by concurrent queries
+# no-replicated-database: query_log lookup assumes single-node execution
+# no-async-insert: test measures synchronous INSERT pipeline threading
 
 # Verifies that a plain INSERT (no SELECT, no MVs) does not request
 # excessive ConcurrencyControl slots or spawn unnecessary threads.

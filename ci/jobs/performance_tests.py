@@ -5,6 +5,7 @@ import re
 import subprocess
 import time
 import traceback
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 
@@ -219,6 +220,32 @@ def get_perf_arch():
     if Utils.is_amd():
         return "amd"
     Utils.raise_with_error("Unknown processor architecture")
+
+
+def build_perf_query_history_link(test_name, check_name):
+    """Build a ClickHouse Play link showing performance history for a query on master."""
+    table = Settings.CI_DB_TABLE_NAME or "checks"
+    tn = (test_name or "").replace("'", "''")
+    cn = (check_name or "").replace("'", "''")
+    query = f"""\
+SELECT
+    check_start_time,
+    commit_sha AS commit,
+    test_name AS test,
+    test_duration_ms AS ms
+FROM {table}
+WHERE pull_request_number = 0
+    AND check_name LIKE '{cn}'
+    AND check_start_time >= now() - INTERVAL 14 DAY
+    AND test_name = '{tn}'
+ORDER BY test, check_start_time
+"""
+    base = Settings.CI_DB_READ_URL or ""
+    user = Settings.CI_DB_READ_USER or ""
+    if user:
+        sep = "&" if "?" in base else "?"
+        base = f"{base}/play{sep}user={urllib.parse.quote(user, safe='')}&run=1"
+    return f"{base}#{Utils.to_base64(query)}"
 
 
 def get_insert_metadata(info, compare_against_release):
@@ -992,9 +1019,50 @@ def main():
         elif not message:
             status = Result.Status.FAIL
             message = "No message in report."
+        # Copy slower/unstable queries into Check Results so that Praktika
+        # attaches per-query CIDB history links in the report.
+        check_sub_results = []
+        # Find the "Tests" sub-result that holds per-query results
+        tests_result = None
+        for r in results:
+            if r.name == "Tests" and r.results:
+                tests_result = r
+                break
+        if tests_result:
+            # Build a check_name pattern from the job name for the history query.
+            # The CIDB check_name for perf jobs looks like
+            # "Performance Comparison (arm_release, master_head, 1/6)".
+            # We use just the arch + baseline_kind part for the LIKE filter so
+            # it matches all shards.
+            arch = get_perf_arch()
+            baseline_kind = (
+                "master_head" if compare_against_master else "release_base"
+            )
+            check_name_pattern = f"%Performance%{arch}%"
+            for tr in tests_result.results:
+                if tr.status in ("slower", "unstable"):
+                    sub = Result(
+                        name=tr.name,
+                        status=Result.Status.FAIL,
+                        info=tr.status,
+                        duration=tr.duration,
+                    )
+                    sub.set_label(
+                        "query history",
+                        link=build_perf_query_history_link(
+                            tr.name, check_name_pattern
+                        ),
+                        hint="Performance history for this query on master",
+                    )
+                    check_sub_results.append(sub)
+
         results.append(
             Result(
-                name="Check Results", status=status, info=message, duration=sw.duration
+                name="Check Results",
+                status=status,
+                info=message,
+                duration=sw.duration,
+                results=check_sub_results,
             )
         )
 

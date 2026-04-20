@@ -1,6 +1,8 @@
 ---
 description: 'System table containing periodic snapshots of histogram metrics, flushed to disk.'
 keywords: ['system table', 'histogram_metric_log']
+sidebar_label: 'histogram_metric_log'
+sidebar_position: 65
 slug: /operations/system-tables/histogram_metric_log
 title: 'system.histogram_metric_log'
 doc_type: 'reference'

@@ -170,7 +170,7 @@ def test_enabled(start_cluster):
         "DELETE FROM system.webassembly_modules WHERE 1=1"
     )
     assert "Only deletion of a module by name is supported" in error
-    assert node1.ping()
+    assert node1.query("SELECT 1").strip() == "1"
 
     # Cleanup
     node1.query("DROP FUNCTION IF EXISTS is_prime")

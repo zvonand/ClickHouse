@@ -58,3 +58,5 @@ private:
 };
 
 }
+
+#include <Interpreters/HistogramMetricLog.h>

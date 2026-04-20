@@ -38,3 +38,20 @@ WHERE current_database = currentDatabase()
     AND type = 'QueryFinish'
 ORDER BY event_time_microseconds DESC
 LIMIT 1;
+
+-- Two distributed sources in one query: 2 + 3 = 5 shards.
+-- Scalar subqueries are evaluated on the initiator, so both `remote` calls
+-- increment `Shards` locally and their values are summed into the outer query.
+SELECT ignore(
+    (SELECT count() FROM remote('127.0.0.{1,2}', system.one)),
+    (SELECT count() FROM remote('127.0.0.{1,2,3}', system.one))
+) FORMAT Null SETTINGS log_comment = '04039_profile_event_shards_4';
+SYSTEM FLUSH LOGS query_log;
+
+SELECT ProfileEvents['Shards']
+FROM system.query_log
+WHERE current_database = currentDatabase()
+    AND log_comment = '04039_profile_event_shards_4'
+    AND type = 'QueryFinish'
+ORDER BY event_time_microseconds DESC
+LIMIT 1;

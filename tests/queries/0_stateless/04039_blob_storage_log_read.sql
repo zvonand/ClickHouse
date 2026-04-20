@@ -32,3 +32,19 @@ SELECT countIf(event_type = 'Read') = 0
 FROM system.blob_storage_log
 WHERE remote_path LIKE '%04039_data/neg_%'
     AND event_date >= yesterday();
+
+-- Gate test: enable_blob_storage_log_for_read_operations=1 but enable_blob_storage_log=0 must not produce any Read events,
+-- because the blob storage log writer is gated by the parent setting.
+INSERT INTO FUNCTION s3(s3_conn, url = 'http://localhost:11111/test/04039_data/gate_'||currentDatabase()||'.csv', structure = 'number UInt64', format = CSV)
+    SETTINGS s3_truncate_on_insert = 1
+    SELECT number FROM numbers(10);
+
+SELECT sum(number) FROM s3(s3_conn, url = 'http://localhost:11111/test/04039_data/gate_'||currentDatabase()||'.csv', structure = 'number UInt64', format = CSV)
+    SETTINGS enable_blob_storage_log = 0, enable_blob_storage_log_for_read_operations = 1;
+
+SYSTEM FLUSH LOGS blob_storage_log;
+
+SELECT countIf(event_type = 'Read') = 0
+FROM system.blob_storage_log
+WHERE remote_path LIKE '%04039_data/gate_%'
+    AND event_date >= yesterday();

@@ -13,7 +13,7 @@ SELECT number, number % 3 AS g FROM numbers(10) ORDER BY g DESC, number DESC LIM
 6	0
 3	0
 0	0
--- DESC, ties at group boundary (Common)
+-- DESC, ties at group boundary
 SELECT number, number % 3 AS g FROM numbers(10) ORDER BY number DESC LIMIT -4 BY g;
 9	0
 8	2
@@ -32,7 +32,7 @@ SELECT intDiv(number, 2) AS g, number FROM numbers(10) ORDER BY g DESC, number D
 2	4
 1	2
 0	0
--- DESC, one-per-pair (Common)
+-- DESC, one-per-pair
 SELECT intDiv(number, 2) AS g, number FROM numbers(10) ORDER BY number DESC LIMIT -1 BY g;
 4	8
 3	6
@@ -49,7 +49,7 @@ SELECT intDiv(number, 3) AS g FROM numbers(12) ORDER BY g LIMIT -2 BY g;
 2
 3
 3
--- Group boundary inside chunk (Common)
+-- Group boundary inside chunk
 SELECT intDiv(number, 3) AS g FROM numbers(12) ORDER BY number LIMIT -2 BY g;
 0
 0
@@ -69,7 +69,7 @@ SELECT intDiv(number, 3) AS g, number FROM numbers(12) ORDER BY g, number LIMIT 
 2	7
 3	9
 3	10
--- Offset crossing chunk boundary (Common)
+-- Offset crossing chunk boundary
 SELECT intDiv(number, 3) AS g, number FROM numbers(12) ORDER BY number LIMIT -2 OFFSET -1 BY g;
 0	0
 0	1
@@ -90,7 +90,7 @@ SELECT intDiv(number, 3) AS g FROM numbers(9) ORDER BY g LIMIT -3 BY g;
 2
 2
 2
--- Boundary at chunk start (Common)
+-- Boundary at chunk start
 SELECT intDiv(number, 3) AS g FROM numbers(9) ORDER BY number LIMIT -3 BY g;
 0
 0
@@ -110,7 +110,7 @@ SELECT intDiv(number, 3) AS g, number FROM numbers(9) ORDER BY g, number LIMIT -
 1	5
 2	7
 2	8
--- Single-element chunks, LIMIT -2 BY g (Common)
+-- Single-element chunks, LIMIT -2 BY g
 SELECT intDiv(number, 3) AS g, number FROM numbers(9) ORDER BY number LIMIT -2 BY g;
 0	1
 0	2
@@ -126,7 +126,7 @@ SELECT intDiv(number, 3) AS g, number FROM numbers(9) ORDER BY g, number LIMIT -
 1	4
 2	6
 2	7
--- Single-element chunks, LIMIT -2 OFFSET -1 BY g (Common)
+-- Single-element chunks, LIMIT -2 OFFSET -1 BY g
 SELECT intDiv(number, 3) AS g, number FROM numbers(9) ORDER BY number LIMIT -2 OFFSET -1 BY g;
 0	0
 0	1
@@ -142,7 +142,7 @@ SELECT 0 AS g FROM numbers(100) ORDER BY g LIMIT -5 BY g;
 0
 0
 0
--- All rows equal, LIMIT -5 BY g (Common: drop ORDER BY since every column is constant key)
+-- All rows equal, LIMIT -5 BY g (no ORDER BY since every column is constant)
 SELECT 0 AS g FROM numbers(100) LIMIT -5 BY g;
 0
 0
@@ -152,7 +152,7 @@ SELECT 0 AS g FROM numbers(100) LIMIT -5 BY g;
 SET max_block_size = 2;
 -- Limit=0, non-zero offset, under small blocks (InOrder)
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -0 OFFSET -3 BY g;
--- Limit=0, non-zero offset, under small blocks (Common)
+-- Limit=0, non-zero offset, under small blocks
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY number LIMIT -0 OFFSET -3 BY g;
 SET max_block_size = 65536;
 -- Multiple ORDER BY columns (not LIMIT BY key) (InOrder)
@@ -165,7 +165,7 @@ SELECT intDiv(number, 3) AS g, number % 2 AS tag, number FROM numbers(12) ORDER 
 2	1	7
 3	1	9
 3	1	11
--- Multiple ORDER BY columns (not LIMIT BY key) (Common)
+-- Multiple ORDER BY columns (not LIMIT BY key)
 SELECT intDiv(number, 3) AS g, number % 2 AS tag, number FROM numbers(12) ORDER BY number LIMIT -2 BY g;
 0	1	1
 0	0	2
@@ -178,12 +178,12 @@ SELECT intDiv(number, 3) AS g, number % 2 AS tag, number FROM numbers(12) ORDER 
 -- Single row (InOrder)
 SELECT number, 0 AS g FROM numbers(1) ORDER BY g, number LIMIT -1 BY g;
 0	0
--- Single row (Common)
+-- Single row
 SELECT number, 0 AS g FROM numbers(1) ORDER BY number LIMIT -1 BY g;
 0	0
 -- Empty result (InOrder)
 SELECT number, 0 AS g FROM numbers(0) ORDER BY g, number LIMIT -1 BY g;
--- Empty result (Common)
+-- Empty result
 SELECT number, 0 AS g FROM numbers(0) ORDER BY number LIMIT -1 BY g;
 -- Limit exceeds total (InOrder)
 SELECT number, 0 AS g FROM numbers(5) ORDER BY g, number LIMIT -100 BY g;
@@ -192,7 +192,7 @@ SELECT number, 0 AS g FROM numbers(5) ORDER BY g, number LIMIT -100 BY g;
 2	0
 3	0
 4	0
--- Limit exceeds total (Common)
+-- Limit exceeds total
 SELECT number, 0 AS g FROM numbers(5) ORDER BY number LIMIT -100 BY g;
 0	0
 1	0
@@ -202,19 +202,19 @@ SELECT number, 0 AS g FROM numbers(5) ORDER BY number LIMIT -100 BY g;
 -- Aggregate on top: LIMIT -2 BY g (InOrder)
 SELECT sum(x) FROM (SELECT number AS x, intDiv(number, 3) AS g FROM numbers(9) ORDER BY g, x LIMIT -2 BY g);
 27
--- Aggregate on top: LIMIT -2 BY g (Common)
+-- Aggregate on top: LIMIT -2 BY g
 SELECT sum(x) FROM (SELECT number AS x, intDiv(number, 3) AS g FROM numbers(9) ORDER BY x LIMIT -2 BY g);
 27
 -- Aggregate on top, decomposed path: LIMIT -2 OFFSET 1 BY g (InOrder)
 SELECT sum(x) FROM (SELECT number AS x, intDiv(number, 3) AS g FROM numbers(9) ORDER BY g, x LIMIT -2 OFFSET 1 BY g);
 27
--- Aggregate on top, decomposed path: LIMIT -2 OFFSET 1 BY g (Common)
+-- Aggregate on top, decomposed path: LIMIT -2 OFFSET 1 BY g
 SELECT sum(x) FROM (SELECT number AS x, intDiv(number, 3) AS g FROM numbers(9) ORDER BY x LIMIT -2 OFFSET 1 BY g);
 27
 -- Aggregate on top, decomposed path: LIMIT 2 OFFSET -1 BY g (InOrder)
 SELECT sum(x) FROM (SELECT number AS x, intDiv(number, 3) AS g FROM numbers(9) ORDER BY g, x LIMIT 2 OFFSET -1 BY g);
 21
--- Aggregate on top, decomposed path: LIMIT 2 OFFSET -1 BY g (Common)
+-- Aggregate on top, decomposed path: LIMIT 2 OFFSET -1 BY g
 SELECT sum(x) FROM (SELECT number AS x, intDiv(number, 3) AS g FROM numbers(9) ORDER BY x LIMIT 2 OFFSET -1 BY g);
 21
 -- DISTINCT + negative LIMIT BY (InOrder)
@@ -225,7 +225,7 @@ SELECT DISTINCT number % 3 AS g, number FROM numbers(15) ORDER BY g, number LIMI
 1	13
 2	11
 2	14
--- DISTINCT + negative LIMIT BY (Common)
+-- DISTINCT + negative LIMIT BY
 SELECT DISTINCT number % 3 AS g, number FROM numbers(15) ORDER BY number LIMIT -2 BY g;
 0	9
 1	10
@@ -237,6 +237,22 @@ SELECT DISTINCT number % 3 AS g, number FROM numbers(15) ORDER BY number LIMIT -
 SELECT 'const' AS c, number FROM numbers(10) ORDER BY number LIMIT -2 BY c;
 const	8
 const	9
+-- String grouping key
+SELECT toString(number % 3) AS s, number FROM numbers(15) ORDER BY number LIMIT -2 BY s;
+0	9
+1	10
+2	11
+0	12
+1	13
+2	14
+-- Composite numeric key
+SELECT number, number % 3 AS g, number % 2 AS h FROM numbers(15) ORDER BY number LIMIT -1 BY g, h;
+9	0	1
+10	1	0
+11	2	1
+12	0	0
+13	1	1
+14	2	0
 SET max_block_size = 1;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g;
 9	0

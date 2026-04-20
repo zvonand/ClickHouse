@@ -253,6 +253,17 @@ SELECT number, number % 3 AS g, number % 2 AS h FROM numbers(15) ORDER BY number
 12	0	0
 13	1	1
 14	2	0
+-- NaN grouping key, single chunk
+SELECT k, number FROM (SELECT if(number < 3, toFloat64('nan'), toFloat64(1.0)) AS k, number FROM numbers(6))
+ORDER BY k, number LIMIT -1 BY k;
+1	5
+nan	2
+-- NaN grouping key across chunk boundary
+SET max_block_size = 3;
+SELECT k, number FROM (SELECT if(number < 3, toFloat64('nan'), toFloat64(1.0)) AS k, number FROM numbers(6))
+ORDER BY k, number LIMIT -1 BY k;
+1	5
+nan	2
 SET max_block_size = 1;
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g;
 9	0

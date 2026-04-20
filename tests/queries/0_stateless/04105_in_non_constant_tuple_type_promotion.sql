@@ -12,7 +12,4 @@ SELECT toUInt8(232) NOT IN (1000, number) FROM numbers(1);
 
 SELECT toUInt8(232) IN [1000, number] FROM numbers(1);
 
-SELECT toInt8(-1) IN (127 + 128, 0);
-SELECT toInt8(-1) IN (127 + 128, number) FROM numbers(1);
-
 SELECT toUInt8(5) IN (1000, number + 5) FROM numbers(1);

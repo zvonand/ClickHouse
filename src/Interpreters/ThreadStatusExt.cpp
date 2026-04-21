@@ -84,10 +84,17 @@ void configureMemoryTrackerFromSettings(bool has_trace_collector, MemoryTracker 
 {
     if (has_trace_collector)
     {
-        memory_tracker.setProfilerStep(settings[Setting::memory_profiler_step]);
-        memory_tracker.setSampleProbability(settings[Setting::memory_profiler_sample_probability]);
-        memory_tracker.setSampleMinAllocationSize(settings[Setting::memory_profiler_sample_min_allocation_size]);
-        memory_tracker.setSampleMaxAllocationSize(settings[Setting::memory_profiler_sample_max_allocation_size]);
+        if (settings[Setting::memory_profiler_step].changed)
+            memory_tracker.setProfilerStep(settings[Setting::memory_profiler_step]);
+        /// Only push the query-level sample settings when the user actually changed them from the
+        /// default; otherwise leave the group tracker at -1 so `getResolvedSampleConfig` falls
+        /// through to `total_memory_tracker_sample_probability`.
+        if (settings[Setting::memory_profiler_sample_probability].changed)
+            memory_tracker.setSampleProbability(settings[Setting::memory_profiler_sample_probability]);
+        if (settings[Setting::memory_profiler_sample_min_allocation_size].changed)
+            memory_tracker.setSampleMinAllocationSize(settings[Setting::memory_profiler_sample_min_allocation_size]);
+        if (settings[Setting::memory_profiler_sample_max_allocation_size].changed)
+            memory_tracker.setSampleMaxAllocationSize(settings[Setting::memory_profiler_sample_max_allocation_size]);
     }
 
     if (settings[Setting::memory_tracker_fault_probability] > 0.0)

@@ -298,12 +298,19 @@ ProcessList::EntryPtr ProcessList::insert(
 
             if (query_context->hasTraceCollector())
             {
-                /// Set up memory profiling
-                thread_group->memory_tracker.setProfilerStep(settings[Setting::memory_profiler_step]);
+                /// Set up memory profiling.
+                /// Only push the query-level sample settings when the user actually changed them from
+                /// the default, so that in the default case the group tracker stays at -1 and the
+                /// thread's cached sample probability falls through to `total_memory_tracker_sample_probability`.
+                if (settings[Setting::memory_profiler_step].changed)
+                    thread_group->memory_tracker.setProfilerStep(settings[Setting::memory_profiler_step]);
 
-                thread_group->memory_tracker.setSampleProbability(settings[Setting::memory_profiler_sample_probability]);
-                thread_group->memory_tracker.setSampleMinAllocationSize(settings[Setting::memory_profiler_sample_min_allocation_size]);
-                thread_group->memory_tracker.setSampleMaxAllocationSize(settings[Setting::memory_profiler_sample_max_allocation_size]);
+                if (settings[Setting::memory_profiler_sample_probability].changed)
+                    thread_group->memory_tracker.setSampleProbability(settings[Setting::memory_profiler_sample_probability]);
+                if (settings[Setting::memory_profiler_sample_min_allocation_size].changed)
+                    thread_group->memory_tracker.setSampleMinAllocationSize(settings[Setting::memory_profiler_sample_min_allocation_size]);
+                if (settings[Setting::memory_profiler_sample_max_allocation_size].changed)
+                    thread_group->memory_tracker.setSampleMaxAllocationSize(settings[Setting::memory_profiler_sample_max_allocation_size]);
 
                 /// Set up tracing of profile events
                 if (settings[Setting::trace_profile_events])

@@ -9,7 +9,7 @@ doc_type: 'reference'
 
 ## Description {#description}
 
-This table does not exist if ZooKeeper is not configured. Shows currently active [watches](https://zookeeper.apache.org/doc/r3.3.3/zookeeperProgrammers.html#ch_zkWatches) registered by this ClickHouse server on ZooKeeper nodes (including auxiliary ZooKeepers). Each row represents one watch.
+Shows currently active [watches](https://zookeeper.apache.org/doc/r3.3.3/zookeeperProgrammers.html#ch_zkWatches) registered by this ClickHouse server on ZooKeeper nodes (including auxiliary ZooKeepers). Each row represents one watch.
 
 ## Columns {#columns}
 

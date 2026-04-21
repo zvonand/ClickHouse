@@ -123,11 +123,15 @@ bool ExecutingGraph::removeAffectedEdges(Node & node, const std::unordered_set<N
 {
     const size_t initial_back_edges_count = node.back_edges.size();
     const size_t initial_direct_edges_count = node.direct_edges.size();
+    std::unordered_set<const void *> removed_edge_ids;
 
     for (auto it = node.back_edges.begin(); it != node.back_edges.end();)
     {
         if (removed_nodes.contains(it->to))
+        {
+            removed_edge_ids.insert(it->update_info.id);
             it = node.back_edges.erase(it);
+        }
         else
             it = std::next(it);
     }
@@ -135,9 +139,20 @@ bool ExecutingGraph::removeAffectedEdges(Node & node, const std::unordered_set<N
     for (auto it = node.direct_edges.begin(); it != node.direct_edges.end();)
     {
         if (removed_nodes.contains(it->to))
+        {
+            removed_edge_ids.insert(it->update_info.id);
             it = node.direct_edges.erase(it);
+        }
         else
             it = std::next(it);
+    }
+
+    /// We need to remove cached updates for removed edges. This updates now contain stale pointers.
+    if (!removed_edge_ids.empty())
+    {
+        auto is_stale = [&](void * id) { return removed_edge_ids.contains(id); };
+        std::erase_if(node.post_updated_input_ports, is_stale);
+        std::erase_if(node.post_updated_output_ports, is_stale);
     }
 
     const bool removed_something = initial_back_edges_count != node.back_edges.size()

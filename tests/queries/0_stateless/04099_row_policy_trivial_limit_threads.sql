@@ -1,4 +1,4 @@
--- Tags: no-parallel, no-random-merge-tree-settings, no-parallel-replicas
+-- Tags: no-parallel-replicas
 
 -- The trivial LIMIT optimization reduces max_streams to 1 for simple
 -- SELECT ... LIMIT N queries without WHERE.  When row policies or
@@ -11,22 +11,22 @@ DROP TABLE IF EXISTS t_row_policy_limit;
 CREATE TABLE t_row_policy_limit (id UInt64) ENGINE = MergeTree ORDER BY id
 SETTINGS index_granularity = 128;
 
+SYSTEM STOP MERGES t_row_policy_limit;
+
 -- Create enough parts so multiple streams are meaningful.
-INSERT INTO t_row_policy_limit SELECT number FROM numbers(1000);
-INSERT INTO t_row_policy_limit SELECT number FROM numbers(1000);
-INSERT INTO t_row_policy_limit SELECT number FROM numbers(1000);
-INSERT INTO t_row_policy_limit SELECT number FROM numbers(1000);
+INSERT INTO t_row_policy_limit SELECT number FROM numbers(1000) SETTINGS insert_deduplicate=1;
+INSERT INTO t_row_policy_limit SELECT number FROM numbers(1000) SETTINGS insert_deduplicate=1;
+INSERT INTO t_row_policy_limit SELECT number FROM numbers(1000) SETTINGS insert_deduplicate=1;
+INSERT INTO t_row_policy_limit SELECT number FROM numbers(1000) SETTINGS insert_deduplicate=1;
 
 SET enable_analyzer = 1;
-SET allow_prefetched_read_pool_for_remote_filesystem = 0;
-SET allow_prefetched_read_pool_for_local_filesystem = 0;
 
 -- Case 0: no row policies
 SELECT 'no_row_policy';
 SELECT *
 FROM (EXPLAIN PIPELINE SELECT id FROM t_row_policy_limit LIMIT 1
       SETTINGS max_threads = 4)
-WHERE explain LIKE '%Limit%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
+WHERE explain LIKE '%Concat%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
 
 -- Case 1: row policy prevents trivial-limit, keeps multiple streams.
 DROP ROW POLICY IF EXISTS 04099_p1 ON t_row_policy_limit;
@@ -36,8 +36,7 @@ SELECT 'row_policy';
 SELECT *
 FROM (EXPLAIN PIPELINE SELECT id FROM t_row_policy_limit LIMIT 1
       SETTINGS max_threads = 4)
-WHERE explain LIKE '%Limit%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
-
+WHERE explain LIKE '%Concat%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
 DROP ROW POLICY 04099_p1 ON t_row_policy_limit;
 
 -- Case 2: always-true row policy adds no effective predicate, so the
@@ -49,7 +48,7 @@ SELECT 'row_policy_always_true';
 SELECT *
 FROM (EXPLAIN PIPELINE SELECT id FROM t_row_policy_limit LIMIT 1
       SETTINGS max_threads = 4)
-WHERE explain LIKE '%Limit%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
+WHERE explain LIKE '%Concat%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
 
 DROP ROW POLICY 04099_p_true ON t_row_policy_limit;
 
@@ -59,6 +58,6 @@ SELECT *
 FROM (EXPLAIN PIPELINE SELECT id FROM t_row_policy_limit LIMIT 1
       SETTINGS max_threads = 4,
                additional_table_filters = {'t_row_policy_limit': 'id < 500'})
-WHERE explain LIKE '%Limit%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
+WHERE explain LIKE '%Concat%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
 
 DROP TABLE t_row_policy_limit;

@@ -92,7 +92,38 @@ $CLICKHOUSE_CLIENT -q "
     drop table src;"
 
 # ---------------------------------------------------------------------------
-# Test 3: SYSTEM PAUSE VIEWS pauses all refreshable views on this replica.
+# Test 3: SYSTEM STOP VIEW after SYSTEM PAUSE VIEW still interrupts the
+# in-flight refresh. Regression test for the PAUSE-then-STOP interaction:
+# once paused, a subsequent STOP must still cancel the running refresh, even
+# though PAUSE has already set the same `stop_requested` guard.
+# ---------------------------------------------------------------------------
+
+$CLICKHOUSE_CLIENT -q "
+    create table src (x Int64) engine Memory;
+    insert into src select * from numbers(10) settings max_block_size=1;
+    create materialized view ps refresh every 1 year (x Int64) engine Memory empty as
+        select x + sleepEachRow(1) as x from src settings max_block_size = 1, max_threads = 1;
+    system refresh view ps;"
+
+wait_status ps Running
+
+# Pause first; refresh keeps running because PAUSE does not interrupt.
+$CLICKHOUSE_CLIENT -q "system pause view ps;"
+
+# Now STOP must still interrupt the in-flight refresh.
+$CLICKHOUSE_CLIENT -q "system stop view ps;"
+
+wait_status ps Disabled
+
+$CLICKHOUSE_CLIENT -q "
+    select '<3a: stop after pause cancels the refresh>',
+        (select count() from ps),
+        (select exception != '' from refreshes where view = 'ps');
+    drop table ps;
+    drop table src;"
+
+# ---------------------------------------------------------------------------
+# Test 4: SYSTEM PAUSE VIEWS pauses all refreshable views on this replica.
 # ---------------------------------------------------------------------------
 
 $CLICKHOUSE_CLIENT -q "

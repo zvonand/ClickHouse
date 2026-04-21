@@ -336,10 +336,14 @@ void RefreshTask::start()
 void RefreshTask::stop()
 {
     std::lock_guard guard(mutex);
-    if (std::exchange(scheduling.stop_requested, true))
-        return;
+    bool was_already_stopped = std::exchange(scheduling.stop_requested, true);
+    /// Always interrupt the in-flight refresh. This matters in the PAUSE-then-STOP sequence:
+    /// `SYSTEM PAUSE VIEW` leaves the running refresh alone but sets `stop_requested`, and a
+    /// subsequent `SYSTEM STOP VIEW` must still cancel it. `interruptExecution` is idempotent
+    /// (guarded by `execution.interrupt_execution`) so repeated calls are safe.
     interruptExecution();
-    scheduleRefresh(guard);
+    if (!was_already_stopped)
+        scheduleRefresh(guard);
 }
 
 void RefreshTask::pause()

@@ -4,10 +4,12 @@
 
 #include <unistd.h> /// for ::getpid
 
+#include <algorithm> /// for std::sort
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <system_error>
+#include <vector>
 
 namespace fs = std::filesystem;
 

@@ -9,9 +9,17 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 $CLICKHOUSE_BINARY help >/dev/null 2>&1
 echo "clickhouse help: $?"
 
-# Test that clickhouse --help returns 0 (goes to local)
+# Test that clickhouse --help returns 0 (dispatcher help)
 $CLICKHOUSE_BINARY --help >/dev/null 2>&1
 echo "clickhouse --help: $?"
+
+# Test that clickhouse -h (alone) returns 0 (dispatcher help)
+$CLICKHOUSE_BINARY -h >/dev/null 2>&1
+echo "clickhouse -h: $?"
+
+# Test that clickhouse -? returns 0 (dispatcher help)
+$CLICKHOUSE_BINARY -? >/dev/null 2>&1
+echo "clickhouse -?: $?"
 
 # Test that clickhouse start --help returns 0
 $CLICKHOUSE_BINARY start --help >/dev/null 2>&1

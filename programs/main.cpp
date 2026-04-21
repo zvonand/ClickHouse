@@ -379,6 +379,18 @@ int main(int argc_, char ** argv_)
         }
     }
 
+    /// Top-level --help / -h / -? (as the sole argument) should show the dispatcher
+    /// help listing all subcommands and exit with code 0. Without this carve-out,
+    /// `--help` would match the `startsWith(argv[i], "-h")` rule below and be routed
+    /// into clickhouse-client, which treats anything starting with "-h" as a --host
+    /// specification and fails.
+    if (main_func == printHelpOnError && argv.size() == 2)
+    {
+        std::string_view arg(argv[1]);
+        if (arg == "--help" || arg == "-h" || arg == "-?")
+            main_func = mainEntryHelp;
+    }
+
     /// If host/port arguments are passed to clickhouse/ch shortcuts,
     /// interpret it as clickhouse-client invocation for usability.
     if (main_func == printHelpOnError && argv.size() >= 2)

@@ -1658,7 +1658,7 @@ void optimizeMergingSortedBuffering(QueryPlan::Node & node)
     if (!sorting)
         return;
 
-    if (sorting->getType() != SortingStep::Type::MergingSorted)
+    if (sorting->getType() != SortingStep::Type::MergingSorted || sorting->getLimit() != 0)
         return;
 
     auto * child_step = node.children.front()->step.get();
@@ -1672,10 +1672,7 @@ void optimizeMergingSortedBuffering(QueryPlan::Node & node)
     for (const auto * child : node.children.front()->children)
     {
         auto * child_sorting = typeid_cast<SortingStep *>(child->step.get());
-        if (child_sorting
-            && child_sorting->getType() == SortingStep::Type::FinishSorting
-            && child_sorting->getUseBuffering()
-            && child_sorting->getLimit() == 0)
+        if (child_sorting && child_sorting->getUseBuffering())
         {
             has_sorted_child_without_limit = true;
             break;
@@ -1685,11 +1682,8 @@ void optimizeMergingSortedBuffering(QueryPlan::Node & node)
         if (typeid_cast<ReadFromRemote *>(child->step.get())
             || typeid_cast<ReadFromParallelRemoteReplicasStep *>(child->step.get()))
         {
-            if (sorting->getLimit() == 0)
-            {
-                has_sorted_child_without_limit = true;
-                break;
-            }
+            has_sorted_child_without_limit = true;
+            break;
         }
     }
 

@@ -133,15 +133,23 @@ public:
         const UInt64 step_bits = static_cast<UInt64>(static_cast<Int64>(step));
 
         const UInt64 diff = end_bits - start_bits;
-        const UInt64 count = diff / step_bits + 1;
+        const UInt64 quotient = diff / step_bits;
 
-        if (count > MAX_BUCKET_COUNT)
+        /// Check the cap on `quotient` rather than on `quotient + 1`. With
+        /// `start = INT64_MIN`, `end = INT64_MAX`, `step = 1`, `diff` is `UINT64_MAX`,
+        /// `quotient` is `UINT64_MAX`, and `quotient + 1` wraps to `0` — bypassing the
+        /// cap and returning `bucket_count = 0`, which later fires `chassert(index <
+        /// bucket_count)` inside `bucketIndexForTimestamp`. Since `MAX_BUCKET_COUNT`
+        /// is well below `UINT64_MAX`, checking `quotient >= MAX_BUCKET_COUNT` is
+        /// equivalent to the original `count > MAX_BUCKET_COUNT` in the safe range,
+        /// but remains correct at the `UInt64` overflow boundary.
+        if (quotient >= MAX_BUCKET_COUNT)
             throw Exception(ErrorCodes::BAD_ARGUMENTS,
-                "Number of buckets ({}) in the timeseries grid exceeds maximum ({}). "
+                "Number of buckets in the timeseries grid exceeds maximum ({}). "
                 "Consider narrowing the [start, end] range or increasing the step.",
-                count, MAX_BUCKET_COUNT);
+                MAX_BUCKET_COUNT);
 
-        return static_cast<size_t>(count);
+        return static_cast<size_t>(quotient + 1);
     }
 
     size_t bucketIndexForTimestamp(const TimestampType timestamp) const

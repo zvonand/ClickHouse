@@ -84,5 +84,14 @@ SELECT arrayFirstIndex(x -> x IS NOT NULL,
 ) AS first_non_null_1idx_extreme
 FROM ts_data_overflow_idx;
 
+-- Case 8: `bucketCount` overflow-bypass. With `start = INT64_MIN`, `end = INT64_MAX`,
+-- `step = 1` the unsigned `diff = 2^64 - 1` and `quotient = diff / step = 2^64 - 1`.
+-- The previous `count = quotient + 1` wrapped to `0` in `UInt64`, bypassing the
+-- `MAX_BUCKET_COUNT` check and silently returning `bucket_count = 0`. That then fired
+-- `chassert(index < bucket_count)` inside `bucketIndexForTimestamp` and aborted the
+-- server. The fix checks `quotient >= MAX_BUCKET_COUNT` before the `+ 1`.
+SELECT timeSeriesResampleToGridWithStaleness(-9223372036854775808, 9223372036854775807, 1, 1)(timestamp, value)
+FROM ts_data_overflow_idx FORMAT Null;  -- { serverError BAD_ARGUMENTS }
+
 DROP TABLE ts_data_overflow_idx;
 DROP TABLE ts_data_overflow_idx_u32;

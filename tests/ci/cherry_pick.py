@@ -238,23 +238,29 @@ close it.
         first_parent = git_runner(f"git rev-parse {self.pr.merge_commit_sha}^1")
         git_runner(f"{GIT_PREFIX} merge -s ours --no-edit {first_parent}")
 
-        # Second step, create cherrypick branch on top of backport_branch and
-        # perform the merge locally. When it succeeds, cherrypick_branch points
-        # at a merge commit with the resolution baked in, so GitHub's merge of
-        # the cherry-pick PR becomes trivial. This avoids a failure mode where
-        # files renamed between the release branch and master produce conflicts
-        # in GitHub's merge even though local `git merge` resolves them via
-        # rename detection. The rename limit is raised to prevent git from
-        # silently disabling rename detection on large diffs.
-        git_runner(f"{GIT_PREFIX} checkout -B {self.cherrypick_branch}")
+        # Second step, create cherrypick branch
+        git_runner(
+            f"{GIT_PREFIX} checkout --no-track -B "
+            f"{self.cherrypick_branch} {self.pr.merge_commit_sha}"
+        )
 
-        # Check if there are actually any changes between branches. If no, then no
-        # other actions are required. It's possible when changes are backported
-        # manually to the release branch already
+        # Try to merge backport_branch into cherrypick_branch locally. When it
+        # succeeds, the merge commit (with rename detection etc. resolved) is
+        # baked into cherrypick_branch, so GitHub's merge of the cherry-pick PR
+        # becomes trivial - backport_branch is an ancestor of cherrypick_branch
+        # via the merge commit. This avoids a failure mode where files renamed
+        # between the release branch and master produce conflicts in GitHub's
+        # merge even though local `git merge` resolves them via rename
+        # detection. The rename limit is raised to prevent git from silently
+        # disabling rename detection on large diffs.
+        #
+        # On conflict, cherrypick_branch stays at pr.merge_commit_sha (the
+        # merge --abort restores HEAD), and conflicts are surfaced on the
+        # GitHub PR for manual resolution by the assigned engineer.
         try:
             git_runner(
                 f"{GIT_PREFIX} -c merge.renameLimit=999999 "
-                f"merge --no-ff --no-edit {self.pr.merge_commit_sha}"
+                f"merge --no-ff --no-edit {self.backport_branch}"
             )
             # The merge succeeded. If it produced no tree change vs
             # backport_branch, the PR is effectively already backported to
@@ -275,15 +281,7 @@ close it.
                 self._backported = True
                 return
         except CalledProcessError:
-            # Local merge has conflicts. Abort and fall back to the old
-            # behavior: cherrypick_branch points at the raw master commit,
-            # and conflicts are surfaced on the GitHub PR for manual
-            # resolution by the assigned engineer.
             git_runner(f"{GIT_PREFIX} merge --abort")
-            git_runner(
-                f"{GIT_PREFIX} checkout -B "
-                f"{self.cherrypick_branch} {self.pr.merge_commit_sha}"
-            )
 
         # Push, create the cherry-pick PR and label it
         for branch in [self.cherrypick_branch, self.backport_branch]:

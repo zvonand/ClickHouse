@@ -18,7 +18,7 @@ bool ToBool::convertImpl(String & out, IParser::Pos & pos)
     const auto param = getArgument(function_name, pos);
     out = fmt::format(
         "multiIf(toString({0}) = 'true', true, "
-        "toString({0}) = 'false', false, (toInt64OrNull(toString({0})) != 0)::Nullable(Bool))",
+        "toString({0}) = 'false', false, toInt64OrNull(toString({0})) != 0)",
         param,
         generateUniqueIdentifier());
     return true;
@@ -101,7 +101,7 @@ bool ToTimeSpan::convertImpl(String & out, IParser::Pos & pos)
             auto result = kqlCallToExpression("time", {arg}, pos.max_depth, pos.max_backtracks);
             out = fmt::format("{}", result);
         }
-        catch (...)
+        catch (const Exception &)
         {
             out = "NULL";
         }

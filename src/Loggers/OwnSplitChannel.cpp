@@ -14,6 +14,10 @@
 
 #include <Poco/Message.h>
 
+#if defined(MEMORY_SANITIZER)
+#include <sanitizer/msan_interface.h>
+#endif
+
 
 namespace ProfileEvents
 {
@@ -47,6 +51,14 @@ void OwnSplitChannel::log(const Poco::Message & msg)
 
 void OwnSplitChannel::log(Poco::Message && msg)
 {
+#if defined(MEMORY_SANITIZER)
+    {
+        auto fmt = msg.getFormatString();
+        __msan_check_mem_is_initialized(&fmt, sizeof(fmt));
+        if (fmt.data())
+            __msan_check_mem_is_initialized(fmt.data(), fmt.size());
+    }
+#endif
     if (stop_logging)
         return;
 
@@ -336,7 +348,7 @@ void AsyncLogMessageQueue::enqueueMessage(AsyncLogMessagePtr message)
 
     if (unlikely(dropped_messages))
     {
-        String log = "We've dropped " + toString(dropped_messages) + " log messages in this channel due to queue overflow";
+        String log = fmt::format("We've dropped {} log messages in this channel due to queue overflow", dropped_messages);
         auto async_message = std::make_shared<AsyncLogMessage>(Poco::Message("AsyncLogMessageQueue", log, Poco::Message::PRIO_WARNING));
         async_message->msg_ext.query_id.clear();
         message_queue.push_back(async_message);
@@ -398,6 +410,16 @@ void OwnAsyncSplitChannel::log(Poco::Message && msg)
 {
     try
     {
+#if defined(MEMORY_SANITIZER)
+        /// Catch which LOG call produces a message with uninitialized format string bytes.
+        /// STID 1478-2063: arm_msan stress test reports use-of-uninitialized-value in TextLog
+        {
+            auto fmt = msg.getFormatString();
+            __msan_check_mem_is_initialized(&fmt, sizeof(fmt));
+            if (fmt.data())
+                __msan_check_mem_is_initialized(fmt.data(), fmt.size());
+        }
+#endif
         /// Based on logger_useful.h this won't be called if the message is not needed
         /// so we can create the AsyncLogMessage as it won't penalize performance by being unused
         auto msg_priority = msg.getPriority();

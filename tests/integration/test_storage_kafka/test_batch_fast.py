@@ -2016,6 +2016,54 @@ def test_kafka_produce_virtual_columns_mapping(
 
 @pytest.mark.parametrize(
     "create_query_generator",
+    [k.generate_new_create_table_query, k.generate_old_create_table_query],
+)
+def test_kafka_produce_virtual_columns_mapping_one_sided_headers(
+    kafka_cluster, create_query_generator
+):
+    """
+    With kafka_map_virtual_columns_on_write=1, headers are mapped to Kafka
+    metadata only when both `_headers.name` and `_headers.value` are present.
+    A schema that has only one of them must keep that column in the message
+    payload instead of silently dropping it.
+    """
+    suffix = k.random_string(6)
+    kafka_table = f"kafka_{suffix}"
+
+    topic_name = f"insert_virtual_one_sided_{suffix}"
+    topic_config = {"retention.ms": "-1"}
+
+    with k.kafka_topic(
+        k.get_admin_client(kafka_cluster), topic_name, config=topic_config
+    ):
+        writer_create_query = create_query_generator(
+            f"{kafka_table}_writer",
+            "msg_value String, `_headers.name` Array(String)",
+            topic_list=topic_name,
+            consumer_group=topic_name,
+            format="JSONEachRow",
+            settings={"kafka_map_virtual_columns_on_write": 1},
+        )
+
+        instance.query(
+            f"""
+            {writer_create_query};
+            INSERT INTO test.{kafka_table}_writer VALUES
+                ('{{"a": 1}}', ['only_name']);
+            """
+        )
+
+        messages = k.kafka_consume_with_retry(kafka_cluster, topic_name, 1)
+        assert len(messages) == 1
+
+        # `_headers.name` must remain in the JSON payload because there is no
+        # corresponding `_headers.value` column to pair with for Kafka headers.
+        payload = json.loads(messages[0])
+        assert payload == {"msg_value": '{"a": 1}', "_headers.name": ["only_name"]}
+
+
+@pytest.mark.parametrize(
+    "create_query_generator",
     [k.generate_old_create_table_query, k.generate_new_create_table_query],
 )
 def test_kafka_insert_avro(kafka_cluster, create_query_generator):

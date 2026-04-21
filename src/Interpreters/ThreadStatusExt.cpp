@@ -79,8 +79,7 @@ void configureMemoryTrackerFromSettings(bool has_trace_collector, MemoryTracker 
 {
     if (has_trace_collector)
     {
-        if (settings[Setting::memory_profiler_step].changed)
-            memory_tracker.setProfilerStep(settings[Setting::memory_profiler_step]);
+        memory_tracker.setProfilerStep(settings[Setting::memory_profiler_step]);
         /// Only push the query-level sample settings when the user actually changed them from the
         /// default; otherwise leave the group tracker at -1 so `getResolvedSampleConfig` falls
         /// through to `total_memory_tracker_sample_probability`.

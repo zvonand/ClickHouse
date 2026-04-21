@@ -3,6 +3,7 @@
 #include <Columns/ColumnArray.h>
 #include <Common/assert_cast.h>
 #include <Common/Arena.h>
+#include <Common/memory.h>
 #include <base/arithmeticOverflow.h>
 #include <DataTypes/DataTypeArray.h>
 #include <AggregateFunctions/IAggregateFunction.h>
@@ -15,6 +16,7 @@
 #include <Common/memory.h>
 
 #include <absl/container/inlined_vector.h>
+
 
 namespace DB
 {
@@ -123,6 +125,8 @@ public:
         : IAggregateFunctionDataHelper<AggregateFunctionForEachData, AggregateFunctionForEach>(arguments, params_, createResultType(nested_))
         , nested_func(nested_), num_arguments(arguments.size())
     {
+        /// Pad the size to a multiple of alignment so that consecutive elements in the array
+        /// are properly aligned (same principle as C++ sizeof for array element types).
         nested_size_of_data = ::Memory::alignUp(nested_func->sizeOfData(), nested_func->alignOfData());
 
         if (arguments.empty())

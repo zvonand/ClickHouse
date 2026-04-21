@@ -6,9 +6,18 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$CUR_DIR"/../shell_config.sh
 
 TABLE="test_pred_ext_${CLICKHOUSE_DATABASE}"
+TABLE_MC="${TABLE}_mc"
+TABLE_OFF="${TABLE}_disabled"
 
 ENABLE_STATS="SET predicate_statistics_sample_rate = 1, optimize_move_to_prewhere = 1, query_plan_optimize_prewhere = 1"
-ENABLE_STATS_SINGLE_STEP="$ENABLE_STATS, enable_multiple_prewhere_read_steps = 0"
+ENABLE_STATS_MULTI_STEP="$ENABLE_STATS, enable_multiple_prewhere_read_steps = 1"
+
+Q1="${TABLE}_q1"
+Q2="${TABLE}_q2"
+Q3="${TABLE}_q3"
+Q4="${TABLE}_q4"
+Q5="${TABLE}_q5"
+Q6="${TABLE}_q6"
 
 $CLICKHOUSE_CLIENT -m --query "
 $ENABLE_STATS;
@@ -31,130 +40,103 @@ INSERT INTO $TABLE SELECT
 FROM numbers(100000);
 "
 
-# ---- Test 1: All predicate classes ----
+# Q1: simple equality → ~10% selectivity, non-empty predicate_expression
+$CLICKHOUSE_CLIENT --query_id="$Q1" --query "$ENABLE_STATS; SELECT * FROM $TABLE WHERE status = 'active' FORMAT Null"
 
+# Q2: 100% selectivity (all rows pass)
+$CLICKHOUSE_CLIENT --query_id="$Q2" --query "$ENABLE_STATS; SELECT * FROM $TABLE WHERE id >= 0 FORMAT Null"
+
+# Q3: 0% selectivity (no rows pass)
+$CLICKHOUSE_CLIENT --query_id="$Q3" --query "$ENABLE_STATS; SELECT * FROM $TABLE WHERE status = 'nonexistent' FORMAT Null"
+
+# Q4: multi-column predicate is still logged (expression captures it)
 $CLICKHOUSE_CLIENT -m --query "
-$ENABLE_STATS; SELECT * FROM $TABLE WHERE status = 'active' FORMAT Null;
-$ENABLE_STATS; SELECT * FROM $TABLE WHERE score > 5000.0 FORMAT Null;
-$ENABLE_STATS; SELECT * FROM $TABLE WHERE id IN (1, 2, 3, 4, 5) FORMAT Null;
-$ENABLE_STATS; SELECT * FROM $TABLE WHERE status LIKE '%act%' FORMAT Null;
-$ENABLE_STATS; SELECT * FROM $TABLE WHERE tag IS NULL FORMAT Null;
-SYSTEM FLUSH LOGS predicate_statistics_log;
+DROP TABLE IF EXISTS $TABLE_MC;
+CREATE TABLE $TABLE_MC (id UInt64, score Float64) ENGINE = MergeTree ORDER BY id
+SETTINGS index_granularity = 8192, min_bytes_for_wide_part = 0;
+INSERT INTO $TABLE_MC SELECT number, number * 0.5 FROM numbers(1000);
 "
+$CLICKHOUSE_CLIENT --query_id="$Q4" --query "$ENABLE_STATS; SELECT * FROM $TABLE_MC WHERE id > score FORMAT Null"
 
-echo '--- predicate classes ---'
+# Q5: sample_rate = 0 → nothing logged
+$CLICKHOUSE_CLIENT -m --query "
+DROP TABLE IF EXISTS $TABLE_OFF;
+CREATE TABLE $TABLE_OFF (id UInt64, status String) ENGINE = MergeTree ORDER BY id
+SETTINGS index_granularity = 8192, min_bytes_for_wide_part = 0;
+INSERT INTO $TABLE_OFF SELECT number, 'x' FROM numbers(1000);
+"
+$CLICKHOUSE_CLIENT --query_id="$Q5" --query "SET predicate_statistics_sample_rate = 0, optimize_move_to_prewhere = 1, query_plan_optimize_prewhere = 1; SELECT * FROM $TABLE_OFF WHERE status = 'x' FORMAT Null"
+
+# Q6: conjunction split across multiple prewhere steps — total_selectivity is consistent and low
+$CLICKHOUSE_CLIENT --query_id="$Q6" --query "$ENABLE_STATS_MULTI_STEP; SELECT * FROM $TABLE WHERE status = 'active' AND category = 'cat_a' FORMAT Null"
+
+$CLICKHOUSE_CLIENT --query "SYSTEM FLUSH LOGS predicate_statistics_log"
+
+# Q1: equality ~10% selectivity, predicate_expression is not empty
+echo '--- q1 equality selectivity ~10% ---'
 $CLICKHOUSE_CLIENT -m --query "
 SELECT
-    column_name,
-    predicate_class,
-    function_name,
+    min(length(predicate_expression)) > 0 AS has_expr,
     sum(input_rows) > 0 AS has_input,
-    sum(passed_rows) > 0 AS has_passed
+    sum(passed_rows) > 0 AS has_passed,
+    round(sum(passed_rows) / sum(input_rows), 1) AS sel
 FROM system.predicate_statistics_log
-WHERE table = '$TABLE' AND column_name != ''
-GROUP BY column_name, predicate_class, function_name
-ORDER BY column_name, predicate_class, function_name;
+WHERE table = '$TABLE' AND query_id = '$Q1' AND predicate_expression != '';
 "
 
-# ---- Test 2: 100% selectivity (all rows pass) ----
-
-$CLICKHOUSE_CLIENT -m --query "
-$ENABLE_STATS; SELECT * FROM $TABLE WHERE id >= 0 FORMAT Null;
-SYSTEM FLUSH LOGS predicate_statistics_log;
-"
-
-echo '--- 100% selectivity ---'
-$CLICKHOUSE_CLIENT -m --query "
-SELECT
-    round(max(filter_selectivity), 1) AS sel
+# Q2: 100% selectivity
+echo '--- q2 100% selectivity ---'
+$CLICKHOUSE_CLIENT --query "
+SELECT round(max(filter_selectivity), 1) AS sel
 FROM system.predicate_statistics_log
-WHERE table = '$TABLE' AND column_name = 'id' AND function_name = 'greaterOrEquals';
+WHERE table = '$TABLE' AND query_id = '$Q2' AND predicate_expression != '';
 "
 
-# ---- Test 3: 0% selectivity (no rows pass) ----
-
-$CLICKHOUSE_CLIENT -m --query "
-$ENABLE_STATS; SELECT * FROM $TABLE WHERE status = 'nonexistent' FORMAT Null;
-SYSTEM FLUSH LOGS predicate_statistics_log;
-"
-
-echo '--- 0% selectivity ---'
+# Q3: 0% selectivity
+echo '--- q3 0% selectivity ---'
 $CLICKHOUSE_CLIENT -m --query "
 SELECT
     sum(input_rows) > 0 AS has_input,
     sum(passed_rows) = 0 AS zero_passed
 FROM system.predicate_statistics_log
-WHERE table = '$TABLE' AND column_name = 'status' AND function_name = 'equals'
-    AND passed_rows = 0;
+WHERE table = '$TABLE' AND query_id = '$Q3' AND predicate_expression != '';
 "
 
-# ---- Test 4: Multi-column predicate (a > b) should produce no log entries ----
-
-TABLE_MC="${TABLE}_mc"
-$CLICKHOUSE_CLIENT -m --query "
-$ENABLE_STATS;
-DROP TABLE IF EXISTS $TABLE_MC;
-CREATE TABLE $TABLE_MC (id UInt64, score Float64) ENGINE = MergeTree ORDER BY id
-SETTINGS index_granularity = 8192, min_bytes_for_wide_part = 0;
-INSERT INTO $TABLE_MC SELECT number, number * 0.5 FROM numbers(1000);
-$ENABLE_STATS; SELECT * FROM $TABLE_MC WHERE id > score FORMAT Null;
-SYSTEM FLUSH LOGS predicate_statistics_log;
-"
-
-echo '--- multi-column skipped ---'
-$CLICKHOUSE_CLIENT --query "SELECT count() = 0 AS skipped FROM system.predicate_statistics_log WHERE table = '$TABLE_MC' AND column_name != ''"
-
-# ---- Test 5: predicate_statistics_sample_rate = 0 → nothing logged ----
-
-TABLE2="${TABLE}_disabled"
-$CLICKHOUSE_CLIENT -m --query "
-SET predicate_statistics_sample_rate = 0, optimize_move_to_prewhere = 1, query_plan_optimize_prewhere = 1;
-DROP TABLE IF EXISTS $TABLE2;
-CREATE TABLE $TABLE2 (id UInt64, status String) ENGINE = MergeTree ORDER BY id
-SETTINGS index_granularity = 8192, min_bytes_for_wide_part = 0;
-INSERT INTO $TABLE2 SELECT number, 'x' FROM numbers(1000);
-SELECT * FROM $TABLE2 WHERE status = 'x' FORMAT Null;
-SYSTEM FLUSH LOGS predicate_statistics_log;
-"
-
-echo '--- disabled ---'
-$CLICKHOUSE_CLIENT --query "SELECT count() = 0 AS nothing_logged FROM system.predicate_statistics_log WHERE table = '$TABLE2'"
-
-# ---- Test 6: filter_expression is not empty ----
-
-echo '--- filter_expression ---'
-$CLICKHOUSE_CLIENT -m --query "
-SELECT
-    length(filter_expression) > 0 AS has_expr
+# Q4: multi-column predicate logged with non-empty predicate_expression
+echo '--- q4 multi-column logged ---'
+$CLICKHOUSE_CLIENT --query "
+SELECT count() > 0 AS logged
 FROM system.predicate_statistics_log
-WHERE table = '$TABLE' AND column_name != ''
-LIMIT 1;
+WHERE table = '$TABLE_MC' AND query_id = '$Q4' AND predicate_expression != '';
 "
 
-# ---- Test 7: total_selectivity in conjunction ----
-
-$CLICKHOUSE_CLIENT -m --query "
-$ENABLE_STATS_SINGLE_STEP; SELECT * FROM $TABLE WHERE status = 'active' AND category = 'cat_a' FORMAT Null;
-SYSTEM FLUSH LOGS predicate_statistics_log;
+# Q5: disabled — nothing logged
+echo '--- q5 disabled ---'
+$CLICKHOUSE_CLIENT --query "
+SELECT count() = 0 AS nothing_logged
+FROM system.predicate_statistics_log
+WHERE table = '$TABLE_OFF' AND query_id = '$Q5';
 "
 
-echo '--- conjunction total_selectivity ---'
+# filter_expression (whole prewhere DAG dump) is not empty
+echo '--- filter_expression ---'
+$CLICKHOUSE_CLIENT --query "
+SELECT min(length(filter_expression)) > 0 AS has_expr
+FROM system.predicate_statistics_log
+WHERE table = '$TABLE' AND predicate_expression != '';
+"
+
+# Q6: conjunction — total_selectivity consistent across step rows and low
+echo '--- q6 conjunction total_selectivity ---'
 $CLICKHOUSE_CLIENT -m --query "
 SELECT
-    count() >= 2 AS has_atoms,
     round(min(total_selectivity), 2) = round(max(total_selectivity), 2) AS same_whole_sel,
     min(total_selectivity) < 0.1 AS selective
 FROM system.predicate_statistics_log
-WHERE table = '$TABLE' AND column_name != ''
-    AND query_id IN (
-        SELECT query_id FROM system.predicate_statistics_log
-        WHERE table = '$TABLE' AND column_name != ''
-        GROUP BY query_id HAVING countDistinct(column_name) >= 2
-    );
+WHERE table = '$TABLE' AND query_id = '$Q6' AND predicate_expression != '';
 "
 
-# ---- Test 8: Selectivity values are sane (between 0 and 1) ----
-
+# Selectivity bounds
 echo '--- selectivity bounds ---'
 $CLICKHOUSE_CLIENT -m --query "
 SELECT
@@ -163,19 +145,17 @@ SELECT
     min(total_selectivity) >= 0 AS total_min_ok,
     max(total_selectivity) <= 1 AS total_max_ok
 FROM system.predicate_statistics_log
-WHERE table = '$TABLE' AND column_name != '';
+WHERE table = '$TABLE' AND predicate_expression != '';
 "
 
-# ---- Test 9: passed_rows <= input_rows always ----
-
+# passed_rows <= input_rows invariant
 echo '--- passed <= input ---'
-$CLICKHOUSE_CLIENT -m --query "
+$CLICKHOUSE_CLIENT --query "
 SELECT count() = 0 AS ok
 FROM system.predicate_statistics_log
 WHERE table = '$TABLE' AND passed_rows > input_rows;
 "
 
-# ---- Cleanup ----
 $CLICKHOUSE_CLIENT --query "DROP TABLE $TABLE"
-$CLICKHOUSE_CLIENT --query "DROP TABLE IF EXISTS $TABLE2"
+$CLICKHOUSE_CLIENT --query "DROP TABLE IF EXISTS $TABLE_OFF"
 $CLICKHOUSE_CLIENT --query "DROP TABLE IF EXISTS $TABLE_MC"

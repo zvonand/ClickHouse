@@ -20,10 +20,8 @@ struct PredicateStatisticsLogElement
     String query_id;
     String filter_expression;
 
-    /// atom metadata
-    String column_name;
-    String predicate_class;       /// "Equality", "Range", "In", "LikeSubstring", "IsNull", "Other"
-    String function_name;         /// "equals", "less", ...
+    /// whole filter expression handled by this step
+    String predicate_expression;
 
     /// this step's selectivity
     UInt64 input_rows{};

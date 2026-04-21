@@ -1,21 +1,17 @@
---- predicate classes ---
-id	In	in	1	1
-score	Range	greater	1	1
-status	Equality	equals	1	1
-status	LikeSubstring	like	1	1
-tag	IsNull	isNull	1	1
---- 100% selectivity ---
+--- q1 equality selectivity ~10% ---
+1	1	1	0.1
+--- q2 100% selectivity ---
 1
---- 0% selectivity ---
+--- q3 0% selectivity ---
 1	1
---- multi-column skipped ---
+--- q4 multi-column logged ---
 1
---- disabled ---
+--- q5 disabled ---
 1
 --- filter_expression ---
 1
---- conjunction total_selectivity ---
-1	1	1
+--- q6 conjunction total_selectivity ---
+1	1
 --- selectivity bounds ---
 1	1	1	1
 --- passed <= input ---

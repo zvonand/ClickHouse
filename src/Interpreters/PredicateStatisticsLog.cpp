@@ -71,22 +71,10 @@ ColumnsDescription PredicateStatisticsLogElement::getColumnsDescription()
             "Full filter expression pushed to the source step."
         },
         {
-            "column_name",
-            lc_string,
+            "predicate_expression",
+            std::make_shared<DataTypeString>(),
             parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Column referenced by a predicate atom extracted from the filter expression."
-        },
-        {
-            "predicate_class",
-            lc_string,
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Classification of the predicate atom: Equality, Range, In, LikeSubstring, IsNull, Other."
-        },
-        {
-            "function_name",
-            lc_string,
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "DAG function name of the predicate atom, e.g. equals, less, in."
+            "Whole filter expression handled by this prewhere/filter step (ActionsDAG dump)."
         },
         {
             "input_rows",
@@ -170,10 +158,7 @@ void PredicateStatisticsLogElement::appendToBlock(MutableColumns & columns) cons
     columns[i++]->insert(table);
     columns[i++]->insert(query_id);
     columns[i++]->insert(filter_expression);
-
-    columns[i++]->insert(column_name);
-    columns[i++]->insert(predicate_class);
-    columns[i++]->insert(function_name);
+    columns[i++]->insert(predicate_expression);
 
     columns[i++]->insert(input_rows);
     columns[i++]->insert(passed_rows);

@@ -303,8 +303,6 @@ void optimizeTreeSecondPass(
                 tryMakeDistributedSorting(frame_node, nodes, optimization_settings);
                 tryMakeDistributedRead(frame_node, nodes, optimization_settings);
             }
-            if (optimization_settings.read_in_order)
-                optimizeMergingSortedBuffering(frame_node);
         });
 
     stack.push_back({.node = &root});

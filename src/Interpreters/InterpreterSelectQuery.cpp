@@ -3259,9 +3259,19 @@ void InterpreterSelectQuery::executeMergeSorted(QueryPlan & query_plan, const st
     const UInt64 limit = getLimitForSorting(query, context);
     const auto exact_rows_before_limit = context->getSettingsRef()[Setting::exact_rows_before_limit];
 
+    SortingStep::Settings sort_settings(context->getSettingsRef());
+
     auto merging_sorted = std::make_unique<SortingStep>(
-        query_plan.getCurrentHeader(), std::move(sort_description), SortingStep::Settings(context->getSettingsRef()), limit, exact_rows_before_limit);
+        query_plan.getCurrentHeader(), std::move(sort_description), sort_settings, limit, exact_rows_before_limit);
     merging_sorted->setStepDescription(fmt::format("Merge sorted streams {}", description), options.max_step_description_length);
+
+    /// Buffer incoming pre-sorted streams to decouple the readers from the merger.
+    /// Mirrors the single-node read-in-order case in optimizeReadInOrder.
+    if (limit == 0
+        && sort_settings.read_in_order_use_buffering
+        && !sort_settings.read_in_order_use_virtual_row_per_block)
+        merging_sorted->enableBuffering();
+
     query_plan.addStep(std::move(merging_sorted));
 }
 

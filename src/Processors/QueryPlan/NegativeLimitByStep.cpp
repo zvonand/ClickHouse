@@ -47,7 +47,7 @@ void NegativeLimitByStep::transformPipeline(QueryPipelineBuilder & pipeline, con
             return nullptr;
 
         if (in_order)
-            return std::make_shared<NegativeLimitByInOrderTransform>(header, group_length, group_offset, columns);
+            return std::make_shared<NegativeLimitBySortedStreamTransform>(header, group_length, group_offset, columns);
 
         return std::make_shared<NegativeLimitByTransform>(header, group_length, group_offset, columns);
     });

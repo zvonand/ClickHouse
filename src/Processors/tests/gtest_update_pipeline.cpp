@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <Processors/Executors/PipelineExecutor.h>
+#include <Processors/Executors/PullingAsyncPipelineExecutor.h>
 #include <Processors/Executors/PullingPipelineExecutor.h>
 #include <Processors/IProcessor.h>
 #include <Processors/ISource.h>
@@ -206,4 +207,67 @@ TEST(Processors, UpdatePipeline)
     /// Input slot was reused, not grown.
     EXPECT_EQ(coordinator->getInputs().size(), 1u);
     EXPECT_EQ(coordinator->getOutputs().size(), 1u);
+}
+
+TEST(Processors, UpdatePipelineMultipleCoordinatorsMultithreaded)
+{
+    constexpr size_t num_streams = 16;
+    constexpr size_t total_pulls = 1000;
+    auto header = makeHeader();
+
+    Pipes pipes;
+    std::vector<std::shared_ptr<DynamicSourceCoordinator>> coordinators;
+    coordinators.reserve(num_streams);
+    for (size_t i = 0; i < num_streams; ++i)
+    {
+        auto coordinator = std::make_shared<DynamicSourceCoordinator>(header);
+        coordinators.push_back(coordinator);
+        pipes.emplace_back(std::move(coordinator));
+    }
+
+    auto united = Pipe::unitePipes(std::move(pipes));
+    united.resize(1, /*strict=*/false, /*min_outstreams_per_resize_after_split=*/0);
+
+    QueryPipeline pipeline(std::move(united));
+    pipeline.setNumThreads(num_streams);
+
+    size_t pulled = 0;
+    {
+        PullingAsyncPipelineExecutor executor(pipeline);
+
+        Chunk chunk;
+        while (pulled < total_pulls && executor.pull(chunk))
+        {
+            if (!chunk)
+                continue;
+            ASSERT_EQ(chunk.getNumRows(), 1u);
+            ASSERT_EQ(chunk.getNumColumns(), 1u);
+            ++pulled;
+        }
+
+        executor.cancel();
+    }
+
+    EXPECT_EQ(pulled, total_pulls);
+
+    /// Every pulled chunk came from exactly one cycle of some coordinator.
+    size_t produced = 0;
+    for (const auto & coordinator : coordinators)
+    {
+        produced += coordinator->totalSourcesCreated();
+        EXPECT_EQ(coordinator->getInputs().size(), 1u);
+        EXPECT_EQ(coordinator->getOutputs().size(), 1u);
+
+        /// At most one source (the currently-live one) is still alive per coordinator.
+        size_t alive = 0;
+        for (size_t i = 0; i < coordinator->totalSourcesCreated(); ++i)
+            if (!coordinator->getSourceWeak(i).expired())
+                ++alive;
+        EXPECT_LE(alive, 1u);
+    }
+    EXPECT_GE(produced, total_pulls);
+
+    /// Print statistics
+    for (size_t i = 0; i < coordinators.size(); ++i)
+        std::cout << "Coordinator #" << i << " Created Sources: " << coordinators.at(i)->totalSourcesCreated() << std::endl;
 }

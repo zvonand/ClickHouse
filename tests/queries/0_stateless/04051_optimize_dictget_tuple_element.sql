@@ -95,6 +95,13 @@ SELECT 'dictGetOrDefault with non-rewritable default';
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), materialize(('MCountry', 'MCity'))).1;
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), materialize(('MCountry', 'MCity'))).2;
 
+-- Test dictGetOrDefault with CTE alias default (the alias references a constant tuple expression, not a ConstantNode)
+SELECT 'dictGetOrDefault with CTE alias default';
+WITH ('CTECountry', 'CTECity') AS d
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), d).1;
+WITH ('CTECountry', 'CTECity') AS d
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), d).2;
+
 -- Test shared-parent scenario: ORDER BY ALL references the SELECT expression, so the tupleElement
 -- (and its inner dictGet) node is shared between SELECT and ORDER BY. The pass must not mutate the
 -- shared dictGet in place — that would leave the other parent's tupleElement wrapping a scalar.

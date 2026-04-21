@@ -40,6 +40,9 @@ FuncCity
 dictGetOrDefault with non-rewritable default
 MCountry
 MCity
+dictGetOrDefault with CTE alias default
+CTECountry
+CTECity
 shared tupleElement across SELECT and ORDER BY ALL
 New York
 Paris

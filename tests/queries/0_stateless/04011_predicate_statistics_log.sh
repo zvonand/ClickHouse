@@ -56,7 +56,7 @@ CREATE TABLE $TABLE_MC (id UInt64, score Float64) ENGINE = MergeTree ORDER BY id
 SETTINGS index_granularity = 8192, min_bytes_for_wide_part = 0;
 INSERT INTO $TABLE_MC SELECT number, number * 0.5 FROM numbers(1000);
 "
-$CLICKHOUSE_CLIENT --query_id="$Q4" --query "$ENABLE_STATS; SELECT * FROM $TABLE_MC WHERE id > score FORMAT Null"
+$CLICKHOUSE_CLIENT --query_id="$Q4" --query "$ENABLE_STATS; SELECT * FROM $TABLE_MC PREWHERE id > score FORMAT Null"
 
 # Q5: sample_rate = 0 → nothing logged
 $CLICKHOUSE_CLIENT -m --query "

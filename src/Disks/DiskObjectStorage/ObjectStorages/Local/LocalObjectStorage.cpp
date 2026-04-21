@@ -285,13 +285,21 @@ void LocalObjectStorage::listObjects(const std::string & path, RelativePathsWith
     if (!fs::exists(path) || !fs::is_directory(path))
         return;
 
-    for (const auto & entry : fs::directory_iterator(path))
+    /// Walk the directory tree iteratively via `recursive_directory_iterator`.
+    /// Previously this was implemented as self-recursion, which could overflow the
+    /// stack when the directory tree was deeper than the C++ thread stack could
+    /// accommodate (especially under ThreadFuzzer / sanitizer / debug builds where
+    /// each stack frame is large). A symlink cycle inside `path` would follow the
+    /// symlink via `entry.is_directory()` and recurse ~40 levels before the kernel
+    /// returned `ELOOP`, which was enough to crash a debug server.
+    ///
+    /// The default `recursive_directory_iterator` does NOT follow directory symlinks,
+    /// which makes the walk safe against symlink cycles and keeps the stack depth
+    /// constant regardless of the filesystem topology.
+    for (const auto & entry : fs::recursive_directory_iterator(path))
     {
         if (entry.is_directory())
-        {
-            listObjects(entry.path(), children, 0);
             continue;
-        }
 
         children.emplace_back(std::make_shared<RelativePathWithMetadata>(entry.path(), getObjectMetadata(entry.path(), false)));
     }

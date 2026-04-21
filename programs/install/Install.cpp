@@ -104,6 +104,25 @@ namespace po = boost::program_options;
 namespace fs = std::filesystem;
 
 
+/// POSIX-compliant single-quote escaping: wrap in single quotes and replace any
+/// embedded single quote with '\''. Safe against arbitrary byte content.
+static std::string shellQuote(std::string_view s)
+{
+    std::string out;
+    out.reserve(s.size() + 2);
+    out.push_back('\'');
+    for (char c : s)
+    {
+        if (c == '\'')
+            out.append("'\\''");
+        else
+            out.push_back(c);
+    }
+    out.push_back('\'');
+    return out;
+}
+
+
 static auto executeScript(const std::string & command, bool throw_on_error = false)
 {
     auto sh = ShellCommand::execute(command);
@@ -1051,7 +1070,7 @@ namespace
         }
 
         std::string command = fmt::format("{} --config-file {} --pid-file {} --daemon",
-            executable.string(), config.string(), pid_file.string());
+            shellQuote(executable.string()), shellQuote(config.string()), shellQuote(pid_file.string()));
 
         if (!user.empty())
         {
@@ -1059,7 +1078,8 @@ namespace
             {
                 /// Sometimes there is no sudo available like in some Docker images.
                 /// We will use clickhouse su instead.
-                command = fmt::format("'{}' su '{}:{}' {}", binary.string(), user, group, command);
+                command = fmt::format("{} su {} {}",
+                    shellQuote(binary.string()), shellQuote(user + ":" + group), command);
             }
             else
             {
@@ -1067,7 +1087,7 @@ namespace
                 /// that's why we are using it instead of the 'clickhouse su' tool.
                 /// by default, sudo resets all the ENV variables, but we should preserve
                 /// the values /etc/default/clickhouse in /etc/init.d/clickhouse file
-                command = fmt::format("sudo --preserve-env -u '{}' {}", user, command);
+                command = fmt::format("sudo --preserve-env -u {} {}", shellQuote(user), command);
             }
         }
 

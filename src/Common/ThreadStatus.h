@@ -36,7 +36,14 @@ struct PerfEventsCounters;
 class InternalTextLogsQueue;
 struct ViewRuntimeData;
 class QueryViewsLog;
+struct Settings;
 enum class ThreadName : uint8_t;
+
+/// Apply memory-profiler / fault-injection / soft-limit related query settings to a `MemoryTracker`.
+/// Query-level sample settings (`memory_profiler_*`) are pushed only when they were actually changed
+/// from their default — otherwise the tracker is left at `sample_probability == -1` so that
+/// `getResolvedSampleConfig` transparently falls through to `total_memory_tracker_sample_probability`.
+void configureMemoryTrackerFromSettings(bool has_trace_collector, MemoryTracker & memory_tracker, const Settings & settings);
 
 using InternalTextLogsQueuePtr = std::shared_ptr<InternalTextLogsQueue>;
 using InternalTextLogsQueueWeakPtr = std::weak_ptr<InternalTextLogsQueue>;

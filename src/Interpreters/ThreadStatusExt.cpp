@@ -75,11 +75,6 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-namespace
-{
-
-using namespace DB;
-
 void configureMemoryTrackerFromSettings(bool has_trace_collector, MemoryTracker & memory_tracker, const Settings & settings)
 {
     if (has_trace_collector)
@@ -101,8 +96,6 @@ void configureMemoryTrackerFromSettings(bool has_trace_collector, MemoryTracker 
         memory_tracker.setFaultProbability(settings[Setting::memory_tracker_fault_probability]);
 
     memory_tracker.setSoftLimit(settings[Setting::memory_overcommit_ratio_denominator]);
-}
-
 }
 
 ThreadGroup::ThreadGroup(ContextPtr query_context_, Int32 os_threads_nice_value_, FatalErrorCallback fatal_error_callback_)

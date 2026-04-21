@@ -174,7 +174,7 @@ TEST(LocalObjectStorage, ListObjectsHandlesPathWithEmbeddedNul)
     {
         storage->listObjects(nul_injected, children, /* max_keys */ 0);
     }
-    catch (const fs::filesystem_error &)
+    catch (const fs::filesystem_error &) // NOLINT(bugprone-empty-catch)
     {
         /// Acceptable — the NUL-injected path produced an invalid argument
         /// for a downstream syscall. Importantly, we reached the catch,

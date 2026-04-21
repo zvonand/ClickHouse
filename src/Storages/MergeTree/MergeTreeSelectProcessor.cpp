@@ -202,6 +202,7 @@ PrewhereExprInfo MergeTreeSelectProcessor::getPrewhereActions(
             .need_filter = true,
             .perform_alter_conversions = true,
             .mutation_version = std::nullopt,
+            .predicate_expression = {},
         };
 
         prewhere_actions.steps.emplace_back(std::make_shared<PrewhereExprStep>(std::move(row_level_filter_step)));
@@ -230,6 +231,7 @@ PrewhereExprInfo MergeTreeSelectProcessor::getPrewhereActions(
             .need_filter = prewhere_info->need_filter,
             .perform_alter_conversions = true,
             .mutation_version = std::nullopt,
+            .predicate_expression = {},
         };
 
         prewhere_actions.steps.emplace_back(std::make_shared<PrewhereExprStep>(std::move(prewhere_step)));

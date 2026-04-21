@@ -361,6 +361,7 @@ PrewhereExprStepPtr createLightweightDeleteStep(bool remove_filter_column)
         .need_filter = true,
         .perform_alter_conversions = true,
         .mutation_version = std::nullopt,
+        .predicate_expression = {},
     };
 
     return std::make_shared<PrewhereExprStep>(std::move(step));

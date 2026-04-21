@@ -5,9 +5,9 @@
 # LOGICAL_ERROR exception ("Can't extract iceberg table state from storage
 # snapshot") when no SELECT or INSERT preceded the mutation in the same server
 # lifetime.
-# The root cause was that StorageObjectStorage::mutate() did not call
-# updateExternalDynamicMetadataIfExists() before reading data, so the storage
-# snapshot lacked the datalake_table_state required by IcebergMetadata::iterate().
+# The root cause was that `StorageObjectStorage::mutate` did not call
+# `updateExternalDynamicMetadataIfExists` before reading data, so the storage
+# snapshot lacked the `datalake_table_state` required by `IcebergMetadata::iterate`.
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
@@ -25,18 +25,15 @@ ${CLICKHOUSE_CLIENT} --query "
 # Populate the Iceberg data files on disk.
 ${CLICKHOUSE_CLIENT} --allow_insert_into_iceberg=1 --query "INSERT INTO ${TABLE} VALUES ('a')"
 
-# Drop and re-create the table to get a fresh storage object whose in-memory
-# metadata has no datalake_table_state loaded (simulates a server restart).
-# The Iceberg data files remain on disk, so the second CREATE must use
-# IF NOT EXISTS to skip writing initial metadata and reuse the existing files.
-${CLICKHOUSE_CLIENT} --query "DROP TABLE ${TABLE}"
-${CLICKHOUSE_CLIENT} --query "
-    CREATE TABLE IF NOT EXISTS ${TABLE} (c0 String)
-    ENGINE = IcebergLocal('${TABLE_PATH}', 'Parquet')
-"
+# DETACH + ATTACH rebuilds the storage object from the stored CREATE statement,
+# so its in-memory metadata has no `datalake_table_state` loaded — the same
+# state as after a server restart. The Iceberg files on disk are preserved.
+${CLICKHOUSE_CLIENT} --query "DETACH TABLE ${TABLE}"
+${CLICKHOUSE_CLIENT} --query "ATTACH TABLE ${TABLE}"
 
-# This mutation is the first operation on the freshly created table — no prior
-# SELECT or INSERT has called updateExternalDynamicMetadataIfExists().
+# This mutation is the first data-reading operation on the freshly attached
+# storage — no prior SELECT or INSERT has called
+# `updateExternalDynamicMetadataIfExists`.
 # Without the fix, this throws a LOGICAL_ERROR exception.
 ${CLICKHOUSE_CLIENT} --allow_insert_into_iceberg=1 --query "ALTER TABLE ${TABLE} UPDATE c0 = 'b' WHERE TRUE"
 

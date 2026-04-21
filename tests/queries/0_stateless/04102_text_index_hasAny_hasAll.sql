@@ -4,7 +4,7 @@
 --     TextSearchQuery can be built and the Exact direct-read optimization applies.
 --   * Other tokenizers split each needle element into further tokens and
 --     produce one TextSearchQuery per element, evaluated as OR (`hasAny`, reusing
---     FUNCTION_IN) or AND (`hasAll`, new FUNCTION_HAS_ALL_ELEMENTS).
+--     FUNCTION_HAS_ANY_ELEMENTS) or AND (`hasAll`, new FUNCTION_HAS_ALL_ELEMENTS).
 
 SET enable_analyzer = 1;
 

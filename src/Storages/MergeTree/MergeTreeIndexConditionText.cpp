@@ -786,7 +786,7 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
         if (is_array_tokenizer && !has_preprocessor)
         {
             /// Fold all needle elements into a single TextSearchQuery.
-            /// This unlocks exact direct read optimization.s
+            /// This unlocks exact direct read optimizations for hasAny and hasAll.
             std::vector<String> tokens;
             tokens.reserve(elements.size());
 

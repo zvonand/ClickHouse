@@ -84,6 +84,11 @@ bool IParserKQLFunction::directMapping(
             out.append(*argument);
         }
 
+        if (out.size() > DBMS_DEFAULT_MAX_QUERY_SIZE)
+            throw Exception(ErrorCodes::SYNTAX_ERROR,
+                "KQL expression size {} exceeds maximum allowed size {}",
+                out.size(), DBMS_DEFAULT_MAX_QUERY_SIZE);
+
         if (pos->type == TokenType::ClosingRoundBracket)
         {
             if (!argument_count_interval.IsWithinBounds(argument_count))
@@ -200,14 +205,14 @@ String IParserKQLFunction::getConvertedArgument(const String & fn_name, IParser:
                         ++pos;
                     }
                     token = fmt::format("[ {0} >=0 ? {0} + 1 : {0}]", array_index);
-
-                    if (token.size() > DBMS_DEFAULT_MAX_QUERY_SIZE)
-                        throw Exception(ErrorCodes::SYNTAX_ERROR,
-                            "KQL array index expression size {} exceeds maximum allowed size {}",
-                            token.size(), DBMS_DEFAULT_MAX_QUERY_SIZE);
                 }
                 else
                     token = String(pos->begin, pos->end);
+
+                if (token.size() > DBMS_DEFAULT_MAX_QUERY_SIZE)
+                    throw Exception(ErrorCodes::SYNTAX_ERROR,
+                        "KQL expression size {} exceeds maximum allowed size {}",
+                        token.size(), DBMS_DEFAULT_MAX_QUERY_SIZE);
 
                 tokens.push_back(token);
             }
@@ -231,7 +236,7 @@ String IParserKQLFunction::getConvertedArgument(const String & fn_name, IParser:
         converted_arg.append((converted_arg.empty() ? "" : " ") + token);
         if (converted_arg.size() > DBMS_DEFAULT_MAX_QUERY_SIZE)
             throw Exception(ErrorCodes::SYNTAX_ERROR,
-                "KQL array index expression size {} exceeds maximum allowed size {}",
+                "KQL sexpression size {} exceeds maximum allowed size {}",
                 converted_arg.size(), DBMS_DEFAULT_MAX_QUERY_SIZE);
     }
 

@@ -21,6 +21,13 @@ SET enable_analyzer = 1;
 SET allow_prefetched_read_pool_for_remote_filesystem = 0;
 SET allow_prefetched_read_pool_for_local_filesystem = 0;
 
+-- Case 0: no row policies
+SELECT 'no_row_policy';
+SELECT *
+FROM (EXPLAIN PIPELINE SELECT id FROM t_row_policy_limit LIMIT 1
+      SETTINGS max_threads = 4)
+WHERE explain LIKE '%Limit%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
+
 -- Case 1: row policy prevents trivial-limit, keeps multiple streams.
 DROP ROW POLICY IF EXISTS 04099_p1 ON t_row_policy_limit;
 CREATE ROW POLICY 04099_p1 ON t_row_policy_limit USING id < 500 AS permissive TO ALL;
@@ -33,7 +40,20 @@ WHERE explain LIKE '%Limit%' OR explain LIKE '%ReadFromMergeTree%' OR explain LI
 
 DROP ROW POLICY 04099_p1 ON t_row_policy_limit;
 
--- Case 2: additional_table_filters prevents trivial-limit.
+-- Case 2: always-true row policy adds no effective predicate, so the
+-- trivial-limit optimization must still fire (max_streams = 1).
+DROP ROW POLICY IF EXISTS 04099_p_true ON t_row_policy_limit;
+CREATE ROW POLICY 04099_p_true ON t_row_policy_limit USING 1 AS permissive TO ALL;
+
+SELECT 'row_policy_always_true';
+SELECT *
+FROM (EXPLAIN PIPELINE SELECT id FROM t_row_policy_limit LIMIT 1
+      SETTINGS max_threads = 4)
+WHERE explain LIKE '%Limit%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
+
+DROP ROW POLICY 04099_p_true ON t_row_policy_limit;
+
+-- Case 3: additional_table_filters prevents trivial-limit.
 SELECT 'additional_filter';
 SELECT *
 FROM (EXPLAIN PIPELINE SELECT id FROM t_row_policy_limit LIMIT 1

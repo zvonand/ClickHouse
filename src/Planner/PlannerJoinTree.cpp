@@ -827,8 +827,10 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
               * and also set the number of threads to 1.
               */
             auto storage_id = storage->getStorageID();
+            auto row_policy_filter = query_context->getRowPolicyFilter(
+                storage_id.getDatabaseName(), storage_id.getTableName(), RowPolicyFilterType::SELECT_FILTER);
             bool has_additional_filters = table_expression_query_info.additional_filter_ast
-                || !!query_context->getRowPolicyFilter(storage_id.getDatabaseName(), storage_id.getTableName(), RowPolicyFilterType::SELECT_FILTER);
+                || (row_policy_filter && !row_policy_filter->isAlwaysTrue());
             if (!has_additional_filters)
                 max_block_size_limited = mainQueryNodeBlockSizeByLimit(select_query_info);
             if (max_block_size_limited)

@@ -248,7 +248,7 @@ DataTypePtr IcebergSchemaProcessor::getSimpleType(const String & type_name)
     if (type_name == f_string || type_name == f_binary)
         return std::make_shared<DataTypeString>();
 
-    if (type_name.starts_with("f_geometry") || type_name.starts_with("f_geography"))
+    if (type_name.starts_with(f_geometry) || type_name.starts_with(f_geography))
         return DataTypeFactory::instance().get("Geometry");
     if (type_name == f_uuid)
         return std::make_shared<DataTypeUUID>();

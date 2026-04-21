@@ -1438,6 +1438,9 @@ static ColumnWithTypeAndName readNonNullableColumnFromArrowColumn(
         case arrow::Type::DICTIONARY:
         {
             auto & dict_info = dictionary_infos[column_name];
+            const bool is_lc_nullable = make_nullable_if_low_cardinality
+                || arrow_column->null_count() > 0
+                || (type_hint && type_hint->isLowCardinalityNullable());
 
             /// Load dictionary values only once and reuse it.
             if (!dict_info.values)
@@ -1475,11 +1478,11 @@ static ColumnWithTypeAndName readNonNullableColumnFromArrowColumn(
                     }
                 }
 
-                auto lc_type = std::make_shared<DataTypeLowCardinality>(make_nullable_if_low_cardinality ? makeNullable(dict_column.type) : dict_column.type);
+                auto lc_type = std::make_shared<DataTypeLowCardinality>(is_lc_nullable ? makeNullable(dict_column.type) : dict_column.type);
                 auto tmp_lc_column = lc_type->createColumn();
                 auto tmp_dict_column = IColumn::mutate(assert_cast<ColumnLowCardinality *>(tmp_lc_column.get())->getDictionaryPtr());
                 dynamic_cast<IColumnUnique *>(tmp_dict_column.get())->uniqueInsertRangeFrom(*dict_column.column, 0, dict_column.column->size());
-                size_t expected_dictionary_size = dict_column.column->size() + (dict_info.default_value_index == -1) + make_nullable_if_low_cardinality;
+                size_t expected_dictionary_size = dict_column.column->size() + (dict_info.default_value_index == -1) + is_lc_nullable;
                 if (tmp_dict_column->size() != expected_dictionary_size)
                 {
                     throw Exception(
@@ -1502,9 +1505,9 @@ static ColumnWithTypeAndName readNonNullableColumnFromArrowColumn(
             }
 
             auto arrow_indexes_column = std::make_shared<arrow::ChunkedArray>(indexes_array);
-            auto indexes_column = readColumnWithIndexesData(arrow_indexes_column, dict_info.default_value_index, dict_info.dictionary_size, make_nullable_if_low_cardinality);
+            auto indexes_column = readColumnWithIndexesData(arrow_indexes_column, dict_info.default_value_index, dict_info.dictionary_size, is_lc_nullable);
             auto lc_column = ColumnLowCardinality::create(dict_info.values->column, indexes_column, /*is_shared=*/true);
-            auto lc_type = std::make_shared<DataTypeLowCardinality>(make_nullable_if_low_cardinality ? makeNullable(dict_info.values->type) : dict_info.values->type);
+            auto lc_type = std::make_shared<DataTypeLowCardinality>(is_lc_nullable ? makeNullable(dict_info.values->type) : dict_info.values->type);
             return {std::move(lc_column), std::move(lc_type), column_name};
         }
 #    define DISPATCH(ARROW_NUMERIC_TYPE, CPP_NUMERIC_TYPE) \

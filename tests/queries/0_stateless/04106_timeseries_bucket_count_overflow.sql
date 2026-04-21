@@ -45,8 +45,10 @@ FROM ts_data_overflow_idx FORMAT Null;  -- { serverError BAD_ARGUMENTS }
 SELECT length(timeSeriesResampleToGridWithStaleness(toDateTime64(0, 0), toDateTime64(16777214, 0), 1, 1)(timestamp, value)) AS grid_len
 FROM ts_data_overflow_idx;
 
--- Case 5: UInt32 timestamp with huge UInt64 start (truncated to UInt32). Tests the sibling
--- code path for `TimestampType = UInt32`.
+-- Case 5: UInt32 timestamp path with a large-but-valid bucket count near the
+-- `MAX_BUCKET_COUNT` cap. Covers the sibling instantiation of the aggregate function with
+-- `TimestampType = UInt32` (via `toUnixTimestamp` of a `DateTime` column) to ensure the
+-- unsigned-arithmetic fix is exercised on that code path as well.
 DROP TABLE IF EXISTS ts_data_overflow_idx_u32;
 CREATE TABLE ts_data_overflow_idx_u32 (timestamp DateTime, value Float64) ENGINE = MergeTree ORDER BY tuple();
 INSERT INTO ts_data_overflow_idx_u32 VALUES ('2020-01-01 00:00:00', 1.0);

@@ -232,7 +232,8 @@ SELECT
     check_start_time,
     commit_sha AS commit,
     test_name AS test,
-    test_duration_ms AS ms
+    test_duration_ms AS ms,
+    report_url
 FROM {table}
 WHERE pull_request_number = 0
     AND check_name LIKE '{cn}'

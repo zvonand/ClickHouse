@@ -160,7 +160,7 @@ ExecutingGraph::UpdateNodeStatus ExecutingGraph::updatePipeline(boost::container
         return UpdateNodeStatus::Exception;
     }
 
-    bool is_cancelled = false;
+    IProcessor::CancelReason cancel_reason_if_cancelled = IProcessor::CancelReason::NotCancelled;
     std::unordered_set<Node *> removed_nodes;
     {
         std::lock_guard guard(processors_mutex);
@@ -179,7 +179,7 @@ ExecutingGraph::UpdateNodeStatus ExecutingGraph::updatePipeline(boost::container
             for (auto & processor : update.to_add)
                 processor->cancel(cancel_reason);
 
-            is_cancelled = true;
+            cancel_reason_if_cancelled = cancel_reason;
         }
     }
 
@@ -205,7 +205,7 @@ ExecutingGraph::UpdateNodeStatus ExecutingGraph::updatePipeline(boost::container
     }
 
     /// Record updated ports for each newly added edge for each processor and schedule it for prepare if something changed.
-    if (!is_cancelled)
+    if (cancel_reason_if_cancelled == IProcessor::CancelReason::NotCancelled || cancel_reason_if_cancelled == IProcessor::CancelReason::PartialResult)
     {
         for (auto & [updated_node, new_edges] : added_edges)
         {
@@ -223,7 +223,8 @@ ExecutingGraph::UpdateNodeStatus ExecutingGraph::updatePipeline(boost::container
         }
     }
 
-    if (is_cancelled)
+    /// If PartialResult was requested requested - continue normally
+    if (cancel_reason_if_cancelled != IProcessor::CancelReason::NotCancelled && cancel_reason_if_cancelled != IProcessor::CancelReason::PartialResult)
         return UpdateNodeStatus::Cancelled;
 
     return UpdateNodeStatus::Done;

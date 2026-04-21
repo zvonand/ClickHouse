@@ -371,7 +371,6 @@ distributed_cache_throw_on_error	0
 distributed_cache_use_clients_cache_for_read	1
 distributed_cache_use_clients_cache_for_write	0
 distributed_cache_wait_connection_from_pool_milliseconds	100
-distributed_cache_write_request_max_tries	10
 distributed_connections_pool_size	1024
 distributed_ddl_entry_format_version	5
 distributed_ddl_output_mode	throw
@@ -582,14 +581,12 @@ hnsw_candidate_list_size_for_search	256
 hsts_max_age	0
 http_connection_timeout	1
 http_headers_progress_interval_ms	100
-http_headers_read_timeout	30
 http_make_head_request	1
 http_max_chunk_size	107374182400
-http_max_field_name_size	4096
+http_max_field_name_size	131072
 http_max_field_value_size	131072
-http_max_fields	1000
+http_max_fields	1000000
 http_max_multipart_form_data_size	1073741824
-http_max_request_header_size	10485760
 http_max_request_param_data_size	10485760
 http_max_tries	10
 http_max_uri_size	1048576

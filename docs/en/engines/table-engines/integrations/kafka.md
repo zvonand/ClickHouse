@@ -274,11 +274,11 @@ When producing messages with `INSERT INTO`, the Kafka engine always uses a colum
 
 With `kafka_map_virtual_columns_on_write = 1`, the behaviour changes:
 
-- `_key` — mapped to the Kafka message key.
-- `_timestamp` — mapped to the Kafka message timestamp.
-- `_headers.name` (type `Array(String)`) and `_headers.value` (type `Array(String)`) — mapped to Kafka message headers. Each pair `(_headers.name[i], _headers.value[i])` becomes one Kafka header. If the two arrays have different lengths, only the common prefix is used.
+- `_key` (type `String`) — mapped to the Kafka message key.
+- `_timestamp` (type `DateTime`) — mapped to the Kafka message timestamp.
+- `_headers.name` (type `Array(String)`) and `_headers.value` (type `Array(String)`) — mapped to Kafka message headers. Each pair `(_headers.name[i], _headers.value[i])` becomes one Kafka header. Because `_headers.name` and `_headers.value` share the `_headers` Nested prefix, ClickHouse requires both arrays to have the same size for every row.
 
-All four columns are **excluded from the message payload** in this mode. This lets you reconstruct a Kafka message with the original key, timestamp and headers without polluting the payload with extra JSON fields (or extra columns in a row-based format).
+Columns with these names are **excluded from the message payload** only if their types match those listed above; otherwise they stay in the payload, so schemas that happen to reuse these names for unrelated data keep working.
 
 Example:
 

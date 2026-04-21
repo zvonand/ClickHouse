@@ -103,13 +103,10 @@ void KafkaProducer::produce(const String & message, size_t rows_in_message, cons
         const size_t names_start = last_row == 0 ? 0 : names_offsets[last_row - 1];
         const size_t names_end = names_offsets[last_row];
         const size_t values_start = last_row == 0 ? 0 : values_offsets[last_row - 1];
-        const size_t values_end = values_offsets[last_row];
 
-        const size_t names_size = names_end - names_start;
-        const size_t values_size = values_end - values_start;
-
-        /// Use the common prefix length; extra entries on either side are ignored.
-        const size_t headers_size = std::min(names_size, values_size);
+        /// `_headers.name` and `_headers.value` share the Nested prefix `_headers`, so
+        /// `NestedElementsValidationTransform` guarantees both arrays have equal sizes here.
+        const size_t headers_size = names_end - names_start;
 
         for (size_t i = 0; i < headers_size; ++i)
         {

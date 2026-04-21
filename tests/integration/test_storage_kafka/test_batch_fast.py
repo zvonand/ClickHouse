@@ -1931,8 +1931,8 @@ def test_kafka_produce_key_timestamp(kafka_cluster, create_query_generator, log_
 @pytest.mark.parametrize(
     "create_query_generator, log_line",
     [
-        (k.generate_new_create_table_query, "Saved offset 3"),
-        (k.generate_old_create_table_query, "Committed offset 3"),
+        (k.generate_new_create_table_query, "Saved offset 2"),
+        (k.generate_old_create_table_query, "Committed offset 2"),
     ],
 )
 def test_kafka_produce_virtual_columns_mapping(
@@ -1995,18 +1995,12 @@ def test_kafka_produce_virtual_columns_mapping(
             f"""INSERT INTO test.{kafka_table}_writer VALUES
                 ('{{"a": 2}}', 'k2', toDateTime(1577836802), [], [])"""
         )
-        # Row 3: mismatched header arrays — extra entries on either side are ignored.
-        instance.query(
-            f"""INSERT INTO test.{kafka_table}_writer VALUES
-                ('{{"a": 3}}', 'k3', toDateTime(1577836803), ['only_name'], [])"""
-        )
 
         instance.wait_for_log_line(log_line)
 
         expected = """\
 {"a": 1}	k1	1577836801	['h1','h2']	['v1','v2']
 {"a": 2}	k2	1577836802	[]	[]
-{"a": 3}	k3	1577836803	[]	[]
 """
 
         result = instance.query_with_retry(

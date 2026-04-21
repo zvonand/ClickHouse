@@ -66,5 +66,23 @@ WITH
 SELECT timeSeriesResampleToGridWithStaleness(start_ts, end_ts, step_s, window_s)(timestamp, value) AS happy_path
 FROM (SELECT arrayJoin(arrayZip(timestamps, values)) AS ts_and_val, ts_and_val.1 AS timestamp, ts_and_val.2 AS value);
 
+-- Case 7: Overflow-safe ceil-division in `bucketIndexForTimestamp`.
+-- With `start_timestamp = INT64_MIN` and `step = INT64_MAX`, any positive `timestamp`
+-- produces an unsigned `diff = ts_bits - start_bits` greater than `2^63`. The classic
+-- ceil-division formula `(diff + step - 1) / step` can overflow modulo `2^64` in this
+-- regime, silently returning `0` and placing the data point into the wrong bucket
+-- (`bucket 0` instead of the last bucket). The overflow-safe form
+-- `diff / step + (diff % step != 0)` used by the fix cannot overflow because no
+-- intermediate exceeds `diff` itself.
+--
+-- Parameters: `start = INT64_MIN`, `end = INT64_MAX - 1`, `step = INT64_MAX`, `window = 0`.
+-- That gives `bucket_count = 3`; the grid points are `[INT64_MIN, -1, INT64_MAX - 1]`.
+-- The inserted positive timestamps (from `ts_data_overflow_idx`) must land in the last
+-- bucket (`index = 2`, SQL 1-based `grid[3]`). Before the fix they landed in `grid[1]`.
+SELECT arrayFirstIndex(x -> x IS NOT NULL,
+    timeSeriesResampleToGridWithStaleness(-9223372036854775808, 9223372036854775806, 9223372036854775807, 0)(timestamp, value)
+) AS first_non_null_1idx_extreme
+FROM ts_data_overflow_idx;
+
 DROP TABLE ts_data_overflow_idx;
 DROP TABLE ts_data_overflow_idx_u32;

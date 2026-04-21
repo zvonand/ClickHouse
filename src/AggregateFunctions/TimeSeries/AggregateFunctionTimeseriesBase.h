@@ -159,7 +159,13 @@ public:
         const UInt64 start_bits = static_cast<UInt64>(static_cast<Int64>(start_timestamp));
         const UInt64 step_bits = static_cast<UInt64>(static_cast<Int64>(step));
 
-        const size_t index = static_cast<size_t>((ts_bits - start_bits + step_bits - 1) / step_bits);
+        const UInt64 diff = ts_bits - start_bits;
+        /// Overflow-safe ceil-division. The classic `(diff + step - 1) / step` formula can
+        /// overflow modulo `2^64` when `diff` is close to `UINT64_MAX` (reachable for extreme
+        /// inputs such as `start_timestamp` near `INT64_MIN` and a large `step`). The
+        /// mathematically-equivalent form `diff / step + (diff % step != 0)` never exceeds
+        /// `diff` itself and therefore cannot overflow `UInt64`.
+        const size_t index = static_cast<size_t>(diff / step_bits + (diff % step_bits != 0));
         chassert(index < bucket_count);
         return index;
     }

@@ -3054,17 +3054,43 @@ class ClickHouseCluster:
 
     @contextmanager
     def pause_rabbitmq(self, timeout=120):
-        run_rabbitmqctl(
-            self.rabbitmq_docker_id, self.rabbitmq_cookie, "stop_app", timeout
-        )
+        # `rabbitmqctl stop_app` / `start_app` and the subsequent readiness
+        # check are known to flake, especially on sanitizer builds. If they
+        # do, the container is left in a stopped / half-started state, which
+        # poisons every follow-up test in the module that relies on the
+        # module-scoped RabbitMQ fixture. Recover by restarting the container
+        # from scratch so subsequent tests see a healthy RabbitMQ.
+        try:
+            run_rabbitmqctl(
+                self.rabbitmq_docker_id, self.rabbitmq_cookie, "stop_app", timeout
+            )
+        except RuntimeError as ex:
+            logging.warning(
+                "pause_rabbitmq: `rabbitmqctl stop_app` failed: %s. "
+                "Resetting RabbitMQ container to recover.",
+                ex,
+            )
+            self.reset_rabbitmq(timeout)
+            raise
 
         try:
             yield
         finally:
-            run_rabbitmqctl(
-                self.rabbitmq_docker_id, self.rabbitmq_cookie, "start_app", timeout
-            )
-            self.wait_rabbitmq_to_start(timeout)
+            try:
+                run_rabbitmqctl(
+                    self.rabbitmq_docker_id,
+                    self.rabbitmq_cookie,
+                    "start_app",
+                    timeout,
+                )
+                self.wait_rabbitmq_to_start(timeout)
+            except RuntimeError as ex:
+                logging.warning(
+                    "pause_rabbitmq: failed to bring RabbitMQ back up: %s. "
+                    "Resetting RabbitMQ container to recover.",
+                    ex,
+                )
+                self.reset_rabbitmq(timeout)
 
     def reset_rabbitmq(self, timeout=120):
         try:

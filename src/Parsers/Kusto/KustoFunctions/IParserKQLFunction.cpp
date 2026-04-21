@@ -236,7 +236,7 @@ String IParserKQLFunction::getConvertedArgument(const String & fn_name, IParser:
         converted_arg.append((converted_arg.empty() ? "" : " ") + token);
         if (converted_arg.size() > DBMS_DEFAULT_MAX_QUERY_SIZE)
             throw Exception(ErrorCodes::SYNTAX_ERROR,
-                "KQL sexpression size {} exceeds maximum allowed size {}",
+                "KQL expression size {} exceeds maximum allowed size {}",
                 converted_arg.size(), DBMS_DEFAULT_MAX_QUERY_SIZE);
     }
 

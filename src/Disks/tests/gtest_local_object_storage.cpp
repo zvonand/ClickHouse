@@ -2,6 +2,8 @@
 
 #include <Disks/DiskObjectStorage/ObjectStorages/Local/LocalObjectStorage.h>
 
+#include <unistd.h> /// for ::getpid
+
 #include <filesystem>
 #include <fstream>
 #include <string>

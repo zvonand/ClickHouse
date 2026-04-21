@@ -11,7 +11,6 @@
 #include <Interpreters/Cache/QueryConditionCache.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/ExpressionActions.h>
-#include <Interpreters/PredicateAtomExtractor.h>
 #include <Interpreters/PredicateStatisticsLog.h>
 #include <Processors/Chunk.h>
 #include <Processors/Merges/Algorithms/MergeTreeReadInfo.h>
@@ -236,17 +235,11 @@ PrewhereExprInfo MergeTreeSelectProcessor::getPrewhereActions(
         prewhere_actions.steps.emplace_back(std::make_shared<PrewhereExprStep>(std::move(prewhere_step)));
     }
 
-    /// extract predicate atoms for selectivity logging
+    /// capture the whole filter expression of each step for selectivity logging
     for (auto & step : prewhere_actions.steps)
     {
         if (step->type == PrewhereExprStep::Filter && !step->filter_column_name.empty() && step->actions)
-        {
-            const auto & dag = step->actions->getActionsDAG();
-            const auto * node = &dag.findInOutputs(step->filter_column_name);
-            while (node->type == ActionsDAG::ActionType::ALIAS)
-                node = node->children[0];
-            step->predicate_atoms = extractPredicateAtoms(node);
-        }
+            step->predicate_expression = step->actions->getActionsDAG().dumpDAG();
     }
 
     return prewhere_actions;
@@ -508,7 +501,7 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
         if (step->type == PrewhereExprStep::Filter)
         {
             all_filter_indices.push_back(i);
-            if (!step->predicate_atoms.empty())
+            if (!step->predicate_expression.empty())
                 filter_step_indices.push_back(i);
         }
     }
@@ -554,26 +547,21 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
 
         Float64 step_selectivity = static_cast<Float64>(passed_rows) / static_cast<Float64>(input_rows);
 
-        for (const auto & atom : step->predicate_atoms)
-        {
-            PredicateStatisticsLogElement elem;
-            elem.event_date = today;
-            elem.event_time = now;
-            elem.database = storage_id.database_name;
-            elem.table = storage_id.table_name;
-            elem.query_id = query_id;
-            elem.filter_expression = filter_expr;
-            elem.column_name = atom.column_name;
-            elem.predicate_class = atom.predicate_class;
-            elem.function_name = atom.function_name;
-            elem.input_rows = input_rows;
-            elem.passed_rows = passed_rows;
-            elem.filter_selectivity = step_selectivity;
-            elem.total_input_rows = whole_input;
-            elem.total_passed_rows = whole_passed;
-            elem.total_selectivity = whole_selectivity;
-            predicate_stats_log->add(std::move(elem));
-        }
+        PredicateStatisticsLogElement elem;
+        elem.event_date = today;
+        elem.event_time = now;
+        elem.database = storage_id.database_name;
+        elem.table = storage_id.table_name;
+        elem.query_id = query_id;
+        elem.filter_expression = filter_expr;
+        elem.predicate_expression = step->predicate_expression;
+        elem.input_rows = input_rows;
+        elem.passed_rows = passed_rows;
+        elem.filter_selectivity = step_selectivity;
+        elem.total_input_rows = whole_input;
+        elem.total_passed_rows = whole_passed;
+        elem.total_selectivity = whole_selectivity;
+        predicate_stats_log->add(std::move(elem));
     }
 }
 

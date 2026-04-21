@@ -1,7 +1,6 @@
 #pragma once
 #include <Common/Logger.h>
 #include <Core/Block.h>
-#include <Interpreters/PredicateAtom.h>
 #include <Columns/ColumnVector.h>
 #include <Columns/ColumnsCommon.h>
 #include <Columns/FilterDescription.h>
@@ -47,7 +46,8 @@ struct PrewhereExprStep
     /// Version of mutation if step is a part of on-fly mutation.
     std::optional<UInt64> mutation_version;
 
-    std::vector<PredicateAtom> predicate_atoms = {};
+    /// Dump of the whole filter expression for this step, used when logging per-step selectivity
+    String predicate_expression;
 };
 
 using PrewhereExprStepPtr = std::shared_ptr<PrewhereExprStep>;

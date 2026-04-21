@@ -170,7 +170,7 @@ private:
         bool empty() const { return back.empty() && direct.empty(); }
     };
     NewEdges addEdges(Node & node);
-    void removeAffectedEdges(Node & node, const std::unordered_set<Node *> & removed_nodes);
+    bool removeAffectedEdges(Node & node, const std::unordered_set<Node *> & removed_nodes);
 
     /// Update graph after processor `node` returned UpdatePipeline status.
     /// All new nodes and nodes with updated ports are pushed into stack.

@@ -119,8 +119,11 @@ ExecutingGraph::NewEdges ExecutingGraph::addEdges(Node & node)
     return result;
 }
 
-void ExecutingGraph::removeAffectedEdges(Node & node, const std::unordered_set<Node *> & removed_nodes)
+bool ExecutingGraph::removeAffectedEdges(Node & node, const std::unordered_set<Node *> & removed_nodes)
 {
+    const size_t initial_back_edges_count = node.back_edges.size();
+    const size_t initial_direct_edges_count = node.direct_edges.size();
+
     for (auto it = node.back_edges.begin(); it != node.back_edges.end();)
     {
         if (removed_nodes.contains(it->to))
@@ -136,6 +139,11 @@ void ExecutingGraph::removeAffectedEdges(Node & node, const std::unordered_set<N
         else
             it = std::next(it);
     }
+
+    const bool removed_something = initial_back_edges_count != node.back_edges.size()
+                                || initial_direct_edges_count != node.direct_edges.size();
+
+    return removed_something;
 }
 
 ExecutingGraph::UpdateNodeStatus ExecutingGraph::updatePipeline(boost::container::devector<Node *> & stack, Node & cur_node, Processors & delayed_destruction)
@@ -183,11 +191,17 @@ ExecutingGraph::UpdateNodeStatus ExecutingGraph::updatePipeline(boost::container
     std::vector<std::pair<Node *, NewEdges>> added_edges;
     for (auto & node : nodes)
     {
+        std::optional<NewEdges> edges;
+
         if (!removed_nodes.empty())
-            removeAffectedEdges(node, removed_nodes);
+            if (removeAffectedEdges(node, removed_nodes))
+                edges.emplace();
 
         if (auto new_edges = addEdges(node); !new_edges.empty())
-            added_edges.emplace_back(&node, std::move(new_edges));
+            edges = std::move(new_edges);
+
+        if (edges.has_value())
+            added_edges.emplace_back(&node, std::move(edges.value()));
     }
 
     /// Record updated ports for each newly added edge for each processor and schedule it for prepare if something changed.

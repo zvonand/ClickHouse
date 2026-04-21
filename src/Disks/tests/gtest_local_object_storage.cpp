@@ -126,6 +126,65 @@ TEST(LocalObjectStorage, ListObjectsWalksNestedDirectoriesWithoutSymlinks)
     EXPECT_EQ(paths[3], (root / "top.txt").string());
 }
 
+/// Regression test for the serverfuzz finding STID 1615-3a7b on master.
+/// The `AST fuzzer` injected an embedded NUL byte into an `icebergLocal(...)`
+/// path literal, turning the argument into `'<user_files>/lakehouses\0test_3_t0'`.
+/// `std::string` preserves the NUL, but every syscall goes through
+/// `path.c_str()` which truncates at the NUL — so the kernel always targets
+/// the same real directory. With the previous self-recursive implementation
+/// of `listObjects`, each recursion created a fresh `fs::directory_iterator`
+/// via `::opendir(path.c_str())` on a progressively longer C++ string that
+/// still resolves to the same directory — an unbounded self-recursion that
+/// blew the thread stack under `ThreadFuzzer` + debug builds (~40 frames of
+/// `LocalObjectStorage.cpp:292` in the crash trace).
+///
+/// `recursive_directory_iterator` descends via `openat(dir_fd, entry_name)`
+/// rather than `opendir(full_path)`, so it does not re-open the same
+/// directory at every level and its traversal is iterative with constant
+/// C++ stack depth. The `listObjects` call must therefore return (either
+/// producing the real directory contents, or throwing a `filesystem_error`
+/// when subsequent metadata calls hit the kernel truncation) — but it must
+/// never crash with a stack overflow.
+TEST(LocalObjectStorage, ListObjectsHandlesPathWithEmbeddedNul)
+{
+    ScopedTempDir tmp("ch_gtest_local_object_storage_nul");
+    const auto & root = tmp.path;
+
+    /// Small nested tree so the iterator actually descends.
+    fs::create_directories(root / "d1" / "d2");
+    std::ofstream(root / "top.txt") << "0";
+    std::ofstream(root / "d1" / "f1.txt") << "1";
+    std::ofstream(root / "d1" / "d2" / "f2.txt") << "2";
+
+    auto storage = makeLocalObjectStorage(root.string());
+
+    /// Build the NUL-injected argument: `<root>\0<garbage>`.
+    /// All libc syscalls will see just `<root>` (truncated at the NUL).
+    std::string nul_injected = root.string();
+    nul_injected.push_back('\0');
+    nul_injected.append("this_part_is_never_seen_by_the_kernel");
+
+    DB::RelativePathsWithMetadata children;
+    /// Either outcome is acceptable; the key assertion is that the call
+    /// returns control to this thread (no SIGSEGV from unbounded recursion):
+    ///  - success, in which case the listing reports the real files, OR
+    ///  - a `filesystem_error` from a subsequent syscall that trips on the
+    ///    NUL-truncated path (e.g. `fs::file_size` on a directory).
+    try
+    {
+        storage->listObjects(nul_injected, children, /* max_keys */ 0);
+    }
+    catch (const fs::filesystem_error &)
+    {
+        /// Acceptable — the NUL-injected path produced an invalid argument
+        /// for a downstream syscall. Importantly, we reached the catch,
+        /// meaning no stack overflow occurred in the iteration.
+    }
+
+    /// Sanity: the test finished (no crash / no infinite loop).
+    SUCCEED();
+}
+
 /// A non-existent or non-directory input must return an empty listing,
 /// never throw or crash.
 TEST(LocalObjectStorage, ListObjectsHandlesMissingAndNonDirectoryPaths)

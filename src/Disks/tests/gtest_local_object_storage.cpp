@@ -49,9 +49,11 @@ struct ScopedTempDir
 
 /// `LocalObjectStorage::listObjects` must not follow symlinks into a cycle
 /// (otherwise it can blow the stack via unbounded recursion). This test
-/// creates `<root>/a -> <root>` which would cycle forever if symlinks are
-/// followed, then verifies that `listObjects` terminates and returns only
-/// the real files on disk.
+/// creates two self-referential symlinks — `<root>/loop -> .` (inside the
+/// root) and `<root>/sub/back -> ..` (inside a nested directory back to the
+/// root) — both of which would cycle forever if symlinks were followed.
+/// It then verifies that `listObjects` terminates and returns only the real
+/// files on disk.
 TEST(LocalObjectStorage, ListObjectsDoesNotFollowSymlinkCycles)
 {
     ScopedTempDir tmp("ch_gtest_local_object_storage_cycle");

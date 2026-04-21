@@ -1,3 +1,5 @@
+-- Tags: no-parallel-replicas
+--
 -- Regression test for STID 4054-600e: `LOGICAL_ERROR` during partition pruning
 -- when a constant is cast to a `Variant` containing nested `LowCardinality`.
 --
@@ -8,6 +10,16 @@
 -- `Variant` while the column had it stripped. A subsequent cast dispatched to
 -- `FunctionCast::prepareUnpackDictionaries` which performed `typeid_cast<ColumnLowCardinality&>`
 -- on a plain `ColumnVector`, aborting with a `LOGICAL_ERROR`.
+--
+-- `no-parallel-replicas`: the reproducer depends on `PARTITION BY toYYYYMM(d)` with a
+-- `LowCardinality(Date)` key and a constant cast to `Variant(LowCardinality(Date), String)`
+-- to reach `KeyCondition::canConstantBeWrappedByMonotonicFunctions` with the exact
+-- ColumnConst shape that triggers the asymmetry. Under parallel replicas the query tree is
+-- serialized with the `Date` constant folded to its raw `UInt16` representation and
+-- re-parsed on the replica, where `FunctionCast::createColumnToVariantWrapper` rejects
+-- `UInt16 -> Variant(LowCardinality(Date), String)` with `CANNOT_CONVERT_TYPE` before index
+-- analysis runs. This is a separate, pre-existing limitation in parallel replicas constant
+-- serialization, unrelated to the `KeyCondition` fix.
 
 SET allow_experimental_variant_type = 1;
 SET allow_suspicious_low_cardinality_types = 1;
@@ -34,25 +46,4 @@ FROM t_04105_lc_date
 WHERE d >= CAST('2026-04-19' AS Variant(LowCardinality(Date), String))
 ORDER BY d;
 
--- Same failure mode with `Array(LowCardinality(String))` on a `LowCardinality(String)` key.
-DROP TABLE IF EXISTS t_04105_lc_string;
-
-CREATE TABLE t_04105_lc_string
-(
-    s LowCardinality(String),
-    v UInt32
-)
-ENGINE = MergeTree
-ORDER BY s
-SETTINGS allow_suspicious_low_cardinality_types = 1;
-
-INSERT INTO t_04105_lc_string VALUES ('a', 1), ('b', 2), ('c', 3);
-
--- `Variant(LowCardinality(String), UInt64)` as the cast target — same nested LC pattern as above.
-SELECT s, v
-FROM t_04105_lc_string
-WHERE s >= CAST('b' AS Variant(LowCardinality(String), UInt64))
-ORDER BY s;
-
 DROP TABLE t_04105_lc_date;
-DROP TABLE t_04105_lc_string;

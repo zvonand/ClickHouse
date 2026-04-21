@@ -8,12 +8,19 @@
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <Columns/ColumnString.h>
+#include <Columns/ColumnConst.h>
 #include <Core/Field.h>
 
 using namespace DB;
 
 namespace
 {
+
+struct TypedArgument
+{
+    DataTypePtr type;
+    Field value;
+};
 
 FunctionBasePtr buildFunction(const String & name, const DataTypes & argument_types)
 {
@@ -30,21 +37,45 @@ FunctionBasePtr buildFunction(const String & name, const DataTypes & argument_ty
     return resolver->build(arguments);
 }
 
-Field evaluateFunction(const String & name, const std::vector<String> & arguments_str)
+Field evaluateFunction(const String & name, const std::vector<TypedArgument> & arguments)
 {
-    auto function = buildFunction(name, {std::make_shared<DataTypeString>()});
+    DataTypes argument_types;
+    for (const auto & arg : arguments)
+        argument_types.push_back(arg.type);
 
-    ColumnsWithTypeAndName arguments;
-    for (const auto & str : arguments_str)
+    auto function = buildFunction(name, argument_types);
+
+    ColumnsWithTypeAndName args;
+    for (size_t i = 0; i < arguments.size(); ++i)
     {
-        auto column = ColumnString::create();
-        column->insert(str);
-        arguments.emplace_back(ColumnWithTypeAndName{std::move(column), std::make_shared<DataTypeString>(), ""});
+        const auto & arg = arguments[i];
+        auto column = arg.type->createColumn();
+        column->insert(arg.value);
+
+        // For constant arguments (index 1 for port functions), wrap in ColumnConst
+        if (i == 1)
+        {
+            auto const_column = ColumnConst::create(column->convertToFullColumnIfLowCardinality(), 1);
+            args.emplace_back(ColumnWithTypeAndName{std::move(const_column), arg.type, ""});
+        }
+        else
+        {
+            args.emplace_back(ColumnWithTypeAndName{std::move(column), arg.type, ""});
+        }
     }
 
-    chassert(!arguments.empty());
-    auto result = function->execute(arguments, std::make_shared<DataTypeUInt16>(), arguments[0].column->size(), false);
+    chassert(!args.empty());
+    auto result = function->execute(args, std::make_shared<DataTypeUInt16>(), args[0].column->size(), false);
     return (*result)[0];
+}
+
+/// Overload for backward compatibility with single-argument string tests
+Field evaluateFunction(const String & name, const std::vector<String> & arguments_str)
+{
+    std::vector<TypedArgument> arguments;
+    for (const auto & str : arguments_str)
+        arguments.push_back({std::make_shared<DataTypeString>(), str});
+    return evaluateFunction(name, arguments);
 }
 
 }
@@ -109,4 +140,52 @@ TEST(PortFunction, RFCVersion)
 
     // URL: //paul@www.example.com:8080
     EXPECT_EQ(evaluateFunction("portRFC", {"//paul@www.example.com:8080"}), UInt64(8080));
+}
+
+TEST(PortFunction, TwoArgumentWithDefault)
+{
+    // Test two-argument form: port(url, default_port)
+    // URL with explicit port should return that port, not default_port combined with digits
+
+    // The original bug case: http://example.com:80 with default 443
+    // Should return 80, NOT 44380
+    EXPECT_EQ(evaluateFunction("port", {{std::make_shared<DataTypeString>(), "http://example.com:80"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(80));
+
+    // Another explicit port
+    EXPECT_EQ(evaluateFunction("port", {{std::make_shared<DataTypeString>(), "http://example.com:8080"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(8080));
+
+    // URL with no port should return default
+    EXPECT_EQ(evaluateFunction("port", {{std::make_shared<DataTypeString>(), "http://example.com"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(443));
+
+    // URL with empty port suffix should return default
+    EXPECT_EQ(evaluateFunction("port", {{std::make_shared<DataTypeString>(), "http://example.com:"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(443));
+
+    // URL with non-digit suffix should return default
+    EXPECT_EQ(evaluateFunction("port", {{std::make_shared<DataTypeString>(), "http://example.com:abc"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(443));
+}
+
+TEST(PortFunction, TwoArgumentOverflow)
+{
+    // Port number overflow - 70000 is larger than UInt16 max (65535)
+    EXPECT_EQ(evaluateFunction("port", {{std::make_shared<DataTypeString>(), "http://example.com:70000"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(443));
+
+    // Very large port
+    EXPECT_EQ(evaluateFunction("port", {{std::make_shared<DataTypeString>(), "http://example.com:99999"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(443));
+}
+
+TEST(PortFunction, TwoArgumentWithRFC)
+{
+    // Test two-argument form for portRFC
+
+    // Explicit port with default
+    EXPECT_EQ(evaluateFunction("portRFC", {{std::make_shared<DataTypeString>(), "http://example.com:80"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(80));
+
+    // URL with no port should return default
+    EXPECT_EQ(evaluateFunction("portRFC", {{std::make_shared<DataTypeString>(), "http://example.com"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(443));
+
+    // Empty port suffix should return default
+    EXPECT_EQ(evaluateFunction("portRFC", {{std::make_shared<DataTypeString>(), "http://example.com:"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(443));
+
+    // Non-digit suffix should return default
+    EXPECT_EQ(evaluateFunction("portRFC", {{std::make_shared<DataTypeString>(), "http://example.com:xyz"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(443));
 }

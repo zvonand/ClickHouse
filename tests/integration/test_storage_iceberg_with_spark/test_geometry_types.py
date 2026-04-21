@@ -111,7 +111,11 @@ def test_geometry_type(started_cluster_iceberg_with_spark, storage_type):
         table_function=True,
     )
 
-    assert instance.query(f"DESCRIBE {table_function_expr} FORMAT TSV") == TSV(
+    geo_settings = {"allow_experimental_geo_types_in_iceberg": 1}
+
+    assert instance.query(
+        f"DESCRIBE {table_function_expr} FORMAT TSV", settings=geo_settings
+    ) == TSV(
         [
             ["id", "Nullable(Int32)"],
             ["geom", "Geometry"],
@@ -121,7 +125,8 @@ def test_geometry_type(started_cluster_iceberg_with_spark, storage_type):
 
     result = instance.query(
         f"SELECT id, variantType(geom), variantType(geog)"
-        f" FROM {table_function_expr} ORDER BY id FORMAT TSV"
+        f" FROM {table_function_expr} ORDER BY id FORMAT TSV",
+        settings=geo_settings,
     )
     assert result.strip() == (
         "1\tPoint\tPoint\n"
@@ -134,35 +139,40 @@ def test_geometry_type(started_cluster_iceberg_with_spark, storage_type):
     assert (
         instance.query(
             f"SELECT variantElement(geom, 'Point')"
-            f" FROM {table_function_expr} WHERE id = 1 FORMAT TSV"
+            f" FROM {table_function_expr} WHERE id = 1 FORMAT TSV",
+            settings=geo_settings,
         ).strip()
         == "(1,2)"
     )
     assert (
         instance.query(
             f"SELECT length(variantElement(geom, 'LineString'))"
-            f" FROM {table_function_expr} WHERE id = 2 FORMAT TSV"
+            f" FROM {table_function_expr} WHERE id = 2 FORMAT TSV",
+            settings=geo_settings,
         ).strip()
         == "3"
     )
     assert (
         instance.query(
             f"SELECT length(variantElement(geom, 'Polygon'))"
-            f" FROM {table_function_expr} WHERE id = 3 FORMAT TSV"
+            f" FROM {table_function_expr} WHERE id = 3 FORMAT TSV",
+            settings=geo_settings,
         ).strip()
         == "1"
     )
     assert (
         instance.query(
             f"SELECT length(variantElement(geom, 'MultiLineString'))"
-            f" FROM {table_function_expr} WHERE id = 4 FORMAT TSV"
+            f" FROM {table_function_expr} WHERE id = 4 FORMAT TSV",
+            settings=geo_settings,
         ).strip()
         == "2"
     )
     assert (
         instance.query(
             f"SELECT length(variantElement(geom, 'MultiPolygon'))"
-            f" FROM {table_function_expr} WHERE id = 5 FORMAT TSV"
+            f" FROM {table_function_expr} WHERE id = 5 FORMAT TSV",
+            settings=geo_settings,
         ).strip()
         == "2"
     )
@@ -173,6 +183,8 @@ def test_geometry_write(started_cluster_iceberg_with_spark, storage_type):
     instance = started_cluster_iceberg_with_spark.instances["node1"]
     TABLE_NAME = "test_geometry_write_" + storage_type + "_" + get_uuid_str()
 
+    geo_settings = {"allow_experimental_geo_types_in_iceberg": 1}
+
     create_iceberg_table(
         storage_type,
         instance,
@@ -180,6 +192,7 @@ def test_geometry_write(started_cluster_iceberg_with_spark, storage_type):
         started_cluster_iceberg_with_spark,
         schema="(id Int32, geom Geometry)",
         format_version=2,
+        settings=geo_settings,
     )
 
     instance.query(
@@ -191,11 +204,12 @@ def test_geometry_write(started_cluster_iceberg_with_spark, storage_type):
         SELECT 4, readWkt('MULTILINESTRING((0 0, 1 1),(2 2, 3 3))') UNION ALL
         SELECT 5, readWkt('MULTIPOLYGON(((0 0, 1 0, 1 1, 0 0)),((2 2, 3 2, 3 3, 2 2)))')
         """,
-        settings={"allow_insert_into_iceberg": 1},
+        settings={"allow_insert_into_iceberg": 1, **geo_settings},
     )
 
     result = instance.query(
-        f"SELECT id, variantType(geom) FROM {TABLE_NAME} ORDER BY id FORMAT TSV"
+        f"SELECT id, variantType(geom) FROM {TABLE_NAME} ORDER BY id FORMAT TSV",
+        settings=geo_settings,
     )
     assert result.strip() == (
         "1\tPoint\n"
@@ -207,7 +221,8 @@ def test_geometry_write(started_cluster_iceberg_with_spark, storage_type):
 
     assert (
         instance.query(
-            f"SELECT variantElement(geom, 'Point') FROM {TABLE_NAME} ORDER BY id LIMIT 1 FORMAT TSV"
+            f"SELECT variantElement(geom, 'Point') FROM {TABLE_NAME} ORDER BY id LIMIT 1 FORMAT TSV",
+            settings=geo_settings,
         ).strip()
         == "(1,2)"
     )

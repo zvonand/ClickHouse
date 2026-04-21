@@ -221,7 +221,7 @@ NamesAndTypesList IcebergSchemaProcessor::tryGetFieldsCharacteristics(Int32 sche
     return fields;
 }
 
-DataTypePtr IcebergSchemaProcessor::getSimpleType(const String & type_name)
+DataTypePtr IcebergSchemaProcessor::getSimpleType(const String & type_name, bool allow_geo_parser)
 {
     if (type_name == f_boolean)
         return DataTypeFactory::instance().get("Bool");
@@ -249,7 +249,7 @@ DataTypePtr IcebergSchemaProcessor::getSimpleType(const String & type_name)
         return std::make_shared<DataTypeString>();
 
     if (type_name.starts_with(f_geometry) || type_name.starts_with(f_geography))
-        return DataTypeFactory::instance().get("Geometry");
+        return allow_geo_parser ? DataTypeFactory::instance().get("Geometry") : std::make_shared<DataTypeString>();
     if (type_name == f_uuid)
         return std::make_shared<DataTypeUUID>();
 
@@ -339,7 +339,7 @@ DataTypePtr IcebergSchemaProcessor::getFieldType(
     if (type.isString())
     {
         const String & type_name = type.extract<String>();
-        auto data_type = getSimpleType(type_name);
+        auto data_type = getSimpleType(type_name, allow_geo_parser);
         // Types like Geometry (Variant) cannot be inside Nullable; they carry their own null semantics.
         return required || !data_type->canBeInsideNullable() ? data_type : makeNullable(data_type);
     }

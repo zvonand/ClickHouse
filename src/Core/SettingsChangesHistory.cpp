@@ -41,6 +41,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         /// Note: please check if the key already exists to prevent duplicate entries.
         addSettingsChanges(settings_changes_history, "26.4",
         {
+            {"allow_experimental_geo_types_in_iceberg", false, false, "New setting to allow parsing Iceberg geometry/geography fields as Geometry type."},
             {"distributed_index_analysis_only_on_coordinator", false, false, "New setting."},
             {"enable_materialized_cte", false, false, "New setting"},
             {"finalize_projection_parts_synchronously", false, false, "New setting to finalize projection parts synchronously during INSERT to reduce peak memory usage."},

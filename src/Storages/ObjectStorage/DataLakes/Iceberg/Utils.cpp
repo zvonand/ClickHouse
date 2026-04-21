@@ -533,7 +533,7 @@ std::pair<Poco::Dynamic::Var, bool> getIcebergType(DataTypePtr type, Int32 & ite
         case TypeIndex::Variant:
         {
             if (type->getCustomName() && type->getCustomName()->getName() == "Geometry")
-                return {Iceberg::f_geometry, true};
+                return {Iceberg::f_geometry, false};
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Unsupported type for iceberg {}", type->getName());
         }
         default:

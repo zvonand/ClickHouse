@@ -342,6 +342,16 @@ void RefreshTask::stop()
     scheduleRefresh(guard);
 }
 
+void RefreshTask::pause()
+{
+    std::lock_guard guard(mutex);
+    /// Do NOT interrupt the currently running refresh. Only prevent future refreshes.
+    /// If `stop_requested` was already set (e.g. by `SYSTEM STOP VIEW`), this is a no-op.
+    if (std::exchange(scheduling.stop_requested, true))
+        return;
+    scheduleRefresh(guard);
+}
+
 void RefreshTask::startReplicated()
 {
     auto component_guard = Coordination::setCurrentComponent("RefreshTask::startReplicated");

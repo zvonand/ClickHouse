@@ -1,0 +1,7 @@
+<1: pause allows current refresh to complete>	20	1	1
+<2: start resumes paused view>	42
+<3: stop cancels the refresh>	0	1
+<4: pause views disables all>	2	2
+<5: start views resumes all>	2	2
+<6: granted pause works>
+<6: denied pause errors as expected>

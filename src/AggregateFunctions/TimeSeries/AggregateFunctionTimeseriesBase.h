@@ -104,6 +104,14 @@ public:
         return sizeof(State);
     }
 
+    /// Upper bound on the number of buckets that can be allocated for a single grid.
+    /// This prevents absurdly large grids (e.g. from adversarial input that passes extreme
+    /// timestamps and a tiny step) from allocating huge amounts of memory or triggering
+    /// undefined behaviour in downstream arithmetic. 16M is consistent with the
+    /// `MAX_ARRAY_SIZE` used by other aggregate functions (`AggregateFunctionGroupArray`,
+    /// `AggregateFunctionIntervalLengthSum`, etc.).
+    static constexpr size_t MAX_BUCKET_COUNT = 0xFFFFFF;
+
     static size_t bucketCount(TimestampType start_timestamp, TimestampType end_timestamp, IntervalType step)
     {
         if (end_timestamp < start_timestamp)
@@ -115,13 +123,43 @@ public:
         if (step <= 0)
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Step should be greater than zero");
 
-        return (end_timestamp - start_timestamp) / step + 1;
+        /// Compute the bucket count using unsigned 64-bit arithmetic to avoid signed overflow
+        /// when `start_timestamp` is very negative (e.g. `DateTime64` near `INT64_MIN`
+        /// produced by an adversarial fuzzer-generated query). Since we already verified
+        /// `end_timestamp >= start_timestamp`, the unsigned difference is the correct
+        /// mathematical value for any representable input.
+        const UInt64 start_bits = static_cast<UInt64>(static_cast<Int64>(start_timestamp));
+        const UInt64 end_bits = static_cast<UInt64>(static_cast<Int64>(end_timestamp));
+        const UInt64 step_bits = static_cast<UInt64>(static_cast<Int64>(step));
+
+        const UInt64 diff = end_bits - start_bits;
+        const UInt64 count = diff / step_bits + 1;
+
+        if (count > MAX_BUCKET_COUNT)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                "Number of buckets ({}) in the timeseries grid exceeds maximum ({}). "
+                "Consider narrowing the [start, end] range or increasing the step.",
+                count, MAX_BUCKET_COUNT);
+
+        return static_cast<size_t>(count);
     }
 
     size_t bucketIndexForTimestamp(const TimestampType timestamp) const
     {
         chassert(timestamp <= end_timestamp);
-        const size_t index = (timestamp <= start_timestamp) ? 0 : ((timestamp - start_timestamp + step - 1) / step);
+        if (timestamp <= start_timestamp)
+            return 0;
+
+        /// Use unsigned arithmetic to avoid signed overflow when `start_timestamp` is very
+        /// negative. Both operands are first converted to `Int64` (the native type of every
+        /// supported `TimestampType`), then reinterpreted as `UInt64`. Since the early-return
+        /// above guarantees `timestamp > start_timestamp`, the unsigned subtraction produces
+        /// the correct non-negative delta in all cases.
+        const UInt64 ts_bits = static_cast<UInt64>(static_cast<Int64>(timestamp));
+        const UInt64 start_bits = static_cast<UInt64>(static_cast<Int64>(start_timestamp));
+        const UInt64 step_bits = static_cast<UInt64>(static_cast<Int64>(step));
+
+        const size_t index = static_cast<size_t>((ts_bits - start_bits + step_bits - 1) / step_bits);
         chassert(index < bucket_count);
         return index;
     }

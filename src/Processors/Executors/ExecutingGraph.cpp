@@ -50,6 +50,9 @@ ExecutingGraph::Node * ExecutingGraph::removeNode(ProcessorPtr processor)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Processor {} does not exist in pipeline", processor->getName());
 
     auto * node = node_it->second;
+    if (!node->last_processor_status)
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Trying to remove not finished processor {}", processor->getName());
+
     if (node->last_processor_status.value() != IProcessor::Status::Finished)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Trying to remove not finished processor {}", processor->getName());
 

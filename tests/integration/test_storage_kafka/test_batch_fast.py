@@ -1929,6 +1929,98 @@ def test_kafka_produce_key_timestamp(kafka_cluster, create_query_generator, log_
 
 
 @pytest.mark.parametrize(
+    "create_query_generator, log_line",
+    [
+        (k.generate_new_create_table_query, "Saved offset 3"),
+        (k.generate_old_create_table_query, "Committed offset 3"),
+    ],
+)
+def test_kafka_produce_virtual_columns_mapping(
+    kafka_cluster, create_query_generator, log_line
+):
+    """
+    With kafka_map_virtual_columns_on_write=1, columns named `_key`, `_timestamp`,
+    `_headers.name` and `_headers.value` are mapped to the corresponding Kafka
+    message fields and are not included in the message payload.
+    """
+    suffix = k.random_string(6)
+    kafka_table = f"kafka_{suffix}"
+    log_line = f"{kafka_table}.*{log_line}"
+
+    topic_name = f"insert_virtual_{suffix}"
+    topic_config = {"retention.ms": "-1"}
+
+    with k.kafka_topic(
+        k.get_admin_client(kafka_cluster), topic_name, config=topic_config
+    ):
+        writer_create_query = create_query_generator(
+            f"{kafka_table}_writer",
+            "msg_value String, _key String, _timestamp DateTime('UTC'), `_headers.name` Array(String), `_headers.value` Array(String)",
+            topic_list=topic_name,
+            consumer_group=topic_name,
+            format="JSONEachRow",
+            settings={"kafka_map_virtual_columns_on_write": 1},
+        )
+        reader_create_query = create_query_generator(
+            kafka_table,
+            "msg_value String",
+            topic_list=topic_name,
+            consumer_group=topic_name,
+            format="JSONEachRow",
+        )
+
+        instance.query(
+            f"""
+            DROP TABLE IF EXISTS test.{kafka_table}_view;
+            {writer_create_query};
+            {reader_create_query};
+            CREATE MATERIALIZED VIEW test.{kafka_table}_view ENGINE=MergeTree ORDER BY tuple() AS
+                SELECT
+                    msg_value,
+                    _key AS kafka_key,
+                    toUnixTimestamp(_timestamp) AS kafka_timestamp,
+                    _headers.name AS kafka_header_names,
+                    _headers.value AS kafka_header_values
+                FROM test.{kafka_table};
+            """
+        )
+
+        # Row 1: full set of headers.
+        instance.query(
+            f"""INSERT INTO test.{kafka_table}_writer VALUES
+                ('{{"a": 1}}', 'k1', toDateTime(1577836801), ['h1', 'h2'], ['v1', 'v2'])"""
+        )
+        # Row 2: empty headers.
+        instance.query(
+            f"""INSERT INTO test.{kafka_table}_writer VALUES
+                ('{{"a": 2}}', 'k2', toDateTime(1577836802), [], [])"""
+        )
+        # Row 3: mismatched header arrays — extra entries on either side are ignored.
+        instance.query(
+            f"""INSERT INTO test.{kafka_table}_writer VALUES
+                ('{{"a": 3}}', 'k3', toDateTime(1577836803), ['only_name'], [])"""
+        )
+
+        instance.wait_for_log_line(log_line)
+
+        expected = """\
+{"a": 1}	k1	1577836801	['h1','h2']	['v1','v2']
+{"a": 2}	k2	1577836802	[]	[]
+{"a": 3}	k3	1577836803	[]	[]
+"""
+
+        result = instance.query_with_retry(
+            f"SELECT msg_value, kafka_key, kafka_timestamp, kafka_header_names, kafka_header_values FROM test.{kafka_table}_view ORDER BY kafka_key",
+            ignore_error=True,
+            retry_count=5,
+            sleep_time=1,
+            check_callback=lambda res: TSV(res) == TSV(expected),
+        )
+
+        assert TSV(result) == TSV(expected)
+
+
+@pytest.mark.parametrize(
     "create_query_generator",
     [k.generate_old_create_table_query, k.generate_new_create_table_query],
 )

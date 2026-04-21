@@ -565,5 +565,30 @@ VirtualColumnsDescription createVirtuals(StreamingHandleErrorMode handle_error_m
 
     return desc;
 }
+
+PayloadSplit splitPayloadColumns(const Block & header, bool map_virtual_columns_on_write)
+{
+    PayloadSplit split;
+    split.format_column_indices.reserve(header.columns());
+
+    for (size_t i = 0; i < header.columns(); ++i)
+    {
+        const auto & column = header.getByPosition(i);
+
+        if (map_virtual_columns_on_write
+            && (column.name == "_key"
+                || column.name == "_timestamp"
+                || column.name == "_headers.name"
+                || column.name == "_headers.value"))
+        {
+            continue;
+        }
+
+        split.format_header.insert(column);
+        split.format_column_indices.push_back(i);
+    }
+
+    return split;
+}
 }
 }

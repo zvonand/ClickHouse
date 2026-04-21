@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Tags: atomic-database, memory-engine
+# Tags: atomic-database, memory-engine, no-parallel
+# The test uses `SYSTEM PAUSE VIEWS` and `SYSTEM START VIEWS` which affect all
+# refreshable views on the server, so it must not run concurrently with other
+# tests that create refreshable materialized views.
 
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
@@ -26,10 +29,10 @@ wait_status() {
 # Test 1: SYSTEM PAUSE VIEW does NOT interrupt the current refresh.
 # ---------------------------------------------------------------------------
 
-# A slow refresh: 20 rows * 1 second each.
+# A slow refresh: 5 rows * 1 second each, long enough to observe `Running` and pause.
 $CLICKHOUSE_CLIENT -q "
     create table src (x Int64) engine Memory;
-    insert into src select * from numbers(20) settings max_block_size=1;
+    insert into src select * from numbers(5) settings max_block_size=1;
     create materialized view p refresh every 1 year (x Int64) engine Memory empty as
         select x + sleepEachRow(1) as x from src settings max_block_size = 1, max_threads = 1;
     system refresh view p;"
@@ -69,7 +72,7 @@ $CLICKHOUSE_CLIENT -q "
 
 $CLICKHOUSE_CLIENT -q "
     create table src (x Int64) engine Memory;
-    insert into src select * from numbers(20) settings max_block_size=1;
+    insert into src select * from numbers(5) settings max_block_size=1;
     create materialized view s refresh every 1 year (x Int64) engine Memory empty as
         select x + sleepEachRow(1) as x from src settings max_block_size = 1, max_threads = 1;
     system refresh view s;"

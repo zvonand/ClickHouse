@@ -1,4 +1,4 @@
-<1: pause allows current refresh to complete>	20	1	1
+<1: pause allows current refresh to complete>	5	1	1
 <2: start resumes paused view>	42
 <3: stop cancels the refresh>	0	1
 <4: pause views disables all>	2	2

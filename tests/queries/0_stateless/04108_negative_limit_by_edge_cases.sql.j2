@@ -108,6 +108,9 @@ SET max_block_size = 3;
 SELECT k, number FROM (SELECT if(number < 3, toFloat64('nan'), toFloat64(1.0)) AS k, number FROM numbers(6))
 ORDER BY k, number LIMIT -1 BY k;
 
+-- LIMIT -N BY ALL (expands to all SELECT columns as grouping keys)
+SELECT number % 3 AS g, number % 2 AS h FROM numbers(10) ORDER BY number LIMIT -1 BY ALL;
+
 {% for block_size in [1, 2, 3] -%}
 SET max_block_size = {{ block_size }};
 SELECT number, number % 3 AS g FROM numbers(15) ORDER BY g, number LIMIT -2 BY g;

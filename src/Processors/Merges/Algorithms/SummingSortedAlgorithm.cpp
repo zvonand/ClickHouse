@@ -482,17 +482,34 @@ static SummingSortedAlgorithm::ColumnsDefinition defineColumns(
         }
     }
 
-    /// Mark Float32/Float64 columns for bit-exact copy in setRow().
-    /// The Field roundtrip (Float32 → Field as Float64 → back to Float32) silently converts
-    /// signaling NaN (SNaN) to quiet NaN (QNaN) on x86, corrupting bit patterns.
-    /// When the sort key is a hash expression over such a column (e.g. ORDER BY gccMurmurHash(c1)),
-    /// this changes the hash value and causes sort order violations during merges.
+    /// Mark columns whose type contains `Float32` or `Float64` (at any nesting level)
+    /// for bit-exact copy in `setRow`.
+    ///
+    /// The `Field` roundtrip for a `Float32` value goes through `Float64` storage. On x86 this
+    /// silently converts a signaling NaN (SNaN) to a quiet NaN (QNaN), changing the bit pattern.
+    /// When the sort key is a hash expression over such a column (e.g. `ORDER BY gccMurmurHash(c1)`),
+    /// this changes the hash value and causes sort order violations during `SummingMergeTree` merges.
+    ///
+    /// Wrappers such as `Nullable(Float32)`, `LowCardinality(Nullable(Float32))`, `Array(Float32)`,
+    /// `Tuple(..., Float32, ...)`, and `Map(K, Float32)` all route through the same `Field` layer,
+    /// so they are affected too. We use `IDataType::forEachChild` to walk the whole type tree.
     def.columns_need_exact_copy.resize(num_columns, false);
     for (size_t i = 0; i < num_columns; ++i)
     {
         const auto & col = header.safeGetByPosition(i);
-        WhichDataType which(recursiveRemoveLowCardinality(col.type));
-        if (which.isFloat())
+        if (!col.type)
+            continue;
+
+        bool contains_float = WhichDataType(*col.type).isFloat();
+        if (!contains_float)
+        {
+            col.type->forEachChild([&contains_float](const IDataType & child)
+            {
+                if (!contains_float && WhichDataType(child).isFloat())
+                    contains_float = true;
+            });
+        }
+        if (contains_float)
             def.columns_need_exact_copy[i] = true;
     }
 
@@ -582,12 +599,13 @@ static void setRow(Row & row, std::vector<ColumnPtr> & row_columns, const Column
             if (raw_columns[i]->hasDynamicStructure() || columns_need_exact_copy[i])
             {
                 /// Store a column-level copy to preserve exact bit patterns.
-                /// - For Dynamic/JSON types: Field roundtrip doesn't work correctly.
-                /// - For Float32/Float64: the Field roundtrip (Float32 → Float64 → Float32)
-                ///   converts signaling NaN (SNaN) to quiet NaN (QNaN) on x86, changing the
-                ///   bit pattern. When the sort key is a hash of a Float column (e.g. ORDER BY
-                ///   gccMurmurHash(c1)), this silently changes the hash value and breaks sort
-                ///   order during SummingMergeTree merges.
+                /// - For `Dynamic`/`JSON` types: `Field` roundtrip doesn't work correctly.
+                /// - For any type that contains `Float32`/`Float64` (direct, or wrapped in
+                ///   `Nullable`/`LowCardinality`/`Array`/`Tuple`/`Map`): the `Field` roundtrip
+                ///   routes `Float32` values through `Float64` storage, which on x86 converts
+                ///   a signaling NaN (SNaN) to a quiet NaN (QNaN), changing the bit pattern.
+                ///   When the sort key is a hash of such a column (e.g. `ORDER BY gccMurmurHash(c1)`),
+                ///   this silently changes the hash value and breaks sort order during merges.
                 auto column = raw_columns[i]->cloneEmpty();
                 column->reserve(1);
                 column->insertFrom(*raw_columns[i], row_num);

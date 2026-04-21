@@ -1,8 +1,8 @@
 #include <Common/NaNUtils.h>
 #include <Interpreters/ExpressionActions.h>
+#include <Processors/QueryPlan/BuildQueryPipelineSettings.h>
 #include <Processors/QueryPlan/UnionStep.h>
 #include <Processors/QueryPlan/QueryPlanStepRegistry.h>
-#include <Processors/QueryPlan/QueryPlanSerializationSettings.h>
 #include <Processors/QueryPlan/Serialization.h>
 #include <Processors/Sources/NullSource.h>
 #include <Processors/Transforms/ExpressionTransform.h>
@@ -11,12 +11,6 @@
 
 namespace DB
 {
-
-namespace QueryPlanSerializationSetting
-{
-    extern const QueryPlanSerializationSettingsUInt64 max_streams_for_union_step;
-    extern const QueryPlanSerializationSettingsFloat max_streams_for_union_step_to_max_threads_ratio;
-}
 
 namespace ErrorCodes
 {
@@ -36,10 +30,8 @@ static SharedHeader checkHeaders(const SharedHeaders & input_headers)
     return res;
 }
 
-UnionStep::UnionStep(SharedHeaders input_headers_, size_t max_threads_, size_t max_streams_, double max_streams_ratio_)
+UnionStep::UnionStep(SharedHeaders input_headers_, size_t max_threads_)
     : max_threads(max_threads_)
-    , max_streams(max_streams_)
-    , max_streams_ratio(max_streams_ratio_)
 {
     updateInputHeaders(std::move(input_headers_));
 }
@@ -96,9 +88,15 @@ QueryPipelineBuilderPtr UnionStep::updatePipeline(QueryPipelineBuilders pipeline
 
     *pipeline = QueryPipelineBuilder::unitePipelines(std::move(pipelines), new_max_threads, &processors);
 
-    /// Compute effective stream limit from the raw settings and the actual max_threads
+    /// Compute effective stream limit from the settings and the actual max_threads
     /// available on this node (which may differ from the coordinator in distributed execution).
-    size_t effective_max_streams = max_streams;
+    const double max_streams_ratio = settings.max_streams_for_union_step_to_max_threads_ratio;
+    if (!isFinite(max_streams_ratio) || max_streams_ratio < 0)
+        throw Exception(ErrorCodes::PARAMETER_OUT_OF_BOUND,
+            "Invalid value for `max_streams_for_union_step_to_max_threads_ratio`: {}. Must be a finite non-negative number.",
+            max_streams_ratio);
+
+    size_t effective_max_streams = settings.max_streams_for_union_step;
     if (max_streams_ratio > 0 && new_max_threads > 0)
     {
         double streams_with_ratio = static_cast<double>(new_max_threads) * max_streams_ratio;
@@ -132,12 +130,6 @@ void UnionStep::describePipeline(FormatSettings & settings) const
     IQueryPlanStep::describePipeline(processors, settings);
 }
 
-void UnionStep::serializeSettings(QueryPlanSerializationSettings & settings) const
-{
-    settings[QueryPlanSerializationSetting::max_streams_for_union_step] = max_streams;
-    settings[QueryPlanSerializationSetting::max_streams_for_union_step_to_max_threads_ratio] = static_cast<float>(max_streams_ratio);
-}
-
 void UnionStep::serialize(Serialization & ctx) const
 {
     (void)ctx;
@@ -145,11 +137,7 @@ void UnionStep::serialize(Serialization & ctx) const
 
 QueryPlanStepPtr UnionStep::deserialize(Deserialization & ctx)
 {
-    return std::make_unique<UnionStep>(
-        ctx.input_headers,
-        /* max_threads_ = */ 0,
-        /* max_streams_ = */ ctx.settings[QueryPlanSerializationSetting::max_streams_for_union_step],
-        /* max_streams_ratio_ = */ ctx.settings[QueryPlanSerializationSetting::max_streams_for_union_step_to_max_threads_ratio]);
+    return std::make_unique<UnionStep>(ctx.input_headers);
 }
 
 void registerUnionStep(QueryPlanStepRegistry & registry)

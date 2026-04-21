@@ -22,7 +22,6 @@
 #include <Processors/QueryPlan/QueryPlan.h>
 #include <Processors/QueryPlan/UnionStep.h>
 #include <QueryPipeline/QueryPipelineBuilder.h>
-#include <Common/NaNUtils.h>
 #include <Common/typeid_cast.h>
 
 #include <Interpreters/InDepthNodeVisitor.h>
@@ -42,8 +41,6 @@ namespace Setting
     extern const SettingsUInt64 max_bytes_in_distinct;
     extern const SettingsUInt64 max_rows_in_distinct;
     extern const SettingsMaxThreads max_threads;
-    extern const SettingsUInt64 max_streams_for_union_step;
-    extern const SettingsFloat max_streams_for_union_step_to_max_threads_ratio;
     extern const SettingsUInt64 offset;
     extern const SettingsBool optimize_distinct_in_order;
 }
@@ -51,7 +48,6 @@ namespace Setting
 namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
-    extern const int PARAMETER_OUT_OF_BOUND;
     extern const int UNION_ALL_RESULT_STRUCTURES_MISMATCH;
 }
 
@@ -348,13 +344,7 @@ void InterpreterSelectWithUnionQuery::buildQueryPlan(QueryPlan & query_plan)
         }
 
         auto max_threads = settings[Setting::max_threads];
-        size_t max_streams = settings[Setting::max_streams_for_union_step];
-        double max_streams_ratio = settings[Setting::max_streams_for_union_step_to_max_threads_ratio];
-        if (!isFinite(max_streams_ratio) || max_streams_ratio < 0)
-            throw Exception(ErrorCodes::PARAMETER_OUT_OF_BOUND,
-                "Invalid value for `max_streams_for_union_step_to_max_threads_ratio`: {}. Must be a finite non-negative number.",
-                max_streams_ratio);
-        auto union_step = std::make_unique<UnionStep>(std::move(headers), max_threads, max_streams, max_streams_ratio);
+        auto union_step = std::make_unique<UnionStep>(std::move(headers), max_threads);
 
         query_plan.unitePlans(std::move(union_step), std::move(plans));
 

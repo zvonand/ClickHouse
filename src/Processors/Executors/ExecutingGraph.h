@@ -174,7 +174,7 @@ private:
 
     /// Update graph after processor `node` returned UpdatePipeline status.
     /// All new nodes and nodes with updated ports are pushed into stack.
-    UpdateNodeStatus updatePipeline(boost::container::devector<Node *> & stack, Node & node);
+    UpdateNodeStatus updatePipeline(boost::container::devector<Node *> & stack, Node & node, Processors & delayed_destruction);
 
     /// Shared with QueryPipeline.
     std::shared_ptr<Processors> processors;

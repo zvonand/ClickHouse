@@ -138,7 +138,7 @@ void ExecutingGraph::removeAffectedEdges(Node & node, const std::unordered_set<N
     }
 }
 
-ExecutingGraph::UpdateNodeStatus ExecutingGraph::updatePipeline(boost::container::devector<Node *> & stack, Node & cur_node)
+ExecutingGraph::UpdateNodeStatus ExecutingGraph::updatePipeline(boost::container::devector<Node *> & stack, Node & cur_node, Processors & delayed_destruction)
 {
     IProcessor::PipelineUpdate update;
 
@@ -175,6 +175,10 @@ ExecutingGraph::UpdateNodeStatus ExecutingGraph::updatePipeline(boost::container
         }
     }
 
+    /// Processors that was removed from the pipeline can hold the last strong reference to data.
+    /// It is too expensive to destroy them under the nodes mutex.
+    delayed_destruction.splice(delayed_destruction.end(), update.to_remove);
+
     /// Updated edges for every node.
     std::vector<std::pair<Node *, NewEdges>> added_edges;
     for (auto & node : nodes)
@@ -187,16 +191,16 @@ ExecutingGraph::UpdateNodeStatus ExecutingGraph::updatePipeline(boost::container
     }
 
     /// Record updated ports for each newly added edge for each processor and schedule it for prepare if something changed.
-    for (auto & [updated_node, new_edges] : added_edges)
+    if (!is_cancelled)
     {
-        for (auto * edge : new_edges.back)
-            updated_node->updated_input_ports.emplace_back(edge->input_port);
-
-        for (auto * edge : new_edges.direct)
-            updated_node->updated_output_ports.emplace_back(edge->output_port);
-
-        if (!is_cancelled)
+        for (auto & [updated_node, new_edges] : added_edges)
         {
+            for (auto * edge : new_edges.back)
+                updated_node->updated_input_ports.emplace_back(edge->input_port);
+
+            for (auto * edge : new_edges.direct)
+                updated_node->updated_output_ports.emplace_back(edge->output_port);
+
             if (updated_node->status == ExecutingGraph::ExecStatus::Idle)
             {
                 updated_node->status = ExecutingGraph::ExecStatus::Preparing;
@@ -240,6 +244,10 @@ ExecutingGraph::UpdateNodeStatus ExecutingGraph::updateNode(Node * start_node, Q
     boost::container::devector<Edge *> updated_edges;
     boost::container::devector<Node *> updated_processors;
     updated_processors.push_back(start_node);
+
+    /// Processors removed via updatePipeline accumulate here and die at function exit,
+    /// after all graph mutexes have been released.
+    Processors delayed_destruction;
 
     std::shared_lock read_lock(nodes_mutex);
 
@@ -410,7 +418,7 @@ ExecutingGraph::UpdateNodeStatus ExecutingGraph::updateNode(Node * start_node, Q
                 read_lock.unlock();
                 {
                     std::unique_lock lock(nodes_mutex);
-                    auto status = updatePipeline(updated_processors, node);
+                    auto status = updatePipeline(updated_processors, node, delayed_destruction);
                     if (status != UpdateNodeStatus::Done)
                         return status;
                 }

@@ -1295,7 +1295,7 @@ namespace DB
 namespace S3
 {
 
-std::string getRunningAvailabilityZone(bool, AZFacilities)
+std::string getRunningAvailabilityZone(AZFacilities)
 {
     throw DB::Exception(ErrorCodes::UNSUPPORTED_METHOD, "Does not support availability zone detection for non-cloud environment");
 }

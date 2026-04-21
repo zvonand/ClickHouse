@@ -277,6 +277,8 @@ void SortingStep::updateLimit(size_t limit_)
         limit = limit_;
         transform_traits.preserves_number_of_rows = false;
     }
+    if (limit)
+        use_buffering = false;
 }
 
 void SortingStep::convertToFinishSorting(SortDescription prefix_description_, bool use_buffering_, bool apply_virtual_row_conversions_)

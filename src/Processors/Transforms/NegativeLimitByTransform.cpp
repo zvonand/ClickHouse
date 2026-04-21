@@ -376,7 +376,7 @@ void NegativeLimitBySortedStreamTransform::rememberKey(const Columns & cols, UIn
 
     for (size_t i = 0; i < key_positions.size(); ++i)
     {
-        if (prev_key_columns[i]->size() > 0)
+        if (!prev_key_columns[i]->empty())
             prev_key_columns[i]->popBack(prev_key_columns[i]->size());
         prev_key_columns[i]->insertFrom(*cols[key_positions[i]], row);
     }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Tags: no-fasttest
+# Tags: no-fasttest, no-llvm-coverage
 """Test native TCP protocol input validation.
 
 Verifies that the server properly validates wire-supplied values:

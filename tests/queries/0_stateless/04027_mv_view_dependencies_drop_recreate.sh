@@ -6,6 +6,14 @@
 # (with no view dependencies) would leak stale edges. Combined with BACKUP/RESTORE
 # this accumulated multiple dependents, violating the assertion.
 
+# Suppress the expected `BackupMetadataFinder` warnings from the RESTORE step.
+# The view's referenced tables are not in the backup (only the view itself is)
+# and have been truncated from the database, so RESTORE emits benign warnings
+# about the missing dependencies. Setting the level to `fatal` before sourcing
+# `shell_config.sh` makes it the only `--send_logs_level` value in the client
+# command line, avoiding precedence issues with the test harness's default.
+export CLICKHOUSE_CLIENT_SERVER_LOGS_LEVEL=fatal
+
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
@@ -13,23 +21,14 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 DB="${CLICKHOUSE_DATABASE}_04027"
 BACKUP_NAME="${CLICKHOUSE_DATABASE}_04027_backup"
 
-ERR_FILE="${CLICKHOUSE_TMP:-/tmp}/04027_mv_view_dependencies_drop_recreate.${CLICKHOUSE_DATABASE}.stderr"
-
 function cleanup()
 {
     ${CLICKHOUSE_CLIENT} -q "DROP DATABASE IF EXISTS ${DB}" 2>/dev/null ||:
-    rm -f "${ERR_FILE}"
 }
 trap cleanup EXIT
 cleanup
 
-# The RESTORE emits expected <Warning> messages from BackupMetadataFinder because
-# the view's referenced tables are not in the backup (only the view itself is)
-# and have been truncated from the database. `--send_logs_level=error` suppresses
-# most warnings; the BackupMetadataFinder ones still leak, so capture stderr to a
-# file, filter them out, and re-emit the rest so any unexpected diagnostics are
-# still visible.
-${CLICKHOUSE_CLIENT} --send_logs_level=error -nm -q "
+${CLICKHOUSE_CLIENT} -nm -q "
     CREATE DATABASE ${DB} ENGINE = Memory;
     CREATE TABLE ${DB}.src1 (c0 Int) ENGINE = Memory;
     CREATE TABLE ${DB}.src2 (c0 Int) ENGINE = Memory;
@@ -51,7 +50,4 @@ ${CLICKHOUSE_CLIENT} --send_logs_level=error -nm -q "
     ALTER TABLE ${DB}.mv MODIFY COMMENT '';
 
     SELECT 'OK';
-" 2>"${ERR_FILE}"
-RC=$?
-grep -v 'BackupMetadataFinder:.*Will try to ignore that and restore tables' "${ERR_FILE}" >&2 ||:
-exit $RC
+"

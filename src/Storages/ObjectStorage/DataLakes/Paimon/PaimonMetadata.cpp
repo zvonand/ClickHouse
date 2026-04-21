@@ -146,6 +146,11 @@ DataLakeMetadataPtr PaimonMetadata::create(
         object_storage, configuration_ptr, global_context, std::move(persistent_components), table_client);
 }
 
+static std::chrono::seconds computeRefreshInterval(Int64 sec)
+{
+    return sec > 0 ? std::chrono::seconds(sec) : std::chrono::seconds(0);
+}
+
 PaimonMetadata::PaimonMetadata(
     ObjectStoragePtr object_storage_,
     StorageObjectStorageConfigurationPtr /*configuration_*/,
@@ -157,9 +162,8 @@ PaimonMetadata::PaimonMetadata(
     , table_client(std::move(table_client_))
     , object_storage(std::move(object_storage_))
     , log(getLogger("PaimonMetadata"))
-    , refresh_interval_sec(persistent_components.metadata_refresh_interval_sec > 0
-            ? std::chrono::seconds(persistent_components.metadata_refresh_interval_sec)
-            : std::chrono::seconds(0))
+    , refresh_interval_sec(computeRefreshInterval(persistent_components.metadata_refresh_interval_sec))
+    , refresh_in_progress(false)
 {
     /// Load initial state
     auto initial_state = loadLatestState();

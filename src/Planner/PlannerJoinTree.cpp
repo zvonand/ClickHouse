@@ -297,6 +297,22 @@ NameAndTypePair chooseSmallestColumnToReadFromStorage(const StoragePtr & storage
     return result;
 }
 
+/// Returns the effective row policy filter for the table, or nullptr if the
+/// table has no row policies for the current user or the combined filter is
+/// always-true. Mirrors the effective-filter check used by
+/// buildRowPolicyFilterIfNeeded.
+RowPolicyFilterPtr getEffectiveRowPolicyFilter(const StoragePtr & storage, const ContextPtr & query_context)
+{
+    auto storage_id = storage->getStorageID();
+    if (!storage_id.hasDatabase())
+        return nullptr;
+    auto row_policy_filter = query_context->getRowPolicyFilter(
+        storage_id.getDatabaseName(), storage_id.getTableName(), RowPolicyFilterType::SELECT_FILTER);
+    if (!row_policy_filter || row_policy_filter->isAlwaysTrue())
+        return nullptr;
+    return row_policy_filter;
+}
+
 bool applyTrivialCountIfPossible(
     QueryPlan & query_plan,
     SelectQueryInfo & select_query_info,
@@ -315,12 +331,8 @@ bool applyTrivialCountIfPossible(
             table_node ? table_node->getStorageSnapshot() : table_function_node->getStorageSnapshot(), query_context))
         return false;
 
-    auto storage_id = storage->getStorageID();
-    auto row_policy_filter = query_context->getRowPolicyFilter(storage_id.getDatabaseName(),
-        storage_id.getTableName(),
-        RowPolicyFilterType::SELECT_FILTER);
-    if (row_policy_filter)
-        return {};
+    if (getEffectiveRowPolicyFilter(storage, query_context))
+        return false;
 
     if (select_query_info.additional_filter_ast)
         return false;
@@ -552,11 +564,10 @@ std::optional<FilterDAGInfo> buildRowPolicyFilterIfNeeded(const StoragePtr & sto
     PlannerContextPtr & planner_context,
     std::set<std::string> & used_row_policies)
 {
-    auto storage_id = storage->getStorageID();
     const auto & query_context = planner_context->getQueryContext();
 
-    auto row_policy_filter = query_context->getRowPolicyFilter(storage_id.getDatabaseName(), storage_id.getTableName(), RowPolicyFilterType::SELECT_FILTER);
-    if (!row_policy_filter || row_policy_filter->isAlwaysTrue())
+    auto row_policy_filter = getEffectiveRowPolicyFilter(storage, query_context);
+    if (!row_policy_filter)
         return {};
 
     for (const auto & row_policy : row_policy_filter->policies)
@@ -826,11 +837,11 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
               * then as the block size we will use limit + offset (not to read more from the table than requested),
               * and also set the number of threads to 1.
               */
-            auto storage_id = storage->getStorageID();
-            auto row_policy_filter = query_context->getRowPolicyFilter(
-                storage_id.getDatabaseName(), storage_id.getTableName(), RowPolicyFilterType::SELECT_FILTER);
-            bool has_additional_filters = table_expression_query_info.additional_filter_ast
-                || (row_policy_filter && !row_policy_filter->isAlwaysTrue());
+            /// Use the same effective-filter checks as the row-policy / additional-filter
+            /// planning further down: the trivial-LIMIT optimization must be disabled
+            /// whenever those filters actually apply, so the flags must agree.
+            bool has_additional_filters = !!table_expression_query_info.additional_filter_ast
+                || !!getEffectiveRowPolicyFilter(storage, query_context);
             if (!has_additional_filters)
                 max_block_size_limited = mainQueryNodeBlockSizeByLimit(select_query_info);
             if (max_block_size_limited)

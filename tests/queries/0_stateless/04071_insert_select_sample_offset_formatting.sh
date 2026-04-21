@@ -22,4 +22,4 @@ format_query() {
 format_query "INSERT INTO dest SELECT * FROM src SAMPLE 0.1 WHERE x > 0 OFFSET 3"
 
 # Nested subquery: inner SELECT should not be affected by disable_from_first_syntax
-format_query "INSERT INTO t SELECT * FROM (SELECT x FROM src SAMPLE 0.1 OFFSET 3)"
+format_query "INSERT INTO t SELECT * FROM (SELECT x FROM src SAMPLE 0.1 WHERE x > 0 OFFSET 3)"

@@ -84,6 +84,7 @@ void ASTSelectQuery::formatImpl(WriteBuffer & ostr, const FormatSettings & s, Fo
     /// of a query-level OFFSET.
     /// Note: FROM-first syntax is disabled for SELECTs inside INSERT to avoid
     /// parsing ambiguity with INSERT ... FROM INFILE syntax.
+    /// The flag is preserved in the frame so that it propagates to nested subqueries.
     bool format_from_first = sampleSize() && limitOffset() && !limitLength() && !frame.disable_from_first_syntax;
 
     if (format_from_first && tables())

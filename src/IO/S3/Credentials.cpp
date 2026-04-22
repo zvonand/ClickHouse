@@ -390,7 +390,10 @@ std::shared_ptr<AWSEC2MetadataClient> createEC2MetadataClient(const Aws::Client:
     return std::make_shared<AWSEC2MetadataClient>(client_configuration, endpoint.c_str());
 }
 
-String AWSEC2MetadataClient::getAvailabilityZoneOrException(bool is_zone_id)
+namespace
+{
+
+String getAvailabilityZoneOrException(bool is_zone_id)
 {
     auto logger = getLogger("AWSEC2MetadataClient");
     String token_str;
@@ -401,12 +404,12 @@ String AWSEC2MetadataClient::getAvailabilityZoneOrException(bool is_zone_id)
         /// Lets serialize token retrieval as we do in AWSEC2MetadataClient::getEC2MetadataToken
         std::lock_guard<std::mutex> lock(t_mutex);
 
-        Poco::URI token_uri(getAWSMetadataEndpoint() + EC2_IMDS_TOKEN_RESOURCE);
+        Poco::URI token_uri(getAWSMetadataEndpoint() + AWSEC2MetadataClient::EC2_IMDS_TOKEN_RESOURCE);
         Poco::Net::HTTPClientSession token_session(token_uri.getHost(), token_uri.getPort());
         token_session.setTimeout(Poco::Timespan(AVAILABILITY_ZONE_REQUEST_TIMEOUT_SECONDS, 0));
 
         Poco::Net::HTTPRequest token_request(Poco::Net::HTTPRequest::HTTP_PUT, token_uri.getPath(), Poco::Net::HTTPMessage::HTTP_1_1);
-        token_request.set(EC2_IMDS_TOKEN_TTL_HEADER, EC2_IMDS_TOKEN_TTL_DEFAULT_VALUE);
+        token_request.set(AWSEC2MetadataClient::EC2_IMDS_TOKEN_TTL_HEADER, AWSEC2MetadataClient::EC2_IMDS_TOKEN_TTL_DEFAULT_VALUE);
         token_request.setContentLength(0);
 
         token_session.sendRequest(token_request);
@@ -422,13 +425,13 @@ String AWSEC2MetadataClient::getAvailabilityZoneOrException(bool is_zone_id)
                 token_response.getStatus());
     }
 
-    Poco::URI uri(getAWSMetadataEndpoint() + (is_zone_id ? EC2_AVAILABILITY_ZONE_ID_RESOURCE : EC2_AVAILABILITY_ZONE_RESOURCE));
+    Poco::URI uri(getAWSMetadataEndpoint() + (is_zone_id ? AWSEC2MetadataClient::EC2_AVAILABILITY_ZONE_ID_RESOURCE : AWSEC2MetadataClient::EC2_AVAILABILITY_ZONE_RESOURCE));
     Poco::Net::HTTPClientSession session(uri.getHost(), uri.getPort());
     session.setTimeout(Poco::Timespan(AVAILABILITY_ZONE_REQUEST_TIMEOUT_SECONDS, 0));
 
     Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_GET, uri.getPath());
     if (!token_str.empty())
-        request.set(EC2_IMDS_TOKEN_HEADER, token_str);
+        request.set(AWSEC2MetadataClient::EC2_IMDS_TOKEN_HEADER, token_str);
     session.sendRequest(request);
 
     Poco::Net::HTTPResponse response;
@@ -439,6 +442,20 @@ String AWSEC2MetadataClient::getAvailabilityZoneOrException(bool is_zone_id)
     Poco::StreamCopier::copyToString(rs, response_data);
     return response_data;
 }
+}
+
+
+String AWSEC2MetadataClient::getAWSZoneID()
+{
+    return getAvailabilityZoneOrException(true);
+}
+
+String AWSEC2MetadataClient::getAWSZoneName()
+{
+    return getAvailabilityZoneOrException(false);
+}
+
+
 
 String getGCPAvailabilityZoneOrException()
 {
@@ -474,8 +491,8 @@ String getRunningAvailabilityZone(AZFacilities az_facility)
     std::vector<std::pair<bool /* used if ALL */, AZGetter>> az_getters =
     {
         /// order of getters reflects DB::S3::AZFacilities, except ALL, which is skipped
-        {false, [](){return AWSEC2MetadataClient::getAvailabilityZoneOrException(true);}},    /// MSK
-        {true,  [](){return AWSEC2MetadataClient::getAvailabilityZoneOrException(false);}},   /// CONFLUENT
+        {false, [](){return AWSEC2MetadataClient::getAWSZoneID();}},                          /// MSK
+        {true,  [](){return AWSEC2MetadataClient::getAWSZoneName();}},                        /// CONFLUENT
         {true,  getGCPAvailabilityZoneOrException},                                           /// GCP
         {false, [](){return PlacementInfo::PlacementInfo::instance().getAvailabilityZone();}} /// CLICKHOUSE
     };

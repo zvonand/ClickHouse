@@ -521,7 +521,7 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
         const auto & step = prewhere_actions.steps[step_i];
         size_t counter_i = prewhere_step_offset + step_i;
 
-        if (counter_i >= counters.size() || !counters[counter_i] || !step.actions)
+        if (counter_i >= counters.size() || !counters[counter_i] || !step->actions)
             continue;
 
         UInt64 input_rows = counters[counter_i]->rows_read.load();
@@ -538,7 +538,7 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
         elem.database = storage_id.database_name;
         elem.table = storage_id.table_name;
         elem.query_id = query_id;
-        elem.predicate_expression = step.actions->getActionsDAG().dumpDAG();
+        elem.predicate_expression = step->actions->getActionsDAG().dumpDAG();
         elem.input_rows = input_rows;
         elem.passed_rows = passed_rows;
         elem.filter_selectivity = step_selectivity;

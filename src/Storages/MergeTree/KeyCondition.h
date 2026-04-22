@@ -31,16 +31,12 @@ class MergeTreeSetIndex;
 /// * push down NOT to leaf nodes
 /// * remove aliases and re-generate function names
 /// * remove unneeded functions (e.g. materialize)
-/// * normalize .null boolean inputs to notEquals(x, 0) (when normalize_null_columns is set)
 struct ActionsDAGWithInversionPushDown
 {
     std::optional<ActionsDAG> dag;
     const ActionsDAG::Node * predicate = nullptr;
 
-    explicit ActionsDAGWithInversionPushDown(
-        const ActionsDAG::Node * predicate_,
-        const ContextPtr & context,
-        bool normalize_null_columns = false);
+    explicit ActionsDAGWithInversionPushDown(const ActionsDAG::Node * predicate_, const ContextPtr & context);
 };
 
 

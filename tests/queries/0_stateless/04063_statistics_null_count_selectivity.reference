@@ -1,15 +1,3 @@
-Without null_count: b < 250 biased to 25% selectivity
-0
-With null_count: b < 250 corrected to ~50% selectivity
-0
-High NULL ratio without null_count: b < 500 biased to 5%
-0
-High NULL ratio with null_count: b < 500 corrected to ~50%
-0
-Actual counts for bias test 1
-2500
-Actual counts for bias test 2
-500
 Test 3a: IS NOT NULL without nullcount (both conditions in prewhere)
 1	1
 Test 3b: IS NULL without nullcount (both conditions in prewhere)
@@ -17,3 +5,5 @@ Test 3b: IS NULL without nullcount (both conditions in prewhere)
 Test 3c: Actual counts for validation
 5000
 5000
+Test 4: Fallback selectivity uses non-null row count
+1

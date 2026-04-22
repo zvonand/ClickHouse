@@ -7,11 +7,6 @@
 namespace DB
 {
 
-/// Create a Range from statistics estimate for use in part pruning.
-/// Returns std::nullopt when statistics are unavailable or corrupted,
-/// causing the caller to fall back to a whole-universe Range (no pruning).
-std::optional<Range> createRangeFromEstimate(const Estimate & estimate, const DataTypePtr & data_type, bool is_nullable);
-
 /// Part pruner based on column statistics, now only supports MinMax.
 /// Similar to PartitionPruner but uses per-column statistics instead of partition keys.
 /// When MinMax statistics are available for columns used in the filter condition,
@@ -43,8 +38,6 @@ private:
     const ActionsDAGWithInversionPushDown filter_dag;
     const ContextPtr context;
     std::map<String, DataTypePtr> stats_column_name_to_type_map;
-    /// Mapping from virtual key column names (e.g. "col.null") to their parent column names.
-    std::map<String, String> virtual_key_to_parent;
     NameOrderedSet used_column_names;
     bool useless = true;
 };

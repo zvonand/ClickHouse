@@ -59,7 +59,6 @@
 #include <Disks/DiskObjectStorage/DiskObjectStorage.h>
 #include <Disks/IO/CachedOnDiskReadBufferFromFile.h>
 
-#include <algorithm>
 #include <base/defines.h>
 #include <atomic>
 #include <exception>

@@ -80,27 +80,20 @@ void ColumnStatistics::build(const ColumnPtr & column)
 void ColumnStatistics::merge(const ColumnStatisticsPtr & other)
 {
     rows += other->rows;
-
-    /// Merge statistics present on both sides
-    for (const auto & [type, stat_ptr] : stats)
+    for (const auto & stat_it : stats)
     {
-        if (auto it = other->stats.find(type); it != other->stats.end())
-            stat_ptr->merge(it->second);
+        if (auto it = other->stats.find(stat_it.first); it != other->stats.end())
+        {
+            stat_it.second->merge(it->second);
+        }
     }
-
-    /// Inherit from other if this type tolerates one-sided merge (TDigest/Uniq/CountMinSketch)
-    for (const auto & [type, stat_ptr] : other->stats)
+    for (const auto & stat_it : other->stats)
     {
-        if (!stats.contains(type) && !stat_ptr->dropOnOneSidedMerge())
-            stats.insert({type, stat_ptr});
+        if (!stats.contains(stat_it.first))
+        {
+            stats.insert(stat_it);
+        }
     }
-
-    /// Drop from this if the type requires both sides for correctness (MinMax/NullCount)
-    std::erase_if(stats, [&other](const auto & item)
-    {
-        const auto & [type, stat_ptr] = item;
-        return !other->stats.contains(type) && stat_ptr->dropOnOneSidedMerge();
-    });
 }
 
 bool ColumnStatistics::structureEquals(const ColumnStatistics & other) const
@@ -179,7 +172,7 @@ std::optional<Float64> ColumnStatistics::estimateGreater(const Field & val) cons
         return 0;
 
     if (auto less = estimateLess(val))
-        return static_cast<Float64>(rows) - *less;
+        return static_cast<Float64>(getNonNullRowCount()) - *less;
     return std::nullopt;
 }
 
@@ -206,9 +199,10 @@ std::optional<Float64> ColumnStatistics::estimateEqual(const Field & val) const
     if (stats.contains(StatisticsType::Uniq))
     {
         UInt64 cardinality = stats.at(StatisticsType::Uniq)->estimateCardinality();
-        if (cardinality == 0 || rows == 0)
+        UInt64 non_null_rows = getNonNullRowCount();
+        if (cardinality == 0 || non_null_rows == 0)
             return 0;
-        return static_cast<Float64>(rows) / static_cast<Float64>(cardinality); /// assume uniform distribution
+        return static_cast<Float64>(non_null_rows) / static_cast<Float64>(cardinality); /// assume uniform distribution
     }
 
     return std::nullopt;
@@ -220,7 +214,10 @@ std::optional<Float64> ColumnStatistics::estimateRange(const Range & range) cons
         return 0;
 
     if (range.isInfinite())
-        return static_cast<Float64>(rows);
+    {
+        bool with_null = range.left_included && range.right_included;
+        return static_cast<Float64>(with_null ? rows : getNonNullRowCount());
+    }
 
     if (range.left == range.right)
         return estimateEqual(range.left);

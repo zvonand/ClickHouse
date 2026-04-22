@@ -1,19 +1,22 @@
 After insert: statistics for Nullable columns
 a	['NullCount']
 b	['NullCount']
+e	['NullCount']
 After DROP STATISTICS a
 a	[]
 b	['NullCount']
+e	['NullCount']
 After ADD + MATERIALIZE STATISTICS a
 a	['NullCount']
 b	['NullCount']
+e	['NullCount']
 After OPTIMIZE TABLE FINAL
 a	['NullCount']
 b	['NullCount']
+e	['NullCount']
 NullCount value after OPTIMIZE FINAL
 all_1_1_1_3	a	['NullCount']
-After second insert (all NULL for a, b, c)
+After second insert (all NULL for a, b, c, e)
 a	['NullCount']
 b	['NullCount']
-LowCardinality(Nullable) statistics
-a	['NullCount']
+e	['NullCount']

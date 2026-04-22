@@ -41,8 +41,9 @@ SELECT partition, column, statistics FROM system.parts_columns
 WHERE database = currentDatabase() AND table = 'rmt_nc1' AND active AND column = 'value'
 ORDER BY partition;
 
--- Verify IS NULL pruning on replica 1
-SELECT 'Replica 1: IS NULL pruning';
+-- Note: IS NULL part pruning via nullcount was removed in Part 1.
+-- We keep the EXPLAIN for coverage, but all parts are read now.
+SELECT 'Replica 1: IS NULL (no part pruning)';
 SELECT trimLeft(explain) FROM (EXPLAIN indexes = 1 SELECT count() FROM rmt_nc1 WHERE value IS NULL)
 WHERE explain LIKE '%Parts:%';
 
@@ -55,8 +56,8 @@ SELECT partition, column, statistics FROM system.parts_columns
 WHERE database = currentDatabase() AND table = 'rmt_nc2' AND active AND column = 'value'
 ORDER BY partition;
 
--- Verify IS NULL pruning on replica 2
-SELECT 'Replica 2: IS NULL pruning';
+-- Note: IS NULL part pruning via nullcount was removed in Part 1.
+SELECT 'Replica 2: IS NULL (no part pruning)';
 SELECT trimLeft(explain) FROM (EXPLAIN indexes = 1 SELECT count() FROM rmt_nc2 WHERE value IS NULL)
 WHERE explain LIKE '%Parts:%';
 

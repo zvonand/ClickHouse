@@ -18,7 +18,6 @@ public:
     void deserialize(ReadBuffer & buf, StatisticsFileVersion version) override;
 
     String getNameForLogs() const override;
-    bool dropOnOneSidedMerge() const override { return true; }
 
     UInt64 getNullCount() const { return null_count; }
 

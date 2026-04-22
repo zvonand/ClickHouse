@@ -67,10 +67,6 @@ public:
     virtual Float64 estimateRange(const Range & range) const;
     virtual String getNameForLogs() const = 0;
 
-    /// Returns true if this statistics type must be dropped when only one side has data during merge.
-    /// MinMax and NullCount require both sides for correctness (used in part pruning).
-    /// Default is false: TDigest/Uniq/CountMinSketch tolerate one-sided inheritance with degraded accuracy.
-    virtual bool dropOnOneSidedMerge() const { return false; }
 
 protected:
     SingleStatisticsDescription stat;

@@ -469,9 +469,9 @@ Float64 ConditionSelectivityEstimator::ColumnEstimator::estimateRanges(const Pla
         if (auto estimate = stats->estimateRange(range))
             result += *estimate;
         else if (range.left == range.right)
-            result += static_cast<Float64>(stats->getNumRows()) * default_cond_equal_factor;
+            result += static_cast<Float64>(stats->getNonNullRowCount()) * default_cond_equal_factor;
         else
-            result += static_cast<Float64>(stats->getNumRows()) * default_cond_range_factor;
+            result += static_cast<Float64>(stats->getNonNullRowCount()) * default_cond_range_factor;
     }
     Float64 selectivity = result / static_cast<Float64>(stats->getNumRows());
     /// Clamp to [0, 1]. Selectivity can exceed 1 when summing estimates across

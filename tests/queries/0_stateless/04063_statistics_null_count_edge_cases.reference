@@ -9,17 +9,3 @@ all_1_1_0_2	value	['NullCount']
 all_3_3_0	value	['NullCount']
 Test 2c: After OPTIMIZE FINAL, NullCount dropped (asymmetric merge)
 all_1_3_1_2	value	['NullCount']
-Test 3a: IS NULL with subcolumns=0 (Parts 1 pruned)
-Parts: 5/5
-Parts: 5/5
-Parts: 4/5
-Parts: 4/4
-Ranges: 4
-51
-Test 3b: IS NOT NULL with subcolumns=0 (Part 0 pruned)
-Parts: 5/5
-Parts: 5/5
-Parts: 4/5
-Parts: 4/4
-Ranges: 4
-51

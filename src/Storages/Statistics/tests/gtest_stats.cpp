@@ -209,124 +209,69 @@ ColumnStatisticsPtr createTestStats(
 }
 }
 
-TEST(Statistics, MergeDropOnOneSidedMinMax)
+TEST(Statistics, EstimateGreaterUsesNonNullRows)
 {
-    auto data_type = std::make_shared<DataTypeInt32>();
+    /// Test that estimateGreater uses getNonNullRowCount() instead of rows.
+    /// With NullCount stats, estimateGreater(val) = getNonNullRowCount() - estimateLess(val).
+    /// For a column with 100 rows (50 NULL + 50 values 1..50), estimateGreater(0) ≈ 50.
+    auto nullable_data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>());
 
-    /// Build column data for testing
-    MutableColumnPtr col = data_type->createColumn();
-    for (Int32 i = 0; i < 100; ++i)
-        col->insert(i);
+    MutableColumnPtr col = nullable_data_type->createColumn();
+    auto * nullable_col = assert_cast<ColumnNullable *>(col.get());
 
-    /// Case 1: Both sides have MinMax -> should merge normally
+    for (Int32 i = 0; i < 50; ++i)
     {
-        auto stats_a = createTestStats({StatisticsType::MinMax, StatisticsType::TDigest}, data_type);
-        auto stats_b = createTestStats({StatisticsType::MinMax, StatisticsType::TDigest}, data_type);
-        stats_a->build(col->cloneResized(col->size()));
-        stats_b->build(col->cloneResized(col->size()));
-
-        stats_a->merge(stats_b);
-
-        const auto & result_stats = stats_a->getStats();
-        EXPECT_TRUE(result_stats.contains(StatisticsType::MinMax)) << "Both sides have MinMax, should keep";
-        EXPECT_TRUE(result_stats.contains(StatisticsType::TDigest)) << "Both sides have TDigest, should keep";
-        EXPECT_EQ(stats_a->getNumRows(), 200u);
+        nullable_col->insertDefault(); /// NULL
+        nullable_col->insert(i + 1);
     }
 
-    /// Case 2: this has MinMax, other doesn't -> should drop MinMax
-    {
-        auto stats_a = createTestStats({StatisticsType::MinMax, StatisticsType::TDigest}, data_type);
-        auto stats_b = createTestStats({StatisticsType::TDigest}, data_type);
-        stats_a->build(col->cloneResized(col->size()));
-        stats_b->build(col->cloneResized(col->size()));
+    auto stats = createTestStats({StatisticsType::NullCount, StatisticsType::MinMax}, nullable_data_type);
+    stats->build(std::move(col));
 
-        stats_a->merge(stats_b);
+    ASSERT_EQ(stats->getNumRows(), 100u);
+    ASSERT_EQ(stats->getNonNullRowCount(), 50u);
 
-        const auto & result_stats = stats_a->getStats();
-        EXPECT_FALSE(result_stats.contains(StatisticsType::MinMax)) << "this has MinMax but other doesn't, should drop";
-        EXPECT_TRUE(result_stats.contains(StatisticsType::TDigest)) << "Both sides have TDigest, should keep";
-    }
+    /// estimateGreater(0) should be approximately 50 (all non-NULL values are > 0)
+    /// because estimateGreater = getNonNullRowCount() - estimateLess(0) ≈ 50 - 0 = 50
+    auto estimate = stats->estimateGreater(Field(Int32(0)));
+    ASSERT_TRUE(estimate.has_value());
+    EXPECT_NEAR(*estimate, 50.0, 1.0);
 
-    /// Case 3: this doesn't have MinMax, other does -> should NOT inherit MinMax
-    {
-        auto stats_a = createTestStats({StatisticsType::TDigest}, data_type);
-        auto stats_b = createTestStats({StatisticsType::MinMax, StatisticsType::TDigest}, data_type);
-        stats_a->build(col->cloneResized(col->size()));
-        stats_b->build(col->cloneResized(col->size()));
+    /// estimateGreater(50) should be approximately 0 (no non-NULL values > 50)
+    auto estimate2 = stats->estimateGreater(Field(Int32(50)));
+    ASSERT_TRUE(estimate2.has_value());
+    EXPECT_NEAR(*estimate2, 0.0, 1.0);
 
-        stats_a->merge(stats_b);
-
-        const auto & result_stats = stats_a->getStats();
-        EXPECT_FALSE(result_stats.contains(StatisticsType::MinMax)) << "this lacks MinMax, should NOT inherit from other";
-        EXPECT_TRUE(result_stats.contains(StatisticsType::TDigest)) << "Both sides have TDigest, should keep";
-    }
-
-    /// Case 4: TDigest one-sided inheritance should work (dropOnOneSidedMerge = false)
-    {
-        auto stats_a = createTestStats({StatisticsType::MinMax}, data_type);
-        auto stats_b = createTestStats({StatisticsType::MinMax, StatisticsType::TDigest}, data_type);
-        stats_a->build(col->cloneResized(col->size()));
-        stats_b->build(col->cloneResized(col->size()));
-
-        stats_a->merge(stats_b);
-
-        const auto & result_stats = stats_a->getStats();
-        EXPECT_TRUE(result_stats.contains(StatisticsType::MinMax)) << "Both sides have MinMax, should keep";
-        EXPECT_TRUE(result_stats.contains(StatisticsType::TDigest)) << "TDigest allows one-sided inheritance";
-    }
+    /// estimateGreater(25) should be approximately 25 (values 26..50)
+    auto estimate3 = stats->estimateGreater(Field(Int32(25)));
+    ASSERT_TRUE(estimate3.has_value());
+    EXPECT_NEAR(*estimate3, 25.0, 2.0);
 }
 
-TEST(Statistics, MergeDropOnOneSidedNullCount)
+TEST(Statistics, EstimateRangeInfiniteWithoutNullUsesNonNullRows)
 {
     auto data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>());
 
-    /// Build nullable column data
     MutableColumnPtr col = data_type->createColumn();
     auto * nullable_col = assert_cast<ColumnNullable *>(col.get());
+
     for (Int32 i = 0; i < 100; ++i)
     {
         if (i % 10 == 0)
-            nullable_col->insertDefault(); /// NULL
+            nullable_col->insertDefault();
         else
             nullable_col->insert(i);
     }
 
-    /// Case 1: Both sides have NullCount -> should merge normally
-    {
-        auto stats_a = createTestStats({StatisticsType::NullCount}, data_type);
-        auto stats_b = createTestStats({StatisticsType::NullCount}, data_type);
-        stats_a->build(col->cloneResized(col->size()));
-        stats_b->build(col->cloneResized(col->size()));
+    auto stats = createTestStats({StatisticsType::NullCount}, data_type);
+    stats->build(std::move(col));
 
-        stats_a->merge(stats_b);
+    ASSERT_EQ(stats->getNumRows(), 100u);
+    ASSERT_EQ(stats->getNonNullRowCount(), 90u);
 
-        const auto & result_stats = stats_a->getStats();
-        EXPECT_TRUE(result_stats.contains(StatisticsType::NullCount)) << "Both sides have NullCount, should keep";
-    }
-
-    /// Case 2: this has NullCount, other doesn't -> should drop NullCount
-    {
-        auto stats_a = createTestStats({StatisticsType::NullCount}, data_type);
-        auto stats_b = createTestStats({}, data_type);
-        stats_a->build(col->cloneResized(col->size()));
-
-        stats_a->merge(stats_b);
-
-        const auto & result_stats = stats_a->getStats();
-        EXPECT_FALSE(result_stats.contains(StatisticsType::NullCount)) << "this has NullCount but other doesn't, should drop";
-    }
-
-    /// Case 3: this doesn't have NullCount, other does -> should NOT inherit NullCount
-    {
-        auto stats_a = createTestStats({}, data_type);
-        auto stats_b = createTestStats({StatisticsType::NullCount}, data_type);
-        stats_b->build(col->cloneResized(col->size()));
-
-        stats_a->merge(stats_b);
-
-        const auto & result_stats = stats_a->getStats();
-        EXPECT_FALSE(result_stats.contains(StatisticsType::NullCount)) << "this lacks NullCount, should NOT inherit from other";
-    }
+    auto estimate = stats->estimateRange(Range::createWholeUniverseWithoutNull());
+    ASSERT_TRUE(estimate.has_value());
+    EXPECT_DOUBLE_EQ(*estimate, 90.0);
 }
 
 TEST(Statistics, NullPredicateContradictionAndTautology)
@@ -398,148 +343,6 @@ TEST(Statistics, NullPredicateContradictionAndTautology)
     test_impl("NOT (x IS NOT NULL) OR x IS NOT NULL", 1.0, 1e-9);
 }
 
-TEST(Statistics, CreateRangeFromEstimate)
-{
-    auto data_type = std::make_shared<DataTypeInt64>();
-
-    /// Normal case: min < max, non-nullable → precise [min, max] range
-    {
-        Estimate est;
-        est.rows_count = 100;
-        est.estimated_min = Int64(10);
-        est.estimated_max = Int64(90);
-        auto range = createRangeFromEstimate(est, data_type, false);
-        ASSERT_TRUE(range.has_value());
-        EXPECT_EQ((*range).left, Field(Int64(10)));
-        EXPECT_EQ((*range).right, Field(Int64(90)));
-        EXPECT_TRUE((*range).left_included);
-        EXPECT_TRUE((*range).right_included);
-    }
-
-    /// Normal case: min == max, non-nullable → singleton range
-    {
-        Estimate est;
-        est.rows_count = 10;
-        est.estimated_min = Int64(42);
-        est.estimated_max = Int64(42);
-        auto range = createRangeFromEstimate(est, data_type, false);
-        ASSERT_TRUE(range.has_value());
-        EXPECT_EQ((*range).left, Field(Int64(42)));
-        EXPECT_EQ((*range).right, Field(Int64(42)));
-    }
-
-    /// Corrupted stats: min > max → should return nullopt (safe fallback)
-    {
-        Estimate est;
-        est.rows_count = 100;
-        est.estimated_min = Int64(90);
-        est.estimated_max = Int64(10);
-        auto range = createRangeFromEstimate(est, data_type, false);
-        EXPECT_FALSE(range.has_value()) << "Corrupted min > max should return nullopt";
-    }
-
-    /// Corrupted stats: min > max, nullable column → should return nullopt
-    {
-        Estimate est;
-        est.rows_count = 100;
-        est.estimated_min = Int64(90);
-        est.estimated_max = Int64(10);
-        est.estimated_null_count = UInt64(5);
-        auto range = createRangeFromEstimate(est, data_type, true);
-        EXPECT_FALSE(range.has_value()) << "Corrupted min > max with nullable should return nullopt";
-    }
-
-    /// Zero rows → nullopt
-    {
-        Estimate est;
-        est.rows_count = 0;
-        est.estimated_min = Int64(0);
-        est.estimated_max = Int64(100);
-        auto range = createRangeFromEstimate(est, data_type, false);
-        EXPECT_FALSE(range.has_value()) << "Zero rows should return nullopt";
-    }
-
-    /// No min/max → nullopt
-    {
-        Estimate est;
-        est.rows_count = 100;
-        auto range = createRangeFromEstimate(est, data_type, false);
-        EXPECT_FALSE(range.has_value()) << "Missing min/max should return nullopt";
-    }
-
-    /// Nullable with null_count == 0 → precise [min, max] (not [min, +inf])
-    {
-        Estimate est;
-        est.rows_count = 100;
-        est.estimated_min = Int64(10);
-        est.estimated_max = Int64(90);
-        est.estimated_null_count = UInt64(0);
-        auto range = createRangeFromEstimate(est, data_type, true);
-        ASSERT_TRUE(range.has_value());
-        EXPECT_EQ((*range).left, Field(Int64(10)));
-        EXPECT_EQ((*range).right, Field(Int64(90))) << "null_count==0 should give precise [min,max]";
-        EXPECT_TRUE((*range).left_included);
-        EXPECT_TRUE((*range).right_included);
-    }
-
-    /// Nullable with null_count > 0 → [min, +inf]
-    {
-        Estimate est;
-        est.rows_count = 100;
-        est.estimated_min = Int64(10);
-        est.estimated_max = Int64(90);
-        est.estimated_null_count = UInt64(5);
-        auto range = createRangeFromEstimate(est, data_type, true);
-        ASSERT_TRUE(range.has_value());
-        EXPECT_EQ((*range).left, Field(Int64(10)));
-        EXPECT_EQ((*range).right, POSITIVE_INFINITY);
-    }
-
-    /// NullCount-only, all NULL → [+inf, +inf]
-    {
-        Estimate est;
-        est.rows_count = 50;
-        est.estimated_null_count = UInt64(50);
-        auto range = createRangeFromEstimate(est, data_type, true);
-        ASSERT_TRUE(range.has_value());
-        EXPECT_EQ((*range).left, POSITIVE_INFINITY);
-        EXPECT_EQ((*range).right, POSITIVE_INFINITY);
-    }
-
-    /// NullCount-only, no NULLs → whole universe without null
-    {
-        Estimate est;
-        est.rows_count = 50;
-        est.estimated_null_count = UInt64(0);
-        auto range = createRangeFromEstimate(est, data_type, true);
-        ASSERT_TRUE(range.has_value());
-        EXPECT_TRUE((*range).left == NEGATIVE_INFINITY);
-        EXPECT_TRUE((*range).right == POSITIVE_INFINITY);
-        EXPECT_FALSE((*range).left_included);
-        EXPECT_FALSE((*range).right_included);
-    }
-
-    /// Corrupted: min > max using UInt64 fields
-    {
-        Estimate est;
-        est.rows_count = 100;
-        est.estimated_min = UInt64(200);
-        est.estimated_max = UInt64(50);
-        auto range = createRangeFromEstimate(est, data_type, false);
-        EXPECT_FALSE(range.has_value()) << "Corrupted UInt64 min > max should return nullopt";
-    }
-
-    /// Corrupted: min > max using Float64 fields
-    {
-        auto float_type = std::make_shared<DataTypeFloat64>();
-        Estimate est;
-        est.rows_count = 100;
-        est.estimated_min = Float64(99.5);
-        est.estimated_max = Float64(1.5);
-        auto range = createRangeFromEstimate(est, float_type, false);
-        EXPECT_FALSE(range.has_value()) << "Corrupted Float64 min > max should return nullopt";
-    }
-}
 
 TEST(Statistics, SerializeDeserializeRoundTrip)
 {

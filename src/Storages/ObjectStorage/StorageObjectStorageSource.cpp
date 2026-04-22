@@ -540,7 +540,7 @@ Chunk StorageObjectStorageSource::generate()
 
                         if (!unmatched_ranges.empty())
                         {
-                            auto query_condition_cache = read_context->getQueryConditionCache();
+                            auto query_condition_cache = Context::getGlobalContextInstance()->getQueryConditionCache();
                             query_condition_cache->write(
                                 storage_id.uuid,
                                 object_info->getFileName(),
@@ -634,7 +634,7 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
     QueryConditionCachePtr query_condition_cache;
     if (format_filter_info && format_filter_info->condition_hash
         && context_->getSettingsRef()[Setting::use_query_condition_cache])
-        query_condition_cache = context_->getQueryConditionCache();
+        query_condition_cache = Context::getGlobalContextInstance()->getQueryConditionCache();
 
     while (true)
     {

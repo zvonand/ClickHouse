@@ -1,10 +1,4 @@
 -- Tests that the text index is used for `hasAny` and `hasAll` predicates.
--- Two code paths exist:
---   * Tokenizer `array` keeps each element as a whole token, so a single
---     TextSearchQuery can be built and the Exact direct-read optimization applies.
---   * Other tokenizers split each needle element into further tokens and
---     produce one TextSearchQuery per element, evaluated as OR (`hasAny`, reusing
---     FUNCTION_HAS_ANY_ELEMENTS) or AND (`hasAll`, new FUNCTION_HAS_ALL_ELEMENTS).
 
 SET enable_analyzer = 1;
 SET query_plan_remove_unused_columns = 1;

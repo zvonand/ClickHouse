@@ -53,7 +53,6 @@ fast_test_digest_config = Job.CacheDigestConfig(
     include_paths=[
         "./ci/jobs/fast_test.py",
         "./ci/jobs/scripts/clickhouse_proc.py",
-        "ci/defs/job_configs.py",
         "./tests/queries/0_stateless/",
         "./tests/config/",
         "./tests/clickhouse-test",

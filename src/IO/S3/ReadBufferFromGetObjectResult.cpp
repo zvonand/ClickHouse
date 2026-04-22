@@ -49,8 +49,8 @@ void ReadBufferFromGetObjectResult::observeMetrics()
         return;
     metrics_observed = true;
 
-    HistogramMetrics::S3ReadRequestDuration.observe(watch.elapsedMicroseconds());
-    HistogramMetrics::S3ReadRequestBytes.observe(bytes_read);
+    HistogramMetrics::S3ReadRequestDuration.observe(static_cast<double>(watch.elapsedMicroseconds()));
+    HistogramMetrics::S3ReadRequestBytes.observe(static_cast<double>(bytes_read));
 }
 
 }

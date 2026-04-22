@@ -69,7 +69,7 @@ class _TeeStream:
                         part,
                         width=_WRAP_WIDTH,
                         subsequent_indent=" " * _TIMESTAMP_INDENT,
-                        break_long_words=True,
+                        break_long_words=False,
                         break_on_hyphens=False,
                         expand_tabs=False,
                         replace_whitespace=False,

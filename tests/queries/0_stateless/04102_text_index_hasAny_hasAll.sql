@@ -7,6 +7,9 @@
 --     FUNCTION_HAS_ANY_ELEMENTS) or AND (`hasAll`, new FUNCTION_HAS_ALL_ELEMENTS).
 
 SET enable_analyzer = 1;
+SET query_plan_remove_unused_columns = 1;
+SET query_plan_optimize_prewhere = 1;
+SET optimize_move_to_prewhere = 1;
 
 DROP TABLE IF EXISTS tab_array;
 DROP TABLE IF EXISTS tab_split;

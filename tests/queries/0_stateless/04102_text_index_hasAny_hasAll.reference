@@ -33,6 +33,7 @@ Granules: 4/4
 Name: arr_idx
 Granules: 2/4
 Granules: 1
+INPUT : 1 -> __text_index_arr_idx_hasAll_a9f8838c2835dbe60c454853d72b330b UInt8 : 2
 Granules: 4/4
 Name: arr_idx
 Granules: 1/4

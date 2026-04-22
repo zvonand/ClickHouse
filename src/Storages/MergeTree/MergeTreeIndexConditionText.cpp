@@ -181,7 +181,6 @@ bool MergeTreeIndexConditionText::requiresReadingAllTokens(const RPNElement & el
             return false;
         }
         case RPNElement::FUNCTION_HAS_ANY_ELEMENTS:
-        case RPNElement::FUNCTION_HAS_ALL_ELEMENTS:
         {
             return element.text_search_queries.size() != 1;
         }
@@ -225,19 +224,26 @@ TextIndexDirectReadMode MergeTreeIndexConditionText::getDirectReadMode(const Str
         return TextIndexDirectReadMode::Exact;
     }
 
+    bool is_array_tokenizer = typeid_cast<const ArrayTokenizer *>(tokenizer);
+    bool has_preprocessor = preprocessor && preprocessor->hasActions();
+
     if (function_name == "equals"
         || function_name == "has"
         || function_name == "mapContainsKey"
         || function_name == "mapContainsValue"
-        || function_name == "hasAny"
         || function_name == "hasAll")
     {
         /// These functions compare the searched token as a whole and therefore
         /// exact direct read is only possible with array token extractor, that doesn't
         /// split documents into tokens. Otherwise we can only use direct read as a hint.
-        bool is_array_tokenizer = typeid_cast<const ArrayTokenizer *>(tokenizer);
-        bool has_preprocessor = preprocessor && preprocessor->hasActions();
         return is_array_tokenizer && !has_preprocessor ? TextIndexDirectReadMode::Exact : getHintOrNoneMode();
+    }
+
+    if (function_name == "hasAny")
+    {
+        /// Function hasAny creates several text search queries with
+        /// tokenizers that split strings, so we can't use direct read as a hint.
+        return is_array_tokenizer && !has_preprocessor ? TextIndexDirectReadMode::Exact : TextIndexDirectReadMode::None;
     }
 
     if (function_name == "like"
@@ -303,8 +309,7 @@ bool MergeTreeIndexConditionText::alwaysUnknownOrTrue() const
          RPNElement::FUNCTION_HAS_ANY_TOKENS,
          RPNElement::FUNCTION_HAS_ALL_TOKENS,
          RPNElement::FUNCTION_LIKE,
-         RPNElement::FUNCTION_HAS_ANY_ELEMENTS,
-         RPNElement::FUNCTION_HAS_ALL_ELEMENTS});
+         RPNElement::FUNCTION_HAS_ANY_ELEMENTS});
 }
 
 bool MergeTreeIndexConditionText::mayBeTrueOnGranule(MergeTreeIndexGranulePtr idx_granule, const UpdatePartialDisjunctionResultFn & update_partial_disjunction_result_fn) const
@@ -350,7 +355,6 @@ bool MergeTreeIndexConditionText::mayBeTrueOnGranule(MergeTreeIndexGranulePtr id
             const auto & text_search_query = element.text_search_queries.front();
             bool exists_in_granule = granule->hasAllQueryTokensOrEmpty(*text_search_query);
             rpn_stack.emplace_back(exists_in_granule, true);
-
         }
         else if (element.function == RPNElement::FUNCTION_HAS_ANY_ELEMENTS)
         {
@@ -362,22 +366,6 @@ bool MergeTreeIndexConditionText::mayBeTrueOnGranule(MergeTreeIndexGranulePtr id
                 if (granule->hasAllQueryTokensOrEmpty(*text_search_query))
                 {
                     exists_in_granule = true;
-                    break;
-                }
-            }
-
-            rpn_stack.emplace_back(exists_in_granule, true);
-        }
-        else if (element.function == RPNElement::FUNCTION_HAS_ALL_ELEMENTS)
-        {
-            /// AND across per-element queries.
-            bool exists_in_granule = true;
-
-            for (const auto & text_search_query : element.text_search_queries)
-            {
-                if (!granule->hasAllQueryTokensOrEmpty(*text_search_query))
-                {
-                    exists_in_granule = false;
                     break;
                 }
             }
@@ -773,7 +761,7 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
 
         const auto & elements = value_field.safeGet<Array>();
 
-        /// hasAny(x, []) is always false, hasAll(x, []) is always true (vacuous truth).
+        /// hasAny(x, []) is always false, hasAll(x, []) is always true.
         if (elements.empty())
         {
             out.function = function_name == "hasAny" ? RPNElement::ALWAYS_FALSE : RPNElement::ALWAYS_TRUE;
@@ -783,7 +771,7 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
         const bool is_array_tokenizer = typeid_cast<const ArrayTokenizer *>(tokenizer) != nullptr;
         const bool has_preprocessor = preprocessor && preprocessor->hasActions();
 
-        if (is_array_tokenizer && !has_preprocessor)
+        if ((is_array_tokenizer && !has_preprocessor) || function_name == "hasAll")
         {
             /// Fold all needle elements into a single TextSearchQuery.
             /// This unlocks exact direct read optimizations for hasAny and hasAll.
@@ -795,7 +783,11 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
                 if (element.getType() != Field::Types::String)
                     return false;
 
-                tokens.push_back(element.safeGet<String>());
+                auto element_tokens = stringToTokens(element);
+                if (element_tokens.empty())
+                    return false;
+
+                std::move(element_tokens.begin(), element_tokens.end(), std::back_inserter(tokens));
             }
 
             if (function_name == "hasAny")
@@ -808,32 +800,33 @@ bool MergeTreeIndexConditionText::traverseFunctionNode(
                 out.function = RPNElement::FUNCTION_HAS_ALL_TOKENS;
                 out.text_search_queries.emplace_back(std::make_shared<TextSearchQuery>(function_name, TextSearchMode::All, direct_read_mode, std::move(tokens)));
             }
-            return true;
         }
-
-        /// Tokenizer splits strings: produce one TextSearchQuery per needle element.
-        for (const auto & element : elements)
+        else
         {
-            if (element.getType() != Field::Types::String)
+            /// Produce one TextSearchQuery per needle element.
+            for (const auto & element : elements)
             {
-                out.text_search_queries.clear();
-                return false;
+                if (element.getType() != Field::Types::String)
+                {
+                    out.text_search_queries.clear();
+                    return false;
+                }
+
+                auto element_tokens = stringToTokens(element);
+
+                /// An element that tokenizes to nothing cannot be proven present by the index.
+                /// Bail out to keep the original predicate, same as tryPrepareSetForTextSearch does for IN.
+                if (element_tokens.empty())
+                {
+                    out.text_search_queries.clear();
+                    return false;
+                }
+
+                out.text_search_queries.emplace_back(std::make_shared<TextSearchQuery>(function_name, TextSearchMode::All, TextIndexDirectReadMode::None, std::move(element_tokens)));
             }
 
-            auto element_tokens = stringToTokens(element);
-
-            /// An element that tokenizes to nothing cannot be proven present by the index.
-            /// Bail out to keep the original predicate, same as tryPrepareSetForTextSearch does for IN.
-            if (element_tokens.empty())
-            {
-                out.text_search_queries.clear();
-                return false;
-            }
-
-            out.text_search_queries.emplace_back(std::make_shared<TextSearchQuery>(function_name, TextSearchMode::All, TextIndexDirectReadMode::None, std::move(element_tokens)));
+            out.function = RPNElement::FUNCTION_HAS_ANY_ELEMENTS;
         }
-
-        out.function = function_name == "hasAny" ? RPNElement::FUNCTION_HAS_ANY_ELEMENTS : RPNElement::FUNCTION_HAS_ALL_ELEMENTS;
         return true;
     }
     if (function_name == "hasToken" || function_name == "hasTokenOrNull")

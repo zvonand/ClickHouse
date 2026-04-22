@@ -3,9 +3,9 @@
 #include <AggregateFunctions/IAggregateFunction.h>
 #include <AggregateFunctions/UniqVariadicHash.h>
 #include <DataTypes/DataTypesNumber.h>
+#include <Common/Exception.h>
 #include <Common/HashTable/HashMap.h>
 #include <Common/VectorWithMemoryTracking.h>
-#include <Common/Exception.h>
 #include <Common/assert_cast.h>
 
 #include <type_traits>
@@ -25,7 +25,7 @@ namespace DB
 
 namespace ErrorCodes
 {
-    extern const int INCORRECT_DATA;
+extern const int CORRUPTED_DATA;
 }
 
 struct CrossTabPhiSquaredWindowData;
@@ -497,6 +497,16 @@ struct CrossTabPhiSquaredWindowData
         count_b.read(buf);
         count_ab.read(buf);
 
+        if (count_a.size() >= INVALID_EDGE_IDX || count_b.size() >= INVALID_EDGE_IDX || count_ab.size() >= INVALID_EDGE_IDX)
+            throw Exception(
+                ErrorCodes::CORRUPTED_DATA,
+                "Corrupted aggregate function state: number of unique values or pairs is too large "
+                "(count_a={}, count_b={}, count_ab={}, limit={})",
+                count_a.size(),
+                count_b.size(),
+                count_ab.size(),
+                INVALID_EDGE_IDX - 1);
+
         /// Update the internal states
         a_hash_by_index.reserve(count_a.size());
         a_marginal_count.reserve(count_a.size());
@@ -505,7 +515,6 @@ struct CrossTabPhiSquaredWindowData
 
         for (const auto & [hash, cnt] : count_a)
         {
-            chassert(a_hash_by_index.size() < INVALID_EDGE_IDX);
             const UInt32 idx = static_cast<UInt32>(a_hash_by_index.size());
             a_index_by_hash[hash] = idx;
             a_hash_by_index.push_back(hash);
@@ -523,7 +532,6 @@ struct CrossTabPhiSquaredWindowData
 
         for (const auto & [hash, cnt] : count_b)
         {
-            chassert(b_hash_by_index.size() < INVALID_EDGE_IDX);
             const UInt32 idx = static_cast<UInt32>(b_hash_by_index.size());
             b_index_by_hash[hash] = idx;
             b_hash_by_index.push_back(hash);
@@ -543,7 +551,6 @@ struct CrossTabPhiSquaredWindowData
             const UInt32 a_idx = a_index_by_hash.at(hash_a);
             const UInt32 b_idx = b_index_by_hash.at(hash_b);
 
-            chassert(ab_edges.size() < INVALID_EDGE_IDX);
             const UInt32 edge_idx = static_cast<UInt32>(ab_edges.size());
             ab_edges.push_back(Edge{a_idx, b_idx, cnt_ab});
 
@@ -555,8 +562,8 @@ struct CrossTabPhiSquaredWindowData
             const Float64 b = static_cast<Float64>(b_marginal_count[b_idx]);
 
             if (unlikely(a <= 0 || b <= 0))
-                throw Exception(ErrorCodes::INCORRECT_DATA,
-                    "Corrupted aggregate state: marginal counts must be positive in CrossTab deserialization");
+                throw Exception(
+                    ErrorCodes::CORRUPTED_DATA, "Corrupted aggregate function state: value frequency must be positive (a={}, b={})", a, b);
 
             phi_term_sum += phiTerm(cnt_ab, a, b);
         }

@@ -490,7 +490,7 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
     std::vector<size_t> filter_step_indices;
     for (size_t i = 0; i < prewhere_actions.steps.size(); ++i)
     {
-        const auto & step = *prewhere_actions.steps[i];                                                                                                                                                                        
+        const auto & step = *prewhere_actions.steps[i];
         if (step.type == PrewhereExprStep::Filter && !step.filter_column_name.empty() && step.actions)
             filter_step_indices.push_back(i);
     }
@@ -498,7 +498,7 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
     if (filter_step_indices.empty())
         return;
 
-    size_t first = prewhere_step_offset + filter_step_indices.front();                                                                                                                                                         
+    size_t first = prewhere_step_offset + filter_step_indices.front();
     size_t last = prewhere_step_offset + filter_step_indices.back();
 
     if (last >= counters.size() || !counters[first] || !counters[last])

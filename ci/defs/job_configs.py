@@ -201,7 +201,7 @@ class JobConfigs:
         allow_merge_on_failure=True,
         post_hooks=[
             "python3 ./ci/jobs/scripts/job_hooks/clickhouse_test_cleanup_hook.py",
-            "sudo rm -rf /Users/ec2-user/actions-runner/_work/ClickHouse/ClickHouse/ci/tmp/run*",
+            "sudo rm -rf /Users/ec2-user/actions-runner/_work/ClickHouse/ClickHouse/ci/tmp/run*; sudo find /System/Volumes/Data/System/Library/Caches/com.apple.coresymbolicationd -type f -mtime +2 -delete",
         ],
     ).parametrize(
         Job.ParamSet(

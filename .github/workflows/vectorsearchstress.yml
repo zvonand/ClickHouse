@@ -48,7 +48,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Config Workflow' --workflow "VectorSearchStress" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Config Workflow' --workflow "VectorSearchStress" --ci --timestamp
 
   dockers_build_amd:
     runs-on: [self-hosted, style-checker]
@@ -82,7 +82,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (amd)' --workflow "VectorSearchStress" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (amd)' --workflow "VectorSearchStress" --ci --timestamp
 
   dockers_build_arm:
     runs-on: [self-hosted, style-checker-aarch64]
@@ -116,7 +116,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (arm)' --workflow "VectorSearchStress" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (arm)' --workflow "VectorSearchStress" --ci --timestamp
 
   vector_search_stress:
     runs-on: [self-hosted, arm-large]
@@ -150,7 +150,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Vector Search Stress' --workflow "VectorSearchStress" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Vector Search Stress' --workflow "VectorSearchStress" --ci --timestamp
 
   finish_workflow:
     runs-on: [self-hosted, style-checker-aarch64]
@@ -185,4 +185,4 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Finish Workflow' --workflow "VectorSearchStress" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Finish Workflow' --workflow "VectorSearchStress" --ci --timestamp

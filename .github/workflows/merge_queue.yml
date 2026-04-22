@@ -45,7 +45,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Config Workflow' --workflow "MergeQueueCI" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Config Workflow' --workflow "MergeQueueCI" --ci --timestamp
 
   dockers_build_amd:
     runs-on: [self-hosted, style-checker]
@@ -80,7 +80,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (amd)' --workflow "MergeQueueCI" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (amd)' --workflow "MergeQueueCI" --ci --timestamp
 
   dockers_build_arm:
     runs-on: [self-hosted, style-checker-aarch64]
@@ -115,7 +115,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (arm)' --workflow "MergeQueueCI" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (arm)' --workflow "MergeQueueCI" --ci --timestamp
 
   style_check:
     runs-on: [self-hosted, style-checker-aarch64]
@@ -150,7 +150,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Style check' --workflow "MergeQueueCI" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Style check' --workflow "MergeQueueCI" --ci --timestamp
 
   fast_test:
     runs-on: [self-hosted, amd-large]
@@ -185,7 +185,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Fast test' --workflow "MergeQueueCI" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Fast test' --workflow "MergeQueueCI" --ci --timestamp
 
   build_amd_binary:
     runs-on: [self-hosted, arm-large]
@@ -220,7 +220,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Build (amd_binary)' --workflow "MergeQueueCI" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Build (amd_binary)' --workflow "MergeQueueCI" --ci --timestamp
 
   finish_workflow:
     runs-on: [self-hosted, style-checker-aarch64]
@@ -255,4 +255,4 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Finish Workflow' --workflow "MergeQueueCI" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Finish Workflow' --workflow "MergeQueueCI" --ci --timestamp

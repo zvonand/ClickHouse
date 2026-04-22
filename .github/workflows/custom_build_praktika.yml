@@ -49,4 +49,4 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Build Praktika' --workflow "Build Praktika for PyPI" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Build Praktika' --workflow "Build Praktika for PyPI" --ci --timestamp

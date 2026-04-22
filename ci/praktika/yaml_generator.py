@@ -168,7 +168,7 @@ jobs:
         id: run
         run: |
           . {ENV_SETUP_SCRIPT}
-          PYTHONUNBUFFERED=1 python3 -m praktika run '{JOB_NAME}' --workflow "{WORKFLOW_NAME}" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run '{JOB_NAME}' --workflow "{WORKFLOW_NAME}" --ci --timestamp
 {UPLOADS_GITHUB}\
 """
 

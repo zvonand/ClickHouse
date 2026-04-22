@@ -48,7 +48,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Config Workflow' --workflow "NightlyStatistics" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Config Workflow' --workflow "NightlyStatistics" --ci --timestamp
 
   collect_statistics:
     runs-on: [self-hosted, style-checker-aarch64]
@@ -82,4 +82,4 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Collect Statistics' --workflow "NightlyStatistics" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Collect Statistics' --workflow "NightlyStatistics" --ci --timestamp

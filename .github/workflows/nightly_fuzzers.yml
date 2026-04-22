@@ -48,7 +48,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Config Workflow' --workflow "NightlyFuzzers" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Config Workflow' --workflow "NightlyFuzzers" --ci --timestamp
 
   dockers_build_amd:
     runs-on: [self-hosted, style-checker]
@@ -83,7 +83,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (amd)' --workflow "NightlyFuzzers" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (amd)' --workflow "NightlyFuzzers" --ci --timestamp
 
   dockers_build_arm:
     runs-on: [self-hosted, style-checker-aarch64]
@@ -118,7 +118,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (arm)' --workflow "NightlyFuzzers" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (arm)' --workflow "NightlyFuzzers" --ci --timestamp
 
   build_arm_fuzzers:
     runs-on: [self-hosted, arm-large]
@@ -153,7 +153,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Build (arm_fuzzers)' --workflow "NightlyFuzzers" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Build (arm_fuzzers)' --workflow "NightlyFuzzers" --ci --timestamp
 
   libfuzzer_tests:
     runs-on: [self-hosted, arm-medium]
@@ -188,7 +188,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'libFuzzer tests' --workflow "NightlyFuzzers" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'libFuzzer tests' --workflow "NightlyFuzzers" --ci --timestamp
 
   finish_workflow:
     runs-on: [self-hosted, style-checker-aarch64]
@@ -223,4 +223,4 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Finish Workflow' --workflow "NightlyFuzzers" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Finish Workflow' --workflow "NightlyFuzzers" --ci --timestamp

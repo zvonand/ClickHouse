@@ -48,7 +48,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Config Workflow' --workflow "NightlyKeeperNoFaults" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Config Workflow' --workflow "NightlyKeeperNoFaults" --ci --timestamp
 
   dockers_build_amd:
     runs-on: [self-hosted, style-checker]
@@ -83,7 +83,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (amd)' --workflow "NightlyKeeperNoFaults" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (amd)' --workflow "NightlyKeeperNoFaults" --ci --timestamp
 
   dockers_build_arm:
     runs-on: [self-hosted, style-checker-aarch64]
@@ -118,7 +118,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (arm)' --workflow "NightlyKeeperNoFaults" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Dockers Build (arm)' --workflow "NightlyKeeperNoFaults" --ci --timestamp
 
   build_arm_binary:
     runs-on: [self-hosted, arm-large]
@@ -153,7 +153,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Build (arm_binary)' --workflow "NightlyKeeperNoFaults" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Build (arm_binary)' --workflow "NightlyKeeperNoFaults" --ci --timestamp
 
   keeper_stress_no_faults:
     runs-on: [self-hosted, arm-large]
@@ -189,7 +189,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Keeper Stress (No Faults)' --workflow "NightlyKeeperNoFaults" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Keeper Stress (No Faults)' --workflow "NightlyKeeperNoFaults" --ci --timestamp
 
   finish_workflow:
     runs-on: [self-hosted, style-checker-aarch64]
@@ -224,4 +224,4 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Finish Workflow' --workflow "NightlyKeeperNoFaults" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Finish Workflow' --workflow "NightlyKeeperNoFaults" --ci --timestamp

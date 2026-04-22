@@ -48,7 +48,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Config Workflow' --workflow "Hourly" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Config Workflow' --workflow "Hourly" --ci --timestamp
 
   collect_flaky_tests:
     runs-on: [self-hosted, style-checker-aarch64]
@@ -82,7 +82,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Collect flaky tests' --workflow "Hourly" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Collect flaky tests' --workflow "Hourly" --ci --timestamp
 
   autoassign_approvers:
     runs-on: [self-hosted, style-checker-aarch64]
@@ -116,4 +116,4 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Autoassign approvers' --workflow "Hourly" --ci --timestamp --log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Autoassign approvers' --workflow "Hourly" --ci --timestamp

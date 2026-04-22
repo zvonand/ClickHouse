@@ -18,7 +18,6 @@ struct PredicateStatisticsLogElement
     String database;
     String table;
     String query_id;
-    String filter_expression;
 
     /// whole filter expression handled by this step
     String predicate_expression;

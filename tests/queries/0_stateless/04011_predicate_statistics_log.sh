@@ -118,14 +118,6 @@ FROM system.predicate_statistics_log
 WHERE table = '$TABLE_OFF' AND query_id = '$Q5';
 "
 
-# filter_expression (whole prewhere DAG dump) is not empty
-echo '--- filter_expression ---'
-$CLICKHOUSE_CLIENT --query "
-SELECT min(length(filter_expression)) > 0 AS has_expr
-FROM system.predicate_statistics_log
-WHERE table = '$TABLE' AND predicate_expression != '';
-"
-
 # Q6: conjunction — total_selectivity consistent across step rows and low
 echo '--- q6 conjunction total_selectivity ---'
 $CLICKHOUSE_CLIENT -m --query "

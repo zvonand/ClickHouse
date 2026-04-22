@@ -8,8 +8,6 @@
 1
 --- q5 disabled ---
 1
---- filter_expression ---
-1
 --- q6 conjunction total_selectivity ---
 1	1
 --- selectivity bounds ---

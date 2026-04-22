@@ -9,18 +9,34 @@
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <Interpreters/PredicateStatisticsLog.h>
-#include <Parsers/ExpressionElementParsers.h>
-#include <Parsers/parseQuery.h>
+#include <Parsers/ASTFunction.h>
+#include <Parsers/ASTLiteral.h>
 #include <base/getFQDNOrHostName.h>
 
 
 namespace DB
 {
 
+namespace
+{
+
+ASTPtr codecZSTD(UInt64 level)
+{
+    return makeASTFunction("CODEC",
+        makeASTFunction("ZSTD", make_intrusive<ASTLiteral>(level)));
+}
+
+ASTPtr codecDeltaZSTD(UInt64 delta_bytes)
+{
+    return makeASTFunction("CODEC",
+        makeASTFunction("Delta", make_intrusive<ASTLiteral>(delta_bytes)),
+        makeASTFunction("ZSTD", make_intrusive<ASTLiteral>(UInt64(1))));
+}
+
+}
+
 ColumnsDescription PredicateStatisticsLogElement::getColumnsDescription()
 {
-    ParserCodec codec_parser;
-
     auto lc_string = std::make_shared<DataTypeLowCardinality>(std::make_shared<DataTypeString>());
     auto array_lc_string = std::make_shared<DataTypeArray>(lc_string);
     auto array_uint64 = std::make_shared<DataTypeArray>(std::make_shared<DataTypeUInt64>());
@@ -31,117 +47,111 @@ ColumnsDescription PredicateStatisticsLogElement::getColumnsDescription()
         {
             "hostname",
             lc_string,
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Hostname of the server executing the query."
         },
         {
             "event_date",
             std::make_shared<DataTypeDate>(),
-            parseQuery(codec_parser, "(Delta(2), ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecDeltaZSTD(2),
             "Event date."
         },
         {
             "event_time",
             std::make_shared<DataTypeDateTime>(),
-            parseQuery(codec_parser, "(Delta(4), ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecDeltaZSTD(4),
             "Timestamp when this log entry was written."
         },
         {
             "database",
             lc_string,
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Database name of the target table."
         },
         {
             "table",
             lc_string,
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Table name of the target table."
         },
         {
             "query_id",
             std::make_shared<DataTypeString>(),
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Query ID for linking back to query_log."
-        },
-        {
-            "filter_expression",
-            std::make_shared<DataTypeString>(),
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
-            "Full filter expression pushed to the source step."
         },
         {
             "predicate_expression",
             std::make_shared<DataTypeString>(),
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Whole filter expression handled by this prewhere/filter step (ActionsDAG dump)."
         },
         {
             "input_rows",
             std::make_shared<DataTypeUInt64>(),
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Rows entering this prewhere/filter step."
         },
         {
             "passed_rows",
             std::make_shared<DataTypeUInt64>(),
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Rows surviving this prewhere/filter step."
         },
         {
             "filter_selectivity",
             std::make_shared<DataTypeFloat64>(),
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Selectivity of this step: passed_rows / input_rows."
         },
 
         {
             "total_input_rows",
             std::make_shared<DataTypeUInt64>(),
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Rows entering the first prewhere step (total rows read from granules)."
         },
         {
             "total_passed_rows",
             std::make_shared<DataTypeUInt64>(),
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Rows surviving all prewhere steps (rows delivered to the query)."
         },
         {
             "total_selectivity",
             std::make_shared<DataTypeFloat64>(),
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Selectivity of the whole predicate: total_passed_rows / total_input_rows."
         },
 
         {
             "index_names",
             array_lc_string,
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Names of indexes applied, e.g. ['PrimaryKey', 'idx_bf_status'] (index rows only)."
         },
         {
             "index_types",
             array_lc_string,
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Types of indexes applied: PrimaryKey, Skip, MinMax, Partition (index rows only)."
         },
         {
             "total_granules",
             array_uint64,
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Granules entering each index stage (index rows only)."
         },
         {
             "granules_after",
             array_uint64,
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Granules remaining after each index stage (index rows only)."
         },
         {
             "index_selectivities",
             array_float64,
-            parseQuery(codec_parser, "(ZSTD(1))", 0, DBMS_DEFAULT_MAX_PARSER_DEPTH, DBMS_DEFAULT_MAX_PARSER_BACKTRACKS),
+            codecZSTD(1),
             "Per-index selectivity: granules_after / total_granules (index rows only)."
         }
     };
@@ -157,7 +167,6 @@ void PredicateStatisticsLogElement::appendToBlock(MutableColumns & columns) cons
     columns[i++]->insert(database);
     columns[i++]->insert(table);
     columns[i++]->insert(query_id);
-    columns[i++]->insert(filter_expression);
     columns[i++]->insert(predicate_expression);
 
     columns[i++]->insert(input_rows);

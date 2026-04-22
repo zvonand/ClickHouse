@@ -945,7 +945,7 @@ Direct read is controlled by two settings:
 **Supported functions**
 
 The direct read optimization supports functions `hasToken`, `hasAllTokens`, and `hasAnyTokens`.
-If the text index is defined with an `array` tokenizer, direct read is also supported for functions `equals`, `has`, `hasAny`, `hasAll`, `mapContainsKey`, `mapContainsValue`, `hasAny`, and `hasAll`.
+If the text index is defined with an `array` tokenizer, direct read is also supported for functions `equals`, `has`, `hasAny`, `hasAll`, `mapContainsKey`, and `mapContainsValue`.
 These functions can also be combined by `AND`, `OR`, and `NOT` operators.
 The `WHERE` or `PREWHERE` clauses can also contain additional non-text-search-functions filters (for text columns or other columns) - in that case, the direct read optimization will still be used but less effective (it only applies to the supported text search functions).
 

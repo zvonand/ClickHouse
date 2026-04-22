@@ -361,14 +361,14 @@ def main():
             original_stderr = sys.stderr
             tee_stream = None
             try:
-                if args.timestamp:
-                    sys.stdout = _TimestampedStream(sys.stdout)
                 if args.log:
                     log_dir = os.path.dirname(args.log)
                     if log_dir:
                         os.makedirs(log_dir, exist_ok=True)
                     tee_stream = _TeeStream(sys.stdout, args.log)
                     sys.stdout = tee_stream
+                if args.timestamp:
+                    sys.stdout = _TimestampedStream(sys.stdout)
                 if args.timestamp or args.log:
                     sys.stderr = sys.stdout
                 Runner().run(

@@ -51,9 +51,10 @@ class _TimestampedStream:
 class _TeeStream:
     """Writes to a terminal stream (with line wrapping) and a log file (without wrapping)."""
 
-    def __init__(self, terminal, log):
+    def __init__(self, terminal, log, subsequent_indent=0):
         self._terminal = terminal
         self._log = log
+        self._subsequent_indent = " " * subsequent_indent
         self._at_line_start = True
 
     def write(self, data):
@@ -68,7 +69,7 @@ class _TeeStream:
                     textwrap.fill(
                         part,
                         width=_WRAP_WIDTH,
-                        subsequent_indent=" " * _TIMESTAMP_INDENT,
+                        subsequent_indent=self._subsequent_indent,
                         break_long_words=False,
                         break_on_hyphens=False,
                         expand_tabs=False,
@@ -195,15 +196,6 @@ def create_parser():
         help="Prefix each output line with a [YYYY-MM-DD HH:MM:SS] timestamp",
         action="store_true",
         default=False,
-    )
-    run_parser.add_argument(
-        "--log",
-        help=(
-            "Write timestamped but unwrapped output to this log file "
-            f"(default: {Settings.RUN_LOG})"
-        ),
-        default=Settings.RUN_LOG,
-        metavar="PATH",
     )
     run_parser.add_argument(
         "--workers",
@@ -376,11 +368,15 @@ def main():
             original_stderr = sys.stderr
             log_file = None
             try:
-                log_dir = os.path.dirname(args.log)
+                log_dir = os.path.dirname(Settings.RUN_LOG)
                 if log_dir:
                     os.makedirs(log_dir, exist_ok=True)
-                log_file = open(args.log, "w", buffering=1)
-                tee = _TeeStream(original_stdout, log_file)
+                log_file = open(Settings.RUN_LOG, "w", buffering=1)
+                tee = _TeeStream(
+                    original_stdout,
+                    log_file,
+                    subsequent_indent=_TIMESTAMP_INDENT if args.timestamp else 0,
+                )
                 sys.stdout = _TimestampedStream(tee) if args.timestamp else tee
                 sys.stderr = sys.stdout
                 Runner().run(

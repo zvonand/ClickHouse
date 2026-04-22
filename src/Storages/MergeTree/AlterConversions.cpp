@@ -319,7 +319,6 @@ PrewhereExprSteps AlterConversions::getMutationSteps(
             .need_filter = is_filter,
             .perform_alter_conversions = perform_alter_conversions,
             .mutation_version = actions.mutation_version,
-            .predicate_expression = {},
         };
 
         steps.push_back(std::make_shared<PrewhereExprStep>(std::move(step)));

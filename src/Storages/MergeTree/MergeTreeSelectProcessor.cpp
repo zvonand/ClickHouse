@@ -202,7 +202,6 @@ PrewhereExprInfo MergeTreeSelectProcessor::getPrewhereActions(
             .need_filter = true,
             .perform_alter_conversions = true,
             .mutation_version = std::nullopt,
-            .predicate_expression = {},
         };
 
         prewhere_actions.steps.emplace_back(std::make_shared<PrewhereExprStep>(std::move(row_level_filter_step)));
@@ -231,17 +230,9 @@ PrewhereExprInfo MergeTreeSelectProcessor::getPrewhereActions(
             .need_filter = prewhere_info->need_filter,
             .perform_alter_conversions = true,
             .mutation_version = std::nullopt,
-            .predicate_expression = {},
         };
 
         prewhere_actions.steps.emplace_back(std::make_shared<PrewhereExprStep>(std::move(prewhere_step)));
-    }
-
-    /// capture the whole filter expression of each step for selectivity logging
-    for (auto & step : prewhere_actions.steps)
-    {
-        if (step->type == PrewhereExprStep::Filter && !step->filter_column_name.empty() && step->actions)
-            step->predicate_expression = step->actions->getActionsDAG().dumpDAG();
     }
 
     return prewhere_actions;
@@ -499,20 +490,16 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
     std::vector<size_t> filter_step_indices;
     for (size_t i = 0; i < prewhere_actions.steps.size(); ++i)
     {
-        const auto & step = prewhere_actions.steps[i];
-        if (step->type == PrewhereExprStep::Filter)
-        {
-            all_filter_indices.push_back(i);
-            if (!step->predicate_expression.empty())
-                filter_step_indices.push_back(i);
-        }
+        const auto & step = *prewhere_actions.steps[i];                                                                                                                                                                        
+        if (step.type == PrewhereExprStep::Filter && !step.filter_column_name.empty() && step.actions)
+            filter_step_indices.push_back(i);
     }
 
     if (filter_step_indices.empty())
         return;
 
-    size_t first = prewhere_step_offset + all_filter_indices.front();
-    size_t last = prewhere_step_offset + all_filter_indices.back();
+    size_t first = prewhere_step_offset + filter_step_indices.front();                                                                                                                                                         
+    size_t last = prewhere_step_offset + filter_step_indices.back();
 
     if (last >= counters.size() || !counters[first] || !counters[last])
         return;
@@ -534,7 +521,7 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
         const auto & step = prewhere_actions.steps[step_i];
         size_t counter_i = prewhere_step_offset + step_i;
 
-        if (counter_i >= counters.size() || !counters[counter_i])
+        if (counter_i >= counters.size() || !counters[counter_i] || !step.actions)
             continue;
 
         UInt64 input_rows = counters[counter_i]->rows_read.load();
@@ -551,7 +538,7 @@ void MergeTreeSelectProcessor::logPredicateStatistics() const
         elem.database = storage_id.database_name;
         elem.table = storage_id.table_name;
         elem.query_id = query_id;
-        elem.predicate_expression = step->predicate_expression;
+        elem.predicate_expression = step.actions->getActionsDAG().dumpDAG();
         elem.input_rows = input_rows;
         elem.passed_rows = passed_rows;
         elem.filter_selectivity = step_selectivity;

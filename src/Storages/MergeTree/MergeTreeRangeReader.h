@@ -45,9 +45,6 @@ struct PrewhereExprStep
 
     /// Version of mutation if step is a part of on-fly mutation.
     std::optional<UInt64> mutation_version;
-
-    /// Dump of the whole filter expression for this step, used when logging per-step selectivity
-    String predicate_expression;
 };
 
 using PrewhereExprStepPtr = std::shared_ptr<PrewhereExprStep>;

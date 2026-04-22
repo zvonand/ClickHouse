@@ -339,7 +339,6 @@ bool tryBuildPrewhereSteps(
                 .need_filter = force_short_circuit_execution,
                 .perform_alter_conversions = true,
                 .mutation_version = std::nullopt,
-                .predicate_expression = {},
             };
 
             prewhere.steps.push_back(std::make_shared<PrewhereExprStep>(std::move(new_step)));

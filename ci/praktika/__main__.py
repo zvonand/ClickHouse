@@ -1,5 +1,6 @@
 import argparse
 import datetime
+import os
 import sys
 import textwrap
 
@@ -356,24 +357,43 @@ def main():
         else:
             job, workflow = job_workflow_pairs[0][0], job_workflow_pairs[0][1]
             print(f"Going to run job [{job.name}], workflow [{workflow.name}]")
-            Runner().run(
-                workflow=workflow,
-                job=job,
-                docker=args.docker,
-                local_run=not args.ci,
-                run_hooks=args.ci or args.run_hooks_locally,
-                no_docker=args.no_docker,
-                param=args.param,
-                test=" ".join(args.test),
-                pr=args.pr,
-                branch=args.branch,
-                sha=args.sha,
-                count=args.count,
-                debug=args.debug,
-                path=args.path,
-                path_1=args.path_1,
-                workers=args.workers,
-            )
+            original_stdout = sys.stdout
+            original_stderr = sys.stderr
+            tee_stream = None
+            try:
+                if args.timestamp:
+                    sys.stdout = _TimestampedStream(sys.stdout)
+                if args.log:
+                    log_dir = os.path.dirname(args.log)
+                    if log_dir:
+                        os.makedirs(log_dir, exist_ok=True)
+                    tee_stream = _TeeStream(sys.stdout, args.log)
+                    sys.stdout = tee_stream
+                if args.timestamp or args.log:
+                    sys.stderr = sys.stdout
+                Runner().run(
+                    workflow=workflow,
+                    job=job,
+                    docker=args.docker,
+                    local_run=not args.ci,
+                    run_hooks=args.ci or args.run_hooks_locally,
+                    no_docker=args.no_docker,
+                    param=args.param,
+                    test=" ".join(args.test),
+                    pr=args.pr,
+                    branch=args.branch,
+                    sha=args.sha,
+                    count=args.count,
+                    debug=args.debug,
+                    path=args.path,
+                    path_1=args.path_1,
+                    workers=args.workers,
+                )
+            finally:
+                sys.stdout = original_stdout
+                sys.stderr = original_stderr
+                if tee_stream is not None:
+                    tee_stream.close()
     else:
         parser.print_help()
         sys.exit(1)

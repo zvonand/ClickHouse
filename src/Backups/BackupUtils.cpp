@@ -2,6 +2,7 @@
 #include <Backups/BackupUtils.h>
 #include <Backups/DDLAdjustingForBackupVisitor.h>
 #include <Databases/DDLRenamingVisitor.h>
+#include <Databases/TablesDependencyGraph.h>
 #include <Interpreters/DatabaseCatalog.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Storages/StorageMaterializedView.h>
@@ -131,9 +132,12 @@ bool isInnerTable(const String & /* database_name */, const String & table_name)
     return table_name.starts_with(".inner.") || table_name.starts_with(".inner_id.") || table_name.starts_with(".tmp.inner.") || table_name.starts_with(".tmp.inner_id.");
 }
 
-bool isTargetForReplaceRefreshableMaterializedView(const StorageID & storage_id, const ContextPtr & context)
+bool isTargetForReplaceRefreshableMaterializedView(
+    const StorageID & storage_id,
+    const TablesDependencyGraph & tables_dependencies,
+    const ContextPtr & context)
 {
-    auto dependents = DatabaseCatalog::instance().getReferentialDependents(storage_id);
+    auto dependents = tables_dependencies.getDependents(storage_id);
 
     auto is_rmv_targeting_table = [&](const StorageID & mv_candidate, const StorageID & target_id) -> bool
     {

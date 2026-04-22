@@ -25,6 +25,7 @@ struct IAccessEntity;
 using AccessEntityPtr = std::shared_ptr<const IAccessEntity>;
 class QueryStatus;
 using QueryStatusPtr = std::shared_ptr<QueryStatus>;
+class TablesDependencyGraph;
 
 
 /// Collects backup entries for all databases and tables which should be put to a backup.
@@ -97,7 +98,10 @@ private:
     void makeBackupEntriesForTablesDefs();
     void makeBackupEntriesForTablesData();
     void makeBackupEntriesForTableData(const QualifiedTableName & table_name);
-    bool shouldBackupTableData(const QualifiedTableName & table_name, const StoragePtr & storage) const;
+    bool shouldBackupTableData(
+        const QualifiedTableName & table_name,
+        const StoragePtr & storage,
+        const TablesDependencyGraph & tables_dependencies) const;
 
     void addBackupEntryUnlocked(const String & file_name, BackupEntryPtr backup_entry);
 

@@ -8,7 +8,9 @@
 #include <Backups/DDLAdjustingForBackupVisitor.h>
 #include <Backups/IBackupCoordination.h>
 #include <Core/Settings.h>
+#include <Databases/DDLDependencyVisitor.h>
 #include <Databases/IDatabase.h>
+#include <Databases/TablesDependencyGraph.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/DatabaseCatalog.h>
 #include <Parsers/ASTCreateQuery.h>
@@ -524,6 +526,12 @@ void BackupEntriesCollector::gatherTablesMetadata()
     checkIsQueryCancelled();
 
     table_infos.clear();
+
+    /// Build a dependency graph over all tables being backed up. We use it
+    /// to decide whether a table is a target of a refreshable materialized view
+    /// that is also being backed up (see `shouldBackupTableData`).
+    TablesDependencyGraph tables_dependencies("BackupEntriesCollector");
+
     for (const auto & [database_name, database_info] : database_infos)
     {
         std::vector<std::pair<ASTPtr, StoragePtr>> db_tables = findTablesInDatabase(database_name);
@@ -559,26 +567,40 @@ void BackupEntriesCollector::gatherTablesMetadata()
             res_table_info.create_table_query = create_table_query;
             res_table_info.metadata_path_in_backup = metadata_path_in_backup;
             res_table_info.data_path_in_backup = data_path_in_backup;
-            res_table_info.should_backup_data = shouldBackupTableData(qualified_name, storage);
 
-            if (res_table_info.should_backup_data)
-            {
-                auto it = database_info.tables.find(table_name);
-                if (it != database_info.tables.end())
-                {
-                    const auto & partitions = it->second.partitions;
-                    if (partitions && storage && !storage->supportsBackupPartition())
-                    {
-                        throw Exception(
-                            ErrorCodes::CANNOT_BACKUP_TABLE,
-                            "Table engine {} doesn't support partitions, cannot backup {}",
-                            storage->getName(),
-                            tableNameWithTypeToString(database_name, table_name, false));
-                    }
-                    res_table_info.partitions = partitions;
-                }
-            }
+            tables_dependencies.addDependencies(
+                qualified_name,
+                getDependenciesFromCreateQuery(
+                    context->getGlobalContext(), qualified_name, create_table_query, context->getCurrentDatabase()).dependencies);
         }
+    }
+
+    tables_dependencies.checkNoCyclicDependencies();
+
+    /// Second pass: now that the graph is fully built, decide whether the data
+    /// of each table should be backed up and validate partition-related constraints.
+    for (auto & [qualified_name, res_table_info] : table_infos)
+    {
+        res_table_info.should_backup_data = shouldBackupTableData(qualified_name, res_table_info.storage, tables_dependencies);
+
+        if (!res_table_info.should_backup_data)
+            continue;
+
+        const auto & database_info = database_infos.at(qualified_name.database);
+        auto it = database_info.tables.find(qualified_name.table);
+        if (it == database_info.tables.end())
+            continue;
+
+        const auto & partitions = it->second.partitions;
+        if (partitions && res_table_info.storage && !res_table_info.storage->supportsBackupPartition())
+        {
+            throw Exception(
+                ErrorCodes::CANNOT_BACKUP_TABLE,
+                "Table engine {} doesn't support partitions, cannot backup {}",
+                res_table_info.storage->getName(),
+                tableNameWithTypeToString(qualified_name.database, qualified_name.table, false));
+        }
+        res_table_info.partitions = partitions;
     }
 }
 
@@ -857,7 +879,10 @@ void BackupEntriesCollector::makeBackupEntriesForTableData(const QualifiedTableN
     }
 }
 
-bool BackupEntriesCollector::shouldBackupTableData(const QualifiedTableName & table_name, const StoragePtr & storage) const
+bool BackupEntriesCollector::shouldBackupTableData(
+    const QualifiedTableName & table_name,
+    const StoragePtr & storage,
+    const TablesDependencyGraph & tables_dependencies) const
 {
     if (backup_settings.structure_only)
         return false;
@@ -866,7 +891,7 @@ bool BackupEntriesCollector::shouldBackupTableData(const QualifiedTableName & ta
         return true;
 
     if (!backup_settings.backup_data_from_refreshable_materialized_view_targets
-        && BackupUtils::isTargetForReplaceRefreshableMaterializedView(storage->getStorageID(), context))
+        && BackupUtils::isTargetForReplaceRefreshableMaterializedView(storage->getStorageID(), tables_dependencies, context))
     {
         LOG_TRACE(log, "Skipping table data for {} (a target of a refreshable materialized view)", table_name.getFullName());
         return false;

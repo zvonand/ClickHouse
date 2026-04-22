@@ -340,7 +340,6 @@ DataTypePtr IcebergSchemaProcessor::getFieldType(
     {
         const String & type_name = type.extract<String>();
         auto data_type = getSimpleType(type_name, allow_geo_parser);
-        // Types like Geometry (Variant) cannot be inside Nullable; they carry their own null semantics.
         return required || !data_type->canBeInsideNullable() ? data_type : makeNullable(data_type);
     }
 

@@ -726,13 +726,16 @@ void prepareGeoColumn(ColumnPtr & column, DataTypePtr & type)
         }
 
         auto result = ColumnString::create();
+        auto null_map = ColumnUInt8::create();
         result->reserve(col_variant.size());
+        null_map->reserve(col_variant.size());
         for (size_t i = 0; i < col_variant.size(); ++i)
         {
             const auto local_discriminator = col_variant.localDiscriminatorAt(i);
             if (local_discriminator == ColumnVariant::NULL_DISCRIMINATOR)
             {
                 result->insertDefault();
+                null_map->insertValue(1);
                 continue;
             }
             const auto global_discriminator = col_variant.globalDiscriminatorAt(i);
@@ -745,9 +748,10 @@ void prepareGeoColumn(ColumnPtr & column, DataTypePtr & type)
             Field field;
             sub_column.get(col_variant.offsetAt(i), field);
             result->insert(transforms[global_discriminator]->dumpObject(field));
+            null_map->insertValue(0);
         }
-        column = std::move(result);
-        type = std::make_shared<DataTypeString>();
+        column = ColumnNullable::create(std::move(result), std::move(null_map));
+        type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeString>());
         return;
     }
 

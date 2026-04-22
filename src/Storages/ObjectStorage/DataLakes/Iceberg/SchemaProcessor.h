@@ -83,7 +83,7 @@ class IcebergSchemaProcessor
     using Node = ActionsDAG::Node;
 
 public:
-    explicit IcebergSchemaProcessor(bool allow_geo_parser_ = true) : allow_geo_parser(allow_geo_parser_) {}
+    explicit IcebergSchemaProcessor(bool allow_geo_parser_ = false) : allow_geo_parser(allow_geo_parser_) {}
 
     void addIcebergTableSchema(Poco::JSON::Object::Ptr schema_ptr);
     std::shared_ptr<NamesAndTypesList> getClickhouseTableSchemaById(Int32 id);

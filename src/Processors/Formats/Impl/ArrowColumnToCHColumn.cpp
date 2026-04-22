@@ -1057,8 +1057,6 @@ static ColumnWithTypeAndName readNonNullableColumnFromArrowColumn(
             {
                 return readColumnWithGeoData(arrow_column, column_name, *geo_metadata);
             }
-            // Iceberg spec v3 geometry/geography columns are WKB-encoded BINARY fields.
-            // When the schema processor sets the type_hint to Geometry, parse WKB directly.
             if (type_hint && type_hint->getName() == "Geometry" && settings.allow_geoparquet_parser)
             {
                 return readColumnWithGeoData(arrow_column, column_name, GeoColumnMetadata{GeoEncoding::WKB, GeoType::Mixed});

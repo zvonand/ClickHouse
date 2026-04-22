@@ -886,9 +886,6 @@ void SchemaConverter::processPrimitiveColumn(
         return;
     }
 
-    /// Iceberg spec v3 geometry/geography columns: WKB-encoded BYTE_ARRAY with type hint Geometry.
-    /// These are BINARY Parquet columns without GeoParquet metadata, but the Iceberg schema
-    /// declares them as geometry/geography types which SchemaProcessor maps to Geometry.
     if (type_hint && type_hint->getName() == "Geometry" && type == parq::Type::BYTE_ARRAY)
     {
         GeoColumnMetadata iceberg_geo{GeoEncoding::WKB, GeoType::Mixed};

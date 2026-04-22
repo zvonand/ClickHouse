@@ -36,6 +36,9 @@ class _TimestampedStream:
                         subsequent_indent=indent,
                         break_long_words=True,
                         break_on_hyphens=False,
+                        expand_tabs=False,
+                        replace_whitespace=False,
+                        drop_whitespace=False,
                     )
                 )
             elif part:

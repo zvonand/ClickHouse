@@ -1,10 +1,77 @@
 import argparse
+import datetime
 import sys
+import textwrap
 
 from .html_prepare import Html
+from .settings import Settings
 from .utils import Utils
 from .validator import Validator
 from .yaml_generator import YamlGenerator
+
+
+_WRAP_WIDTH = 160
+
+
+class _TimestampedStream:
+    def __init__(self, stream):
+        self._stream = stream
+        self._at_line_start = True
+
+    def write(self, data):
+        if not data:
+            return
+        parts = data.split("\n")
+        for i, part in enumerate(parts):
+            is_last = i == len(parts) - 1
+            if self._at_line_start and part:
+                ts = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S] ")
+                indent = " " * len(ts)
+                self._stream.write(
+                    textwrap.fill(
+                        part,
+                        width=_WRAP_WIDTH,
+                        initial_indent=ts,
+                        subsequent_indent=indent,
+                        break_long_words=True,
+                        break_on_hyphens=False,
+                    )
+                )
+            elif part:
+                self._stream.write(part)
+            if not is_last:
+                self._stream.write("\n")
+                self._at_line_start = True
+            else:
+                self._at_line_start = not part
+
+    def flush(self):
+        self._stream.flush()
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
+class _TeeStream:
+    """Writes to a terminal stream and a plain log file simultaneously."""
+
+    def __init__(self, terminal, log_path):
+        self._terminal = terminal
+        self._log = open(log_path, "w", buffering=1)
+
+    def write(self, data):
+        self._terminal.write(data)
+        self._log.write(data)
+
+    def flush(self):
+        self._terminal.flush()
+        self._log.flush()
+
+    def close(self):
+        self._log.close()
+
+    def __getattr__(self, name):
+        return getattr(self._terminal, name)
 
 
 def create_parser():
@@ -104,6 +171,23 @@ def create_parser():
         ),
         action="store_true",
         default="",
+    )
+    run_parser.add_argument(
+        "--timestamp",
+        help="Prefix each output line with a [YYYY-MM-DD HH:MM:SS] timestamp",
+        action="store_true",
+        default=False,
+    )
+    run_parser.add_argument(
+        "--log",
+        help=(
+            "Write plain (unwrapped) output to this log file in addition to stdout "
+            "(default path: job.log when flag is given without a value)"
+        ),
+        nargs="?",
+        const=Settings.RUN_LOG,
+        default=None,
+        metavar="PATH",
     )
     run_parser.add_argument(
         "--workers",

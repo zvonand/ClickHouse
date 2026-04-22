@@ -1,4 +1,4 @@
-SELECT 'Sanity Check to ensure window variant is choosen. Non-window variant would take too long';
+SELECT 'Sanity Check to ensure window variant is chosen. Non-window variant would take too long';
 SELECT
     number,
     round(cv, 2),

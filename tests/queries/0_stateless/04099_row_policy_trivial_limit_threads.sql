@@ -1,4 +1,6 @@
--- Tags: no-parallel-replicas
+-- Tags: no-parallel-replicas, no-object-storage
+-- -no-parallel-replicas - PR changes the EXPLAIN output
+-- -no-object-storage - parts on remote FS uses MergeTreeSelect(pool: ReadPool) over MergeTreeSelect(pool: ReadPoolInOrder)
 
 -- The trivial LIMIT optimization reduces max_streams to 1 for simple
 -- SELECT ... LIMIT N queries without WHERE.  When row policies or
@@ -26,7 +28,7 @@ SELECT 'no_row_policy';
 SELECT *
 FROM (EXPLAIN PIPELINE SELECT id FROM t_row_policy_limit LIMIT 1
       SETTINGS max_threads = 4)
-WHERE explain LIKE '%Concat%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
+WHERE explain LIKE '%Limit%' OR explain LIKE '%Concat%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
 
 -- Case 1: row policy prevents trivial-limit, keeps multiple streams.
 DROP ROW POLICY IF EXISTS 04099_p1 ON t_row_policy_limit;
@@ -36,7 +38,7 @@ SELECT 'row_policy';
 SELECT *
 FROM (EXPLAIN PIPELINE SELECT id FROM t_row_policy_limit LIMIT 1
       SETTINGS max_threads = 4)
-WHERE explain LIKE '%Concat%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
+WHERE explain LIKE '%Limit%' OR explain LIKE '%Concat%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
 DROP ROW POLICY 04099_p1 ON t_row_policy_limit;
 
 -- Case 2: always-true row policy adds no effective predicate, so the
@@ -48,7 +50,7 @@ SELECT 'row_policy_always_true';
 SELECT *
 FROM (EXPLAIN PIPELINE SELECT id FROM t_row_policy_limit LIMIT 1
       SETTINGS max_threads = 4)
-WHERE explain LIKE '%Concat%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
+WHERE explain LIKE '%Limit%' OR explain LIKE '%Concat%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
 
 DROP ROW POLICY 04099_p_true ON t_row_policy_limit;
 
@@ -58,6 +60,6 @@ SELECT *
 FROM (EXPLAIN PIPELINE SELECT id FROM t_row_policy_limit LIMIT 1
       SETTINGS max_threads = 4,
                additional_table_filters = {'t_row_policy_limit': 'id < 500'})
-WHERE explain LIKE '%Concat%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
+WHERE explain LIKE '%Limit%' OR explain LIKE '%Concat%' OR explain LIKE '%ReadFromMergeTree%' OR explain LIKE '%MergeTreeSelect%';
 
 DROP TABLE t_row_policy_limit;

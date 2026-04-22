@@ -12,9 +12,14 @@ from .yaml_generator import YamlGenerator
 
 
 _WRAP_WIDTH = 160
+_TIMESTAMP_INDENT = len(
+    datetime.datetime(2000, 1, 1).strftime("[%Y-%m-%d %H:%M:%S] ")
+)
 
 
 class _TimestampedStream:
+    """Prepends a [YYYY-MM-DD HH:MM:SS] timestamp to each output line."""
+
     def __init__(self, stream):
         self._stream = stream
         self._at_line_start = True
@@ -27,20 +32,7 @@ class _TimestampedStream:
             is_last = i == len(parts) - 1
             if self._at_line_start and part:
                 ts = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S] ")
-                indent = " " * len(ts)
-                self._stream.write(
-                    textwrap.fill(
-                        part,
-                        width=_WRAP_WIDTH,
-                        initial_indent=ts,
-                        subsequent_indent=indent,
-                        break_long_words=True,
-                        break_on_hyphens=False,
-                        expand_tabs=False,
-                        replace_whitespace=False,
-                        drop_whitespace=False,
-                    )
-                )
+                self._stream.write(ts + part)
             elif part:
                 self._stream.write(part)
             if not is_last:
@@ -57,22 +49,44 @@ class _TimestampedStream:
 
 
 class _TeeStream:
-    """Writes to a terminal stream and a plain log file simultaneously."""
+    """Writes to a terminal stream (with line wrapping) and a log file (without wrapping)."""
 
-    def __init__(self, terminal, log_path):
+    def __init__(self, terminal, log):
         self._terminal = terminal
-        self._log = open(log_path, "w", buffering=1)
+        self._log = log
+        self._at_line_start = True
 
     def write(self, data):
-        self._terminal.write(data)
+        if not data:
+            return
         self._log.write(data)
+        parts = data.split("\n")
+        for i, part in enumerate(parts):
+            is_last = i == len(parts) - 1
+            if self._at_line_start and part:
+                self._terminal.write(
+                    textwrap.fill(
+                        part,
+                        width=_WRAP_WIDTH,
+                        subsequent_indent=" " * _TIMESTAMP_INDENT,
+                        break_long_words=True,
+                        break_on_hyphens=False,
+                        expand_tabs=False,
+                        replace_whitespace=False,
+                        drop_whitespace=False,
+                    )
+                )
+            elif part:
+                self._terminal.write(part)
+            if not is_last:
+                self._terminal.write("\n")
+                self._at_line_start = True
+            else:
+                self._at_line_start = not part
 
     def flush(self):
         self._terminal.flush()
         self._log.flush()
-
-    def close(self):
-        self._log.close()
 
     def __getattr__(self, name):
         return getattr(self._terminal, name)
@@ -185,12 +199,10 @@ def create_parser():
     run_parser.add_argument(
         "--log",
         help=(
-            "Write plain (unwrapped) output to this log file in addition to stdout "
-            "(default path: job.log when flag is given without a value)"
+            "Write timestamped but unwrapped output to this log file "
+            f"(default: {Settings.RUN_LOG})"
         ),
-        nargs="?",
-        const=Settings.RUN_LOG,
-        default=None,
+        default=Settings.RUN_LOG,
         metavar="PATH",
     )
     run_parser.add_argument(
@@ -362,18 +374,15 @@ def main():
             print(f"Going to run job [{job.name}], workflow [{workflow.name}]")
             original_stdout = sys.stdout
             original_stderr = sys.stderr
-            tee_stream = None
+            log_file = None
             try:
-                if args.log:
-                    log_dir = os.path.dirname(args.log)
-                    if log_dir:
-                        os.makedirs(log_dir, exist_ok=True)
-                    tee_stream = _TeeStream(sys.stdout, args.log)
-                    sys.stdout = tee_stream
-                if args.timestamp:
-                    sys.stdout = _TimestampedStream(sys.stdout)
-                if args.timestamp or args.log:
-                    sys.stderr = sys.stdout
+                log_dir = os.path.dirname(args.log)
+                if log_dir:
+                    os.makedirs(log_dir, exist_ok=True)
+                log_file = open(args.log, "w", buffering=1)
+                tee = _TeeStream(original_stdout, log_file)
+                sys.stdout = _TimestampedStream(tee) if args.timestamp else tee
+                sys.stderr = sys.stdout
                 Runner().run(
                     workflow=workflow,
                     job=job,
@@ -395,8 +404,8 @@ def main():
             finally:
                 sys.stdout = original_stdout
                 sys.stderr = original_stderr
-                if tee_stream is not None:
-                    tee_stream.close()
+                if log_file is not None:
+                    log_file.close()
     else:
         parser.print_help()
         sys.exit(1)

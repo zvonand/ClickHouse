@@ -112,16 +112,44 @@ bool equals(const T & first, const T & second)
     return first_string_stream.str() == second_string_stream.str();
 }
 
-bool operator==(const Poco::JSON::Array & first, const Poco::JSON::Array & second)
+
+bool schemaFieldsAreStructurallyIdentical(const Poco::JSON::Object & first, const Poco::JSON::Object & second)
 {
-    return equals(first, second);
+    static constexpr const char * structural_keys[] = {f_id, f_name, f_required, f_type};
+    for (const char * key : structural_keys)
+    {
+        const bool first_has = first.has(key);
+        const bool second_has = second.has(key);
+        if (first_has != second_has)
+            return false;
+        if (!first_has)
+            continue;
+        Poco::JSON::Object wrapper_first;
+        wrapper_first.set(key, first.get(key));
+        Poco::JSON::Object wrapper_second;
+        wrapper_second.set(key, second.get(key));
+        if (!equals(wrapper_first, wrapper_second))
+            return false;
+    }
+    return true;
 }
 
 bool schemasAreIdentical(const Poco::JSON::Object & first, const Poco::JSON::Object & second)
 {
     if (!first.isArray(f_fields) || !second.isArray(f_fields))
         return false;
-    return *(first.getArray(f_fields)) == *(second.getArray(f_fields));
+    const auto first_fields = first.getArray(f_fields);
+    const auto second_fields = second.getArray(f_fields);
+    if (first_fields->size() != second_fields->size())
+        return false;
+    for (UInt32 i = 0; i != first_fields->size(); ++i)
+    {
+        const auto first_field = first_fields->getObject(i);
+        const auto second_field = second_fields->getObject(i);
+        if (!first_field || !second_field || !schemaFieldsAreStructurallyIdentical(*first_field, *second_field))
+            return false;
+    }
+    return true;
 }
 
 std::pair<size_t, size_t> parseDecimal(const String & type_name)

@@ -44,12 +44,12 @@ SELECT count() FROM tab_array WHERE hasAll(arr, []);
 
 SELECT '-- array tokenizer: index is used';
 SELECT trimLeft(explain) FROM (
-    EXPLAIN indexes = 1 SELECT count() FROM tab_array WHERE hasAny(arr, ['foo', 'baz'])
-) WHERE explain LIKE '%Name:%' OR explain LIKE '%Granules:%';
+    EXPLAIN indexes = 1, actions = 1 SELECT count() FROM tab_array WHERE hasAny(arr, ['foo', 'baz'])
+) WHERE explain LIKE '%Name:%' OR explain LIKE '%Granules:%' OR explain LIKE '%INPUT%\_\_text_index%';
 
 SELECT trimLeft(explain) FROM (
-    EXPLAIN indexes = 1 SELECT count() FROM tab_array WHERE hasAll(arr, ['foo', 'bar'])
-) WHERE explain LIKE '%Name:%' OR explain LIKE '%Granules:%';
+    EXPLAIN indexes = 1, actions = 1 SELECT count() FROM tab_array WHERE hasAll(arr, ['foo', 'bar'])
+) WHERE explain LIKE '%Name:%' OR explain LIKE '%Granules:%' OR explain LIKE '%INPUT%\_\_text_index%';
 
 DROP TABLE tab_array;
 
@@ -88,11 +88,11 @@ SELECT count() FROM tab_split WHERE hasAll(arr, []);
 
 SELECT '-- splitByNonAlpha: index is still used';
 SELECT trimLeft(explain) FROM (
-    EXPLAIN indexes = 1 SELECT count() FROM tab_split WHERE hasAny(arr, ['hello world', 'baz qux'])
-) WHERE explain LIKE '%Name:%' OR explain LIKE '%Granules:%';
+    EXPLAIN indexes = 1, actions = 1 SELECT count() FROM tab_split WHERE hasAny(arr, ['hello world', 'baz qux'])
+) WHERE explain LIKE '%Name:%' OR explain LIKE '%Granules:%' OR explain LIKE '%INPUT%\_\_text_index%';
 
 SELECT trimLeft(explain) FROM (
-    EXPLAIN indexes = 1 SELECT count() FROM tab_split WHERE hasAll(arr, ['hello world', 'foo bar'])
-) WHERE explain LIKE '%Name:%' OR explain LIKE '%Granules:%';
+    EXPLAIN indexes = 1, actions = 1 SELECT count() FROM tab_split WHERE hasAll(arr, ['hello world', 'foo bar'])
+) WHERE explain LIKE '%Name:%' OR explain LIKE '%Granules:%' OR explain LIKE '%INPUT%\_\_text_index%';
 
 DROP TABLE tab_split;

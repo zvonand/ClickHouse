@@ -456,7 +456,6 @@ String AWSEC2MetadataClient::getAWSZoneName()
 }
 
 
-
 String getGCPAvailabilityZoneOrException()
 {
     Poco::URI uri(String(GCP_METADATA_SERVICE_ENDPOINT) + "/computeMetadata/v1/instance/zone");
@@ -501,6 +500,7 @@ String getRunningAvailabilityZone(AZFacilities az_facility)
     {
         std::vector<std::string> ex_msgs;
 
+        /// it is expected that some facilities do not work, we are prepared for exceptions
         for (auto & getter : az_getters)
         {
             try

@@ -108,8 +108,8 @@ EXPLAIN SYNTAX SYSTEM LOAD PRIMARY KEY db.t;
 EXPLAIN SYNTAX SYSTEM UNLOAD PRIMARY KEY db.t;
 
 SELECT '--- flush variants ---';
--- Global `SYSTEM FLUSH LOGS;` is rejected by the style check; the per-log
--- form is still exercised below.
+-- The global (targetless) flush-logs form is rejected by the style check;
+-- the per-log form is still exercised below.
 EXPLAIN SYNTAX SYSTEM FLUSH LOGS query_log;
 EXPLAIN SYNTAX SYSTEM FLUSH DISTRIBUTED db.t;
 EXPLAIN SYNTAX SYSTEM FLUSH ASYNC INSERT QUEUE;

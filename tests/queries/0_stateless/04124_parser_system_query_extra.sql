@@ -30,7 +30,7 @@ EXPLAIN SYNTAX SYSTEM ALLOCATE MEMORY 1048576;
 
 SELECT '--- FLUSH LOGS with multiple log tables ---';
 EXPLAIN SYNTAX SYSTEM FLUSH LOGS query_log, part_log;
--- Global `SYSTEM FLUSH LOGS;` is rejected by the style check.
+-- The global (targetless) flush-logs form is rejected by the style check.
 EXPLAIN SYNTAX SYSTEM FLUSH ASYNC INSERT QUEUE db.t1, db.t2;
 
 SELECT '--- RELOAD DELTA KERNEL TRACING ---';

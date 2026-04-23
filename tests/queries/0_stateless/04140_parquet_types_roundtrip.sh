@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Tags: no-fasttest
+# ^^ the fast-test build does not ship all Parquet compression codecs.
 
 # Exercise ParquetBlockInputFormat / ParquetBlockOutputFormat across the full
 # type soup, compression codecs, multiple row groups, filter pushdown,

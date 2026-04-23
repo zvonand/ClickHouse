@@ -1,3 +1,8 @@
+-- Tags: no-parallel
+-- ^^ required because the parser test mentions SYSTEM DROP subcommands. The
+-- EXPLAIN SYNTAX wrapper means no command actually runs, but the style check
+-- is grep-based and flags any file containing `SYSTEM DROP`.
+--
 -- Exercise the SYSTEM query parser and AST formatter for a wide variety of
 -- subcommands. EXPLAIN SYNTAX round-trips the AST so this hits both
 -- ParserSystemQuery::parseImpl and ASTSystemQuery::formatImpl without
@@ -35,8 +40,8 @@ EXPLAIN SYNTAX SYSTEM PREWARM MARK CACHE db.t;
 EXPLAIN SYNTAX SYSTEM PREWARM PRIMARY INDEX CACHE db.t;
 
 SELECT '--- merge / fetch / move / sends / ttl / cleanup start/stop ---';
-EXPLAIN SYNTAX SYSTEM STOP MERGES;
-EXPLAIN SYNTAX SYSTEM START MERGES;
+-- Global forms (SYSTEM STOP/START MERGES without a table) are not tested here
+-- because the style check rejects them anywhere in tests/queries/.
 EXPLAIN SYNTAX SYSTEM STOP MERGES db.t;
 EXPLAIN SYNTAX SYSTEM START MERGES db.t;
 EXPLAIN SYNTAX SYSTEM STOP TTL MERGES;
@@ -103,7 +108,9 @@ EXPLAIN SYNTAX SYSTEM LOAD PRIMARY KEY db.t;
 EXPLAIN SYNTAX SYSTEM UNLOAD PRIMARY KEY db.t;
 
 SELECT '--- flush variants ---';
-EXPLAIN SYNTAX SYSTEM FLUSH LOGS;
+-- Global `SYSTEM FLUSH LOGS;` is rejected by the style check; the per-log
+-- form is still exercised below.
+EXPLAIN SYNTAX SYSTEM FLUSH LOGS query_log;
 EXPLAIN SYNTAX SYSTEM FLUSH DISTRIBUTED db.t;
 EXPLAIN SYNTAX SYSTEM FLUSH ASYNC INSERT QUEUE;
 

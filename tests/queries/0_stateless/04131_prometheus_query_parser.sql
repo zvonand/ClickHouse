@@ -1,3 +1,7 @@
+-- Tags: no-fasttest
+-- ^^ ANTLR4 support is disabled in the fast-test build, and the PromQL
+-- grammar requires it.
+--
 -- Exercise Prometheus/PromQL parsing (Parsers/Prometheus/PrometheusQueryParsingUtil.cpp
 -- and the ANTLR visitor) via the prometheusQuery() / prometheusQueryRange() table
 -- functions against an empty TimeSeries table. This drives tryParseScalar,

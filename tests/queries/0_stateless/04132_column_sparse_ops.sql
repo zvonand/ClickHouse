@@ -16,7 +16,7 @@ FROM numbers(300);
 
 SELECT '--- parts_columns: which columns chose sparse serialization ---';
 SELECT name, serialization_kind FROM system.parts_columns
-WHERE table = 'sparse_ops' AND active
+WHERE database = currentDatabase() AND table = 'sparse_ops' AND active
 ORDER BY name, serialization_kind;
 
 SELECT '--- aggregate over sparse Int64 column ---';

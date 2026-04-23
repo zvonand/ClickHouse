@@ -68,8 +68,11 @@ SELECT argMinMerge(amin), argMaxMerge(amax) FROM (
     FROM (SELECT 'a' AS val, 3 AS key UNION ALL SELECT 'b', 1 UNION ALL SELECT 'c', 5));
 
 SELECT '--- topK -State -> -Merge ---';
+-- topK over unique numbers is non-deterministic (all rows tie at count=1).
+-- Use a weighted distribution so the top-3 are stable.
 SELECT arraySort(topKMerge(3)(s)) FROM (
-    SELECT topKState(3)(number) AS s FROM numbers(10));
+    SELECT topKState(3)(number) AS s FROM (
+        SELECT arrayJoin([1, 1, 1, 1, 2, 2, 2, 3, 3, 4]) AS number));
 
 SELECT '--- -If combinator with state ---';
 SELECT uniqMerge(s) FROM (

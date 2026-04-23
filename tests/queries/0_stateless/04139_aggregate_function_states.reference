@@ -21,7 +21,7 @@ g2	50
 --- argMinState / argMaxState -> -Merge ---
 b	c
 --- topK -State -> -Merge ---
-[5,6,9]
+[1,2,3]
 --- -If combinator with state ---
 50
 --- finalizeAggregation on state column ---

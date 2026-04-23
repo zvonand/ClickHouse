@@ -35,7 +35,8 @@ SELECT groupArrayInsertAt('default', 3)(name, idx) FROM (
     UNION ALL SELECT 'b', 0::UInt32);
 
 SELECT '--- groupArrayArray (flatten) ---';
-SELECT groupArrayArray(arr) FROM (
+-- UNION ALL ordering is not stable; sort for deterministic output.
+SELECT arraySort(groupArrayArray(arr)) FROM (
     SELECT [1,2]::Array(Int32) AS arr
     UNION ALL SELECT [3,4]
     UNION ALL SELECT []);

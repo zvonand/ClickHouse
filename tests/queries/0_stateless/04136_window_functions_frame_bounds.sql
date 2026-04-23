@@ -48,11 +48,15 @@ FROM (SELECT number % 2 AS p, number AS x FROM numbers(6))
 ORDER BY p, x;
 
 SELECT '--- row_number / rank / dense_rank / percent_rank / cume_dist ---';
+-- Add a stable tiebreaker id so row_number() is deterministic under ties.
 SELECT x, row_number() OVER w, rank() OVER w, dense_rank() OVER w,
        percent_rank() OVER w, cume_dist() OVER w
-FROM (SELECT arrayJoin([1, 1, 2, 3, 3, 4]) AS x)
-WINDOW w AS (ORDER BY x)
-ORDER BY x;
+FROM (
+    SELECT x, rowNumberInAllBlocks() AS tb
+    FROM (SELECT arrayJoin([1, 1, 2, 3, 3, 4]) AS x)
+)
+WINDOW w AS (ORDER BY x, tb)
+ORDER BY x, tb;
 
 SELECT '--- ntile ---';
 SELECT x, ntile(3) OVER (ORDER BY x) FROM (SELECT arrayJoin([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) AS x) ORDER BY x;

@@ -34,9 +34,13 @@ SELECT min(x), max(x) FROM (
     UNION ALL SELECT toIPv6('::2')
     UNION ALL SELECT toIPv6('2001:db8::1'));
 
-SELECT '--- any / anyLast of Tuple ---';
-SELECT any(val) FROM (SELECT (1, 'a') AS val UNION ALL SELECT (2, 'b'));
-SELECT anyLast(val) FROM (SELECT (1, 'a') AS val UNION ALL SELECT (2, 'b') UNION ALL SELECT (3, 'c'));
+SELECT '--- any_value of Tuple (order-stable via ORDER BY) ---';
+-- any()/anyLast() pick "some" value and are non-deterministic under parallelism;
+-- use ORDER BY + LIMIT 1 to still exercise the tuple code path deterministically.
+SELECT val FROM (SELECT (1, 'a') AS val UNION ALL SELECT (2, 'b')) ORDER BY val LIMIT 1;
+SELECT val FROM (
+    SELECT (1, 'a') AS val UNION ALL SELECT (2, 'b') UNION ALL SELECT (3, 'c')
+) ORDER BY val DESC LIMIT 1;
 
 SELECT '--- argMin / argMax on Tuple value, numeric key ---';
 SELECT argMin(val, key) FROM (

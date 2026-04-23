@@ -18,8 +18,9 @@ SELECT bitmapToArray(bitmapXor(bitmapBuild([1,2,3]::Array(UInt32)), bitmapBuild(
 SELECT bitmapToArray(bitmapAndnot(bitmapBuild([1,2,3]::Array(UInt32)), bitmapBuild([2,3,4]::Array(UInt32))));
 
 SELECT '--- bitmapSubsetInRange / bitmapSubsetLimit ---';
-SELECT bitmapToArray(bitmapSubsetInRange(bitmapBuild([1,2,3,4,5,6]::Array(UInt32)), 2::UInt32, 5::UInt32));
-SELECT bitmapToArray(bitmapSubsetLimit(bitmapBuild([1,2,3,4,5,6]::Array(UInt32)), 2::UInt32, 3::UInt32));
+-- Element order inside the bitmap is an implementation detail; sort for stability.
+SELECT arraySort(bitmapToArray(bitmapSubsetInRange(bitmapBuild([1,2,3,4,5,6]::Array(UInt32)), 2::UInt32, 5::UInt32)));
+SELECT arraySort(bitmapToArray(bitmapSubsetLimit(bitmapBuild([1,2,3,4,5,6]::Array(UInt32)), 2::UInt32, 3::UInt32)));
 
 SELECT '--- bitmapContains / bitmapHasAny / bitmapHasAll ---';
 SELECT bitmapContains(bitmapBuild([1,2,3]::Array(UInt32)), 2::UInt32);

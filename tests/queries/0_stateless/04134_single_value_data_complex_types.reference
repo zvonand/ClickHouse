@@ -9,7 +9,7 @@
 --- min / max of IPv4 / IPv6 ---
 1.1.1.1	192.168.1.1
 ::1	2001:db8::1
---- any / anyLast of Tuple ---
+--- any_value of Tuple (order-stable via ORDER BY) ---
 (1,'a')
 (3,'c')
 --- argMin / argMax on Tuple value, numeric key ---

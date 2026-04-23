@@ -53,6 +53,7 @@ namespace DB
   *
   * @see LockMemoryExceptionInThread
   * @see MemoryTrackerBlockerInThread
+  * @see MemoryTrackerUntrackedAllocationsBlockerInThread
   */
 class MemoryTracker
 {

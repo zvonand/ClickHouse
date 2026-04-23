@@ -321,7 +321,15 @@ void S3ObjectStorage::listObjects(const std::string & path, RelativePathsWithMet
         ProfileEvents::increment(ProfileEvents::DiskS3ListObjects);
 
         outcome = client.get()->ListObjectsV2(request);
-        throwIfError(outcome);
+        try
+        {
+            throwIfError(outcome);
+        }
+        catch (Exception & e)
+        {
+            e.addMessage("while listing objects in bucket '{}' with prefix '{}' on disk '{}'", uri.bucket, path, disk_name);
+            throw;
+        }
 
         auto result = outcome.GetResult();
         auto objects = result.GetContents();

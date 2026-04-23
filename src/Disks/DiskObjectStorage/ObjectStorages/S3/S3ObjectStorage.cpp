@@ -527,7 +527,7 @@ ObjectMetadata S3ObjectStorage::getObjectMetadata(const std::string & path, bool
         }
         if (!updated)
         {
-            e.addMessage("while reading " + path);
+            e.addMessage("while reading '{}' in bucket '{}' on disk '{}'", path, uri.bucket, disk_name);
             throw;
         }
     }

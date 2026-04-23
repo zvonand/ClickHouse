@@ -66,20 +66,22 @@ private:
 #pragma clang diagnostic ignored "-Wgnu-anonymous-struct"
 #pragma clang diagnostic ignored "-Wnested-anon-types"
 
-    /// Hot writes: updated on every alloc/free flush. Isolated on their own cache line
-    /// so that flushes from any core do not invalidate the read-mostly line below.
+    /// Hot: every field touched on the alloc/free path. Packed into a single cache line
+    /// (24B writes + 40B reads = 64B exactly) so each allocation needs at most one line
+    /// in flight. The line bounces among writer cores either way; co-locating the
+    /// read-mostly limits/parent/metric here means writers get them for free with the
+    /// same fetch. The only cost is reader-only cores re-fetching when allocator writes
+    /// invalidate, but allocations dominate over pure reads in practice.
     struct
     {
+        /// Hot writes: updated on every alloc/free flush.
         alignas(DB::CH_CACHE_LINE_SIZE) std::atomic<Int64> amount {0};
         std::atomic<Int64> peak {0};
         std::atomic<Int64> rss {0};
-    };
 
-    /// Read-mostly: read on every alloc to enforce caps and walk the tracker chain,
-    /// but written rarely (set once at construction or via configuration changes).
-    struct
-    {
-        alignas(DB::CH_CACHE_LINE_SIZE) std::atomic<Int64> soft_limit {0};
+        /// Hot reads: checked on every alloc but written only at construction or via
+        /// rare configuration changes.
+        std::atomic<Int64> soft_limit {0};
         std::atomic<Int64> hard_limit {0};
         std::atomic<Int64> profiler_limit {0};
 
@@ -89,14 +91,15 @@ private:
 
         /// You could specify custom metric to track memory usage.
         std::atomic<CurrentMetrics::Metric> metric = CurrentMetrics::end();
-
-        /// This description will be used as prefix into log messages (if isn't nullptr)
-        std::atomic<const char *> description_ptr = nullptr;
     };
 
-    /// Cold: rarely-touched configuration / sampling parameters.
+    /// Cold: rarely-touched configuration, sampling, and log-only fields.
     struct
     {
+        /// This description will be used as prefix into log messages (if isn't nullptr).
+        /// Only read on logging paths, not per allocation.
+        alignas(DB::CH_CACHE_LINE_SIZE) std::atomic<const char *> description_ptr = nullptr;
+
         Int64 profiler_step = 0;
 
         /// To test exception safety of calling code, memory tracker throws an exception on each memory allocation with specified probability.

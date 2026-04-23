@@ -490,7 +490,7 @@ String getRunningAvailabilityZone(AZFacilities az_facility)
     std::vector<std::pair<bool /* used if ALL */, AZGetter>> az_getters =
     {
         /// order of getters reflects DB::S3::AZFacilities, except ALL, which is skipped
-        {false, [](){return AWSEC2MetadataClient::getAWSZoneID();}},                          /// MSK
+        {true,  [](){return AWSEC2MetadataClient::getAWSZoneID();}},                          /// MSK
         {true,  [](){return AWSEC2MetadataClient::getAWSZoneName();}},                        /// CONFLUENT
         {true,  getGCPAvailabilityZoneOrException},                                           /// GCP
         {false, [](){return PlacementInfo::PlacementInfo::instance().getAvailabilityZone();}} /// CLICKHOUSE
@@ -1312,8 +1312,11 @@ namespace DB
 namespace S3
 {
 
-std::string getRunningAvailabilityZone(AZFacilities)
+std::string getRunningAvailabilityZone(AZFacilities az_facility)
 {
+    if (az_facility == AZFacilities::CLICKHOUSE)
+        return PlacementInfo::PlacementInfo::instance().getAvailabilityZone();
+
     throw DB::Exception(ErrorCodes::UNSUPPORTED_METHOD, "Does not support availability zone detection for non-cloud environment");
 }
 

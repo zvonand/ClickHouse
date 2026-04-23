@@ -72,8 +72,8 @@ SELECT '--- empty / null handling ---';
 SELECT min(val), max(val), any(val), anyLast(val), argMin(val, 1), argMax(val, 1)
 FROM (SELECT (1, 'a') AS val WHERE 0);
 
-SELECT '--- Nullable(Int32) aggregates ---';
-SELECT min(x), max(x), any(x), anyLast(x) FROM (
+SELECT '--- Nullable(Int32) aggregates (min/max only; any/anyLast are non-deterministic) ---';
+SELECT min(x), max(x), count(x), countIf(x IS NULL) FROM (
     SELECT CAST(3 AS Nullable(Int32)) AS x
     UNION ALL SELECT NULL
     UNION ALL SELECT CAST(1 AS Nullable(Int32)));

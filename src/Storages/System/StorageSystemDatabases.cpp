@@ -12,7 +12,6 @@
 #include <Storages/System/StorageSystemDatabases.h>
 #include <Storages/VirtualColumnUtils.h>
 #include <Common/logger_useful.h>
-#include <Core/Settings.h>
 
 
 namespace DB

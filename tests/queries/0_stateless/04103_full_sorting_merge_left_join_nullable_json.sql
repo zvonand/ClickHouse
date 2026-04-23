@@ -3,6 +3,9 @@
 -- Crash: ColumnObject miscast as ColumnNullable during serialization for unmatched rows.
 
 SET allow_experimental_json_type = 1;
+SET max_threads = 16;
+SET join_algorithm = 'full_sorting_merge';
+SET join_use_nulls = 1;
 
 CREATE TABLE t_fsm_left
 (
@@ -21,31 +24,44 @@ CREATE TABLE t_fsm_right_json
 ENGINE = MergeTree()
 ORDER BY id;
 
-INSERT INTO t_fsm_left VALUES ('1', 'a'), ('2', 'b');
-INSERT INTO t_fsm_right_json VALUES ('1', '{"port":443}', ['{"proto":"tcp"}']);
+CREATE TABLE t_fsm_right2_json
+(
+    `id` String,
+    `result` Array(JSON),
+    `tags` Array(String)
+)
+ENGINE = MergeTree
+ORDER BY id;
 
--- Unmatched row 2 must produce NULL for val (Nullable(JSON)) and [] for arr (Array(JSON))
+INSERT INTO t_fsm_left SELECT
+    toString(number),
+    toString(number)
+FROM numbers(1000);
+
+INSERT INTO t_fsm_right_json SELECT
+    toString(number),
+    '{"port":443}',
+    ['{"proto":"tcp"}']
+FROM numbers(500);
+
+INSERT INTO t_fsm_right2_json SELECT
+    toString(number),
+    ['{"ok":true}'],
+    ['tag1']
+FROM numbers(300);
+
 SELECT
     l.id,
     l.name,
-    r.val,
-    r.arr
+    r1.val,
+    r1.arr,
+    r2.result,
+    r2.tags
 FROM t_fsm_left AS l
-LEFT OUTER JOIN t_fsm_right_json AS r ON l.id = r.id
-ORDER BY l.id
-SETTINGS join_use_nulls = 1, join_algorithm = 'full_sorting_merge';
-
--- Same with two chained LEFT JOINs as in the original crash report
-CREATE TABLE t_fsm_right2_json
-(
-    id String,
-    result Array(JSON),
-    tags Array(String)
-)
-ENGINE = MergeTree()
-ORDER BY id;
-
-INSERT INTO t_fsm_right2_json VALUES ('1', ['{"ok":true}'], ['tag1']);
+LEFT JOIN t_fsm_right_json AS r1 ON l.id = r1.id
+LEFT JOIN t_fsm_right2_json AS r2 ON l.id = r2.id
+ORDER BY l.id ASC
+LIMIT 5;
 
 SELECT
     l.id,

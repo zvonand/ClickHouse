@@ -131,7 +131,7 @@ def test_kafka_zone_awareness(kafka_cluster, create_query_generator):
         ENGINE = MergeTree()
         ORDER BY time;
 
-        {create_query_generator(kafka_table, "t UInt64, `e.x` String", brokers='kafka1:19092', topic_list=topname, consumer_group=topname, format='JSONEachRow', settings={'kafka_autodetect_client_rack':'MSK', 'input_format_import_nested_json':1})};
+        {create_query_generator(kafka_table, "t UInt64, `e.x` String", brokers='kafka1:19092', topic_list=topname, consumer_group=topname, format='JSONEachRow', settings={'kafka_autodetect_client_rack':'AWS_ZONE_ID', 'input_format_import_nested_json':1})};
 
         CREATE MATERIALIZED VIEW test.persistent_{kafka_table}_mv TO test.persistent_{kafka_table} AS
         SELECT

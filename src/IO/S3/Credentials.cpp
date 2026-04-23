@@ -487,16 +487,16 @@ String getRunningAvailabilityZone(AZFacilities az_facility)
 
     using AZGetter = std::function<String()>;
 
-    std::vector<std::pair<bool /* used if ALL */, AZGetter>> az_getters =
+    std::vector<std::pair<bool /* used if AUTO */, AZGetter>> az_getters =
     {
-        /// order of getters reflects DB::S3::AZFacilities, except ALL, which is skipped
-        {true,  [](){return AWSEC2MetadataClient::getAWSZoneID();}},                          /// MSK
-        {true,  [](){return AWSEC2MetadataClient::getAWSZoneName();}},                        /// CONFLUENT
-        {true,  getGCPAvailabilityZoneOrException},                                           /// GCP
+        /// order of getters reflects DB::S3::AZFacilities, except AUTO, which is skipped
+        {true,  [](){return AWSEC2MetadataClient::getAWSZoneID();}},                          /// AWS_ZONE_ID
+        {true,  [](){return AWSEC2MetadataClient::getAWSZoneName();}},                        /// AWS_ZONE_NAME
+        {true,  getGCPAvailabilityZoneOrException},                                           /// GCP_ZONE
         {false, [](){return PlacementInfo::PlacementInfo::instance().getAvailabilityZone();}} /// CLICKHOUSE
     };
 
-    if (az_facility == AZFacilities::ALL)
+    if (az_facility == AZFacilities::AUTO)
     {
         std::vector<std::string> ex_msgs;
 

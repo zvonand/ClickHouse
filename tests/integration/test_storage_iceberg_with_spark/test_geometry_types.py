@@ -101,7 +101,8 @@ def test_geometry_type(started_cluster_iceberg_with_spark, storage_type):
     )
 
     create_iceberg_table(
-        storage_type, instance, TABLE_NAME, started_cluster_iceberg_with_spark
+        storage_type, instance, TABLE_NAME, started_cluster_iceberg_with_spark,
+        settings={"allow_experimental_geo_types_in_iceberg": 1},
     )
 
     table_function_expr = get_creation_expression(

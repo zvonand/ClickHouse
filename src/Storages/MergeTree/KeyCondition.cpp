@@ -788,10 +788,18 @@ static const ActionsDAG::Node & cloneDAGWithInversionPushDown(
     const ContextPtr & context,
     const bool need_inversion);
 
-/// Rewrite `<op>(coalesce(a, b), const)` (or with `ifNull`, or with the constant on the left)
-/// into `or(<op>(a, const), and(isNull(a), <op>(b, const)))`, so per-column primary-key and
-/// skip indexes on `a` and `b` can prune granules through the existing `use_skip_indexes_for_disjunctions`
-/// path in `MergeTreeDataSelectExecutor::mergePartialResultsForDisjunctions`.
+/// Rewrite `<op>(coalesce(a_1, ..., a_N), const)` (or with `ifNull`, or with the constant on the
+/// left) into
+///     `(a_1 <op> const)`
+///     `OR (isNull(a_1) AND a_2 <op> const)`
+///     `OR (isNull(a_1) AND isNull(a_2) AND a_3 <op> const)`
+///     `...`
+///     `OR (isNull(a_1) AND ... AND isNull(a_{N-1}) AND a_N <op> const)`
+/// so per-column primary-key and skip indexes on each `a_i` can prune granules through the
+/// existing `use_skip_indexes_for_disjunctions` path in
+/// `MergeTreeDataSelectExecutor::mergePartialResultsForDisjunctions`.
+/// The last branch needs no trailing `isNull(a_N)` guard - if execution reaches it, `a_N` is the
+/// `coalesce` result regardless of its nullability.
 /// Returns `false` if the pattern does not match, in which case the caller should continue with
 /// the default cloning path.
 static bool tryRewriteCoalesceComparison(
@@ -850,34 +858,52 @@ static bool tryRewriteCoalesceComparison(
     if (coalesce_name != "coalesce" && coalesce_name != "ifNull")
         return false;
 
-    if (coalesce_node->children.size() != 2)
+    const size_t num_args = coalesce_node->children.size();
+    if (num_args < 2)
         return false;
 
-    /// If one of the coalesce arguments is already a constant, the existing monotonic-chain
-    /// path (see `isKeyPossiblyWrappedByMonotonicFunctionsImpl`) already handles it - don't interfere.
-    if (is_const(*coalesce_node->children[0]) || is_const(*coalesce_node->children[1]))
-        return false;
+    /// If any `coalesce` argument is already a constant, the existing monotonic-chain path
+    /// (see `isKeyPossiblyWrappedByMonotonicFunctionsImpl`) handles the 2-arg single-constant
+    /// case, and a constant in the middle of the list would truncate `coalesce` (short-circuit
+    /// on the first non-NULL), which needs separate handling - don't interfere.
+    for (const auto * child : coalesce_node->children)
+        if (is_const(*child))
+            return false;
 
-    const auto & a_cloned = cloneDAGWithInversionPushDown(*coalesce_node->children[0], inverted_dag, inputs_mapping, context, false);
-    const auto & b_cloned = cloneDAGWithInversionPushDown(*coalesce_node->children[1], inverted_dag, inputs_mapping, context, false);
+    std::vector<const ActionsDAG::Node *> cloned_args;
+    cloned_args.reserve(num_args);
+    for (const auto * child : coalesce_node->children)
+        cloned_args.push_back(&cloneDAGWithInversionPushDown(*child, inverted_dag, inputs_mapping, context, false));
     const auto & const_cloned = cloneDAGWithInversionPushDown(*const_node, inverted_dag, inputs_mapping, context, false);
 
     auto op_func = FunctionFactory::instance().get(*canonical_op, context);
-    auto make_cmp = [&](const ActionsDAG::Node & var) -> const ActionsDAG::Node &
-    {
-        return inverted_dag.addFunction(op_func, {&var, &const_cloned}, "");
-    };
-    const auto & a_cmp = make_cmp(a_cloned);
-    const auto & b_cmp = make_cmp(b_cloned);
-
     auto is_null_func = FunctionFactory::instance().get("isNull", context);
-    const auto & is_null_a = inverted_dag.addFunction(is_null_func, {&a_cloned}, "");
-
     auto and_func = FunctionFactory::instance().get("and", context);
-    const auto & and_node = inverted_dag.addFunction(and_func, {&is_null_a, &b_cmp}, "");
-
     auto or_func = FunctionFactory::instance().get("or", context);
-    out = &inverted_dag.addFunction(or_func, {&a_cmp, &and_node}, "");
+
+    /// Precompute `isNull(a_i)` for i < num_args - 1 (the last branch has no `isNull` guard).
+    std::vector<const ActionsDAG::Node *> is_null_nodes;
+    is_null_nodes.reserve(num_args - 1);
+    for (size_t i = 0; i + 1 < num_args; ++i)
+        is_null_nodes.push_back(&inverted_dag.addFunction(is_null_func, {cloned_args[i]}, ""));
+
+    ActionsDAG::NodeRawConstPtrs or_children;
+    or_children.reserve(num_args);
+    /// First branch: `a_0 <op> const` (no `isNull` prefix).
+    or_children.push_back(&inverted_dag.addFunction(op_func, {cloned_args[0], &const_cloned}, ""));
+    /// Subsequent branches: `and(isNull(a_0), ..., isNull(a_{i-1}), a_i <op> const)`.
+    for (size_t i = 1; i < num_args; ++i)
+    {
+        ActionsDAG::NodeRawConstPtrs and_children;
+        and_children.reserve(i + 1);
+        for (size_t j = 0; j < i; ++j)
+            and_children.push_back(is_null_nodes[j]);
+        const auto & cmp_i = inverted_dag.addFunction(op_func, {cloned_args[i], &const_cloned}, "");
+        and_children.push_back(&cmp_i);
+        or_children.push_back(&inverted_dag.addFunction(and_func, std::move(and_children), ""));
+    }
+
+    out = &inverted_dag.addFunction(or_func, std::move(or_children), "");
     return true;
 }
 

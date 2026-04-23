@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <base/types.h>
 #include <boost/noncopyable.hpp>
+#include <Common/SipHash.h>
 
 
 namespace google
@@ -92,14 +93,19 @@ private:
         bool operator==(const ImporterKey & other) const = default;
     };
 
-    std::unordered_map<ImporterKey,
-                       std::shared_ptr<ImporterWithSourceTree>,
-                       decltype([](const ImporterKey & key)
-                       {
-                           auto h1 = std::hash<String>{}(key.schema_directory);
-                           auto h2 = std::hash<String>{}(key.schema_path);
-                           return h1 ^ (h2 << 1) ^ (static_cast<uint8_t>(key.with_envelope) << 2);
-                       })> importers;
+    struct ImporterKeyHash
+    {
+        size_t operator()(const ImporterKey & key) const
+        {
+            SipHash hash;
+            hash.update(key.schema_directory);
+            hash.update(key.schema_path);
+            hash.update(key.with_envelope);
+            return hash.get64();
+        }
+    };
+
+    std::unordered_map<ImporterKey, std::shared_ptr<ImporterWithSourceTree>, ImporterKeyHash> importers;
     std::mutex mutex;
 };
 

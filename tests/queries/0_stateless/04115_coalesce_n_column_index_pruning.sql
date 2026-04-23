@@ -1,14 +1,7 @@
 -- Tags: no-replicated-database, no-parallel-replicas
 -- no-replicated-database: EXPLAIN output differs for replicated database.
 -- no-parallel-replicas: EXPLAIN output differs for parallel replicas.
-
--- Verify that `coalesce(a_1, ..., a_N) <op> const` with N > 2 non-constant arguments is
--- rewritten at index-analysis time into
---     `(a_1 <op> const)`
---     `OR (a_1 IS NULL AND a_2 <op> const)`
---     `...`
---     `OR (a_1 IS NULL AND ... AND a_{N-1} IS NULL AND a_N <op> const)`
--- so per-column primary key and skip indexes on each `a_i` are consulted.
+-- `coalesce(a_1, ..., a_N) <op> const` with N > 2.
 -- See `src/Storages/MergeTree/KeyCondition.cpp::tryRewriteCoalesceComparison`.
 
 SET parallel_replicas_local_plan = 1;

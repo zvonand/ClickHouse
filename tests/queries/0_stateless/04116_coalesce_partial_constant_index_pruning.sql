@@ -1,14 +1,7 @@
 -- Tags: no-replicated-database, no-parallel-replicas
 -- no-replicated-database: EXPLAIN output differs for replicated database.
 -- no-parallel-replicas: EXPLAIN output differs for parallel replicas.
-
--- Verify that `coalesce(...) <op> const` with partial-constant arguments is normalized and
--- rewritten at index-analysis time so per-column PK and skip indexes are still consulted:
---   - NULL-literal args are dropped (`coalesce(a, NULL, b)` -> `coalesce(a, b)`).
---   - Args after the first non-Nullable one are unreachable and dropped
---     (`coalesce(a, 42, b)` -> `coalesce(a, 42)`; `coalesce(a, b, 42, d)` -> `coalesce(a, b, 42)`).
---   - A trailing non-null constant `c` adds a final
---     `isNull(y_1) AND ... AND isNull(y_M) AND (c <op> const)` branch.
+-- `coalesce(...) <op> const` with partial-constant arguments (NULL literals, middle/trailing constants).
 -- See `src/Storages/MergeTree/KeyCondition.cpp::tryRewriteCoalesceComparison`.
 
 SET parallel_replicas_local_plan = 1;

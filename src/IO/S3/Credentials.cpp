@@ -401,7 +401,7 @@ String getAvailabilityZoneOrException(bool is_zone_id)
 
     /// IMDSv2
     {
-        /// Lets serialize token retrieval as we do in AWSEC2MetadataClient::getEC2MetadataToken
+        /// Let's serialize token retrieval as we do in AWSEC2MetadataClient::getEC2MetadataToken
         std::lock_guard<std::mutex> lock(t_mutex);
 
         Poco::URI token_uri(getAWSMetadataEndpoint() + AWSEC2MetadataClient::EC2_IMDS_TOKEN_RESOURCE);
@@ -418,11 +418,8 @@ String getAvailabilityZoneOrException(bool is_zone_id)
         std::istream & token_rs = token_session.receiveResponse(token_response);
         if (token_response.getStatus() == Poco::Net::HTTPResponse::HTTP_OK)
             Poco::StreamCopier::copyToString(token_rs, token_str);
-        else
-            LOG_WARNING(
-                logger,
-                "Failed to get AWS availability zone. HTTP response code: {}. Falling back to token-less flow IMDSv1",
-                token_response.getStatus());
+        if (token_str.empty())
+            throw DB::Exception(ErrorCodes::AWS_ERROR, "Failed to get AWS availability zone (token). HTTP response code: {}", token_response.getStatus());
     }
 
     Poco::URI uri(getAWSMetadataEndpoint() + (is_zone_id ? AWSEC2MetadataClient::EC2_AVAILABILITY_ZONE_ID_RESOURCE : AWSEC2MetadataClient::EC2_AVAILABILITY_ZONE_RESOURCE));
@@ -430,8 +427,8 @@ String getAvailabilityZoneOrException(bool is_zone_id)
     session.setTimeout(Poco::Timespan(AVAILABILITY_ZONE_REQUEST_TIMEOUT_SECONDS, 0));
 
     Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_GET, uri.getPath());
-    if (!token_str.empty())
-        request.set(AWSEC2MetadataClient::EC2_IMDS_TOKEN_HEADER, token_str);
+
+    request.set(AWSEC2MetadataClient::EC2_IMDS_TOKEN_HEADER, token_str);
     session.sendRequest(request);
 
     Poco::Net::HTTPResponse response;

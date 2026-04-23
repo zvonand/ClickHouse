@@ -20,7 +20,7 @@ instance = cluster.add_instance(
 
 # Runs custom python-based S3 endpoint.
 def run_endpoint(cluster):
-    logging.info("Starting custommm2 S3 endpoint")
+    logging.info("Starting custom S3 endpoint")
     # container_id = cluster.get_container_id("instance")
     container_id = cluster.get_container_id("resolver")
     current_dir = os.path.dirname(__file__)

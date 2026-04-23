@@ -197,7 +197,7 @@ class JobConfigs:
         runs_on=None,  # from parametrize()
         command="python3 ./ci/jobs/fast_test.py --set-status-success",
         digest_config=fast_test_digest_config,
-        result_name_for_cidb="Darwin tests",
+        result_name_for_cidb="Tests",
         allow_merge_on_failure=True,
         post_hooks=[
             "python3 ./ci/jobs/scripts/job_hooks/clickhouse_test_cleanup_hook.py",

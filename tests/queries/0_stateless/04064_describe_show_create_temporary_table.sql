@@ -26,6 +26,7 @@ SHOW CREATE TEMPORARY TABLE t;
 
 -- DESCRIBE TEMPORARY TABLE with subquery or table function should be a syntax error.
 DESCRIBE TEMPORARY TABLE (SELECT 1); -- { clientError SYNTAX_ERROR }
+DESCRIBE TEMPORARY TABLE SELECT 1; -- { clientError SYNTAX_ERROR }
 DESCRIBE TEMPORARY TABLE numbers(10); -- { clientError SYNTAX_ERROR }
 
 -- SHOW CREATE VIEW should still resolve a permanent view when a temporary table with the

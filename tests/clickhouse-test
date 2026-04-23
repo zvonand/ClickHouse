@@ -6206,6 +6206,10 @@ if __name__ == "__main__":
 
     try:
         main(args)
+    except ServerDied as e:
+        print(f"{e}", file=sys.stderr)
+        traceback.print_exc()
+        sys.exit(1)
     except Terminated as e:
         print(f"Terminated with {e.signal} signal", file=sys.stderr)
         sys.exit(128 + e.signal)

@@ -2623,6 +2623,9 @@ The maximum size of the set in the right-hand side of the IN operator to use tab
     DECLARE(Bool, analyze_index_with_space_filling_curves, true, R"(
 If a table has a space-filling curve in its index, e.g. `ORDER BY mortonEncode(x, y)` or `ORDER BY hilbertEncode(x, y)`, and the query has conditions on its arguments, e.g. `x >= 10 AND x <= 20 AND y >= 20 AND y <= 30`, use the space-filling curve for index analysis.
 )", 0) \
+    DECLARE(Bool, allow_key_condition_coalesce_rewrite, true, R"(
+Rewrite predicates of the form `coalesce(a, b) <op> const` and `ifNull(a, b) <op> const` to `(a <op> const) OR (a IS NULL AND b <op> const)` before index analysis, so per-column primary key and skip indexes on `a` and `b` can be used. The rewrite is strictly additive for index pruning; runtime filtering still uses the original predicate.
+)", 0) \
     DECLARE(Bool, joined_subquery_requires_alias, true, R"(
 Force joined subqueries and table functions to have aliases for correct name qualification.
 )", 0) \

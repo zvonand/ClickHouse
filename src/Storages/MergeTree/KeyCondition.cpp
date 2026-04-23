@@ -56,6 +56,7 @@ namespace DB
 {
 namespace Setting
 {
+    extern const SettingsBool allow_key_condition_coalesce_rewrite;
     extern const SettingsBool analyze_index_with_space_filling_curves;
     extern const SettingsDateTimeOverflowBehavior date_time_overflow_behavior;
     extern const SettingsTimezone session_timezone;
@@ -785,6 +786,106 @@ static const ActionsDAG::Node & cloneDAGWithInversionPushDown(
     ActionsDAG & inverted_dag,
     std::unordered_map<const ActionsDAG::Node *, const ActionsDAG::Node *> & inputs_mapping,
     const ContextPtr & context,
+    const bool need_inversion);
+
+/// Rewrite `<op>(coalesce(a, b), const)` (or with `ifNull`, or with the constant on the left)
+/// into `or(<op>(a, const), and(isNull(a), <op>(b, const)))`, so per-column primary-key and
+/// skip indexes on `a` and `b` can prune granules through the existing `use_skip_indexes_for_disjunctions`
+/// path in `MergeTreeDataSelectExecutor::mergePartialResultsForDisjunctions`.
+/// Returns `false` if the pattern does not match, in which case the caller should continue with
+/// the default cloning path.
+static bool tryRewriteCoalesceComparison(
+    const ActionsDAG::Node & node,
+    const String & op_name,
+    ActionsDAG & inverted_dag,
+    std::unordered_map<const ActionsDAG::Node *, const ActionsDAG::Node *> & inputs_mapping,
+    const ContextPtr & context,
+    const ActionsDAG::Node *& out)
+{
+    if (node.children.size() != 2)
+        return false;
+
+    /// Maps each rewritable op to its operand-swap mirror (e.g. `less(const, x)` ≡ `greater(x, const)`).
+    /// Also acts as the allowlist of ops we rewrite at all; non-members are rejected here.
+    static const std::map<String, String> mirror_op = {
+        {"equals", "equals"},
+        {"less", "greater"},
+        {"greater", "less"},
+        {"lessOrEquals", "greaterOrEquals"},
+        {"greaterOrEquals", "lessOrEquals"},
+    };
+    auto mirror_it = mirror_op.find(op_name);
+    if (mirror_it == mirror_op.end())
+        return false;
+
+    auto is_const = [](const ActionsDAG::Node & n)
+    {
+        return n.type == ActionsDAG::ActionType::COLUMN && n.column && isColumnConst(*n.column);
+    };
+
+    const ActionsDAG::Node * coalesce_node = nullptr;
+    const ActionsDAG::Node * const_node = nullptr;
+    const String * canonical_op = &op_name;
+
+    if (is_const(*node.children[1]) && !is_const(*node.children[0]))
+    {
+        coalesce_node = node.children[0];
+        const_node = node.children[1];
+    }
+    else if (is_const(*node.children[0]) && !is_const(*node.children[1]))
+    {
+        coalesce_node = node.children[1];
+        const_node = node.children[0];
+        canonical_op = &mirror_it->second;
+    }
+    else
+    {
+        return false;
+    }
+
+    if (coalesce_node->type != ActionsDAG::ActionType::FUNCTION)
+        return false;
+
+    const auto & coalesce_name = coalesce_node->function_base->getName();
+    if (coalesce_name != "coalesce" && coalesce_name != "ifNull")
+        return false;
+
+    if (coalesce_node->children.size() != 2)
+        return false;
+
+    /// If one of the coalesce arguments is already a constant, the existing monotonic-chain
+    /// path (see `isKeyPossiblyWrappedByMonotonicFunctionsImpl`) already handles it - don't interfere.
+    if (is_const(*coalesce_node->children[0]) || is_const(*coalesce_node->children[1]))
+        return false;
+
+    const auto & a_cloned = cloneDAGWithInversionPushDown(*coalesce_node->children[0], inverted_dag, inputs_mapping, context, false);
+    const auto & b_cloned = cloneDAGWithInversionPushDown(*coalesce_node->children[1], inverted_dag, inputs_mapping, context, false);
+    const auto & const_cloned = cloneDAGWithInversionPushDown(*const_node, inverted_dag, inputs_mapping, context, false);
+
+    auto op_func = FunctionFactory::instance().get(*canonical_op, context);
+    auto make_cmp = [&](const ActionsDAG::Node & var) -> const ActionsDAG::Node &
+    {
+        return inverted_dag.addFunction(op_func, {&var, &const_cloned}, "");
+    };
+    const auto & a_cmp = make_cmp(a_cloned);
+    const auto & b_cmp = make_cmp(b_cloned);
+
+    auto is_null_func = FunctionFactory::instance().get("isNull", context);
+    const auto & is_null_a = inverted_dag.addFunction(is_null_func, {&a_cloned}, "");
+
+    auto and_func = FunctionFactory::instance().get("and", context);
+    const auto & and_node = inverted_dag.addFunction(and_func, {&is_null_a, &b_cmp}, "");
+
+    auto or_func = FunctionFactory::instance().get("or", context);
+    out = &inverted_dag.addFunction(or_func, {&a_cmp, &and_node}, "");
+    return true;
+}
+
+static const ActionsDAG::Node & cloneDAGWithInversionPushDown(
+    const ActionsDAG::Node & node,
+    ActionsDAG & inverted_dag,
+    std::unordered_map<const ActionsDAG::Node *, const ActionsDAG::Node *> & inputs_mapping,
+    const ContextPtr & context,
     const bool need_inversion)
 {
     const ActionsDAG::Node * res = nullptr;
@@ -896,6 +997,12 @@ static const ActionsDAG::Node & cloneDAGWithInversionPushDown(
                 /// We match columns by name, so it is important to fill name correctly.
                 /// So, use empty string to make it automatically.
                 res = &inverted_dag.addFunction(function_builder, children, "");
+                handled_inversion = true;
+            }
+            else if (!need_inversion
+                && context->getSettingsRef()[Setting::allow_key_condition_coalesce_rewrite]
+                && tryRewriteCoalesceComparison(node, name, inverted_dag, inputs_mapping, context, res))
+            {
                 handled_inversion = true;
             }
             else

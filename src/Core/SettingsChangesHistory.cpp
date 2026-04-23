@@ -42,6 +42,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         addSettingsChanges(settings_changes_history, "26.5",
         {
             {"predicate_statistics_sample_rate", 0, 0, "New setting to collect predicate selectivity statistics into system.predicate_statistics_log"},
+            {"allow_key_condition_coalesce_rewrite", false, true, "New setting to rewrite `coalesce(a, b) <op> const` and `ifNull(a, b) <op> const` predicates to a disjunction before index analysis, enabling per-column PK and skip-index pruning."},
         });
         addSettingsChanges(settings_changes_history, "26.4",
         {

@@ -30,7 +30,7 @@ Name: a_idx
 682
 --- PK form: ORDER BY (a, id) prunes via PrimaryKey on a ---
 PrimaryKey
-Condition: or((a isNull), (a in [42, 42]))
+Condition: (a in [42, 42])
 Granules: 17/1024
 1024
 --- ordered comparison: coalesce(a, b) > K ---
@@ -48,7 +48,6 @@ Granules: 1024/1024
 23894
 --- PR #94754 regression: coalesce(key, const) = X still prunes via PK ---
 PrimaryKey
-Condition: (coalesce(a, 0) in [42, 42])
 Granules: 3/1024
 128
 --- negative operators must not regress (no pruning, correct results) ---

@@ -152,10 +152,13 @@ SETTINGS index_granularity = 64, allow_nullable_key = 1,
 
 INSERT INTO tab_monotone SELECT toUInt32(intDiv(number, 128)) FROM numbers(65536);
 
+-- Only check that PK analysis fired and pruned to a small set of granules. The exact textual
+-- form of `Condition:` depends on whether the constant-FALSE branch from the coalesce rewrite
+-- (`isNull(a) AND (0 = 42)`) gets folded, which varies under randomized settings.
 SELECT trimLeft(explain) FROM (
     EXPLAIN indexes = 1
     SELECT count() FROM tab_monotone WHERE coalesce(a, toUInt32(0)) = 42
-) WHERE explain ILIKE '%PrimaryKey%' OR explain ILIKE '%Condition:%' OR explain ILIKE '%Granules:%';
+) WHERE explain ILIKE '%PrimaryKey%' OR explain ILIKE '%Granules:%';
 
 SELECT count() FROM tab_monotone WHERE coalesce(a, toUInt32(0)) = 42;
 

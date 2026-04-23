@@ -790,16 +790,24 @@ static const ActionsDAG::Node & cloneDAGWithInversionPushDown(
 
 /// Rewrite `<op>(coalesce(a_1, ..., a_N), const)` (or with `ifNull`, or with the constant on the
 /// left) into
-///     `(a_1 <op> const)`
-///     `OR (isNull(a_1) AND a_2 <op> const)`
-///     `OR (isNull(a_1) AND isNull(a_2) AND a_3 <op> const)`
+///     `(y_1 <op> const)`
+///     `OR (isNull(y_1) AND y_2 <op> const)`
+///     `OR (isNull(y_1) AND isNull(y_2) AND y_3 <op> const)`
 ///     `...`
-///     `OR (isNull(a_1) AND ... AND isNull(a_{N-1}) AND a_N <op> const)`
-/// so per-column primary-key and skip indexes on each `a_i` can prune granules through the
+///     `OR (isNull(y_1) AND ... AND isNull(y_{M-1}) AND y_M <op> const)`
+///     `[OR (isNull(y_1) AND ... AND isNull(y_M) AND (c <op> const))]`
+/// so per-column primary-key and skip indexes on each `y_i` can prune granules through the
 /// existing `use_skip_indexes_for_disjunctions` path in
 /// `MergeTreeDataSelectExecutor::mergePartialResultsForDisjunctions`.
-/// The last branch needs no trailing `isNull(a_N)` guard - if execution reaches it, `a_N` is the
-/// `coalesce` result regardless of its nullability.
+///
+/// The `a_i` list is normalized before rewriting, mirroring `FunctionCoalesce::getReturnTypeImpl`:
+/// NULL-literal arguments are dropped, and arguments after the first non-Nullable one are
+/// unreachable by short-circuit and dropped too. The normalized list `y_1, ..., y_M` is the
+/// Nullable prefix; if the terminator is a non-null constant it is captured as `c` and emitted
+/// as a final `isNull(y_1) AND ... AND isNull(y_M) AND (c <op> const)` branch (`KeyCondition`
+/// folds the constant predicate downstream). If the terminator is a non-constant non-Nullable
+/// column, it becomes `y_M` with no separate `c` and the `y_M` branch omits `isNull(y_M)` -
+/// reaching that branch implies `y_M` is the `coalesce` result regardless of its nullability.
 /// Returns `false` if the pattern does not match, in which case the caller should continue with
 /// the default cloning path.
 static bool tryRewriteCoalesceComparison(
@@ -858,22 +866,52 @@ static bool tryRewriteCoalesceComparison(
     if (coalesce_name != "coalesce" && coalesce_name != "ifNull")
         return false;
 
-    const size_t num_args = coalesce_node->children.size();
-    if (num_args < 2)
+    if (coalesce_node->children.size() < 2)
         return false;
 
-    /// If any `coalesce` argument is already a constant, the existing monotonic-chain path
-    /// (see `isKeyPossiblyWrappedByMonotonicFunctionsImpl`) handles the 2-arg single-constant
-    /// case, and a constant in the middle of the list would truncate `coalesce` (short-circuit
-    /// on the first non-NULL), which needs separate handling - don't interfere.
+    /// Normalize the argument list: drop NULL-literal args and truncate at the first
+    /// non-Nullable arg (anything after it is unreachable by `coalesce` short-circuit).
+    /// This mirrors the filter in `FunctionCoalesce::getReturnTypeImpl`, so the rewritten
+    /// DAG is always semantically equivalent to the original `coalesce`.
+    std::vector<const ActionsDAG::Node *> normalized_args;
+    const ActionsDAG::Node * trailing_const = nullptr;
+    normalized_args.reserve(coalesce_node->children.size());
     for (const auto * child : coalesce_node->children)
-        if (is_const(*child))
-            return false;
+    {
+        if (child->result_type->onlyNull())
+            continue;
+
+        if (!canContainNull(*child->result_type))
+        {
+            /// Non-Nullable terminator: `coalesce` always returns this value (or earlier), so
+            /// anything after is unreachable. If it is a constant, keep it as the trailing
+            /// constant branch; if it is a non-constant column, it becomes `y_M` with no
+            /// separate trailing-constant branch.
+            if (is_const(*child))
+                trailing_const = child;
+            else
+                normalized_args.push_back(child);
+            break;
+        }
+
+        normalized_args.push_back(child);
+    }
+
+    const size_t m = normalized_args.size();
+    const bool has_trailing_const = trailing_const != nullptr;
+
+    /// Degenerate: all args were NULL literals. `coalesce(...) <op> const` is NULL (FALSE in
+    /// WHERE). Let the default path clone the node; not worth special-casing.
+    if (m == 0 && !has_trailing_const)
+        return false;
 
     std::vector<const ActionsDAG::Node *> cloned_args;
-    cloned_args.reserve(num_args);
-    for (const auto * child : coalesce_node->children)
-        cloned_args.push_back(&cloneDAGWithInversionPushDown(*child, inverted_dag, inputs_mapping, context, false));
+    cloned_args.reserve(m);
+    for (const auto * y : normalized_args)
+        cloned_args.push_back(&cloneDAGWithInversionPushDown(*y, inverted_dag, inputs_mapping, context, false));
+    const ActionsDAG::Node * cloned_trailing = has_trailing_const
+        ? &cloneDAGWithInversionPushDown(*trailing_const, inverted_dag, inputs_mapping, context, false)
+        : nullptr;
     const auto & const_cloned = cloneDAGWithInversionPushDown(*const_node, inverted_dag, inputs_mapping, context, false);
 
     auto op_func = FunctionFactory::instance().get(*canonical_op, context);
@@ -881,25 +919,54 @@ static bool tryRewriteCoalesceComparison(
     auto and_func = FunctionFactory::instance().get("and", context);
     auto or_func = FunctionFactory::instance().get("or", context);
 
-    /// Precompute `isNull(a_i)` for i < num_args - 1 (the last branch has no `isNull` guard).
+    auto make_cmp = [&](const ActionsDAG::Node * lhs) -> const ActionsDAG::Node &
+    {
+        return inverted_dag.addFunction(op_func, {lhs, &const_cloned}, "");
+    };
+
+    /// `coalesce(NULL, ..., NULL, c) <op> const` reduces to a constant predicate.
+    if (m == 0)
+    {
+        out = &make_cmp(cloned_trailing);
+        return true;
+    }
+
+    /// `coalesce(NULL, ..., NULL, y)` with a single non-Nullable terminator reduces to `y <op> const`.
+    if (m == 1 && !has_trailing_const)
+    {
+        out = &make_cmp(cloned_args[0]);
+        return true;
+    }
+
+    /// Precompute `isNull(y_i)` for all i. When `has_trailing_const` is true, `isNull(y_M)` is
+    /// used by the trailing branch; otherwise `isNull(y_{M-1})` is the last one consumed.
     std::vector<const ActionsDAG::Node *> is_null_nodes;
-    is_null_nodes.reserve(num_args - 1);
-    for (size_t i = 0; i + 1 < num_args; ++i)
+    is_null_nodes.reserve(m);
+    for (size_t i = 0; i < m; ++i)
         is_null_nodes.push_back(&inverted_dag.addFunction(is_null_func, {cloned_args[i]}, ""));
 
     ActionsDAG::NodeRawConstPtrs or_children;
-    or_children.reserve(num_args);
-    /// First branch: `a_0 <op> const` (no `isNull` prefix).
-    or_children.push_back(&inverted_dag.addFunction(op_func, {cloned_args[0], &const_cloned}, ""));
-    /// Subsequent branches: `and(isNull(a_0), ..., isNull(a_{i-1}), a_i <op> const)`.
-    for (size_t i = 1; i < num_args; ++i)
+    or_children.reserve(m + (has_trailing_const ? 1 : 0));
+    /// First branch: `y_1 <op> const` (no `isNull` prefix).
+    or_children.push_back(&make_cmp(cloned_args[0]));
+    /// Subsequent branches: `and(isNull(y_1), ..., isNull(y_{i-1}), y_i <op> const)`.
+    for (size_t i = 1; i < m; ++i)
     {
         ActionsDAG::NodeRawConstPtrs and_children;
         and_children.reserve(i + 1);
         for (size_t j = 0; j < i; ++j)
             and_children.push_back(is_null_nodes[j]);
-        const auto & cmp_i = inverted_dag.addFunction(op_func, {cloned_args[i], &const_cloned}, "");
-        and_children.push_back(&cmp_i);
+        and_children.push_back(&make_cmp(cloned_args[i]));
+        or_children.push_back(&inverted_dag.addFunction(and_func, std::move(and_children), ""));
+    }
+    /// Trailing-constant branch: `and(isNull(y_1), ..., isNull(y_M), c <op> const)`.
+    if (has_trailing_const)
+    {
+        ActionsDAG::NodeRawConstPtrs and_children;
+        and_children.reserve(m + 1);
+        for (size_t j = 0; j < m; ++j)
+            and_children.push_back(is_null_nodes[j]);
+        and_children.push_back(&make_cmp(cloned_trailing));
         or_children.push_back(&inverted_dag.addFunction(and_func, std::move(and_children), ""));
     }
 

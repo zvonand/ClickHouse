@@ -21,7 +21,6 @@
 #include <Functions/JSONPath/Parsers/ParserJSONPath.h>
 #include <Common/JSONParsers/SimdJSONParser.h>
 #include <Interpreters/Context.h>
-#include <IO/ReadHelpers.h>
 #include <base/range.h>
 
 #include "config.h"

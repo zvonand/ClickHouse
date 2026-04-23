@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Tags: no-fasttest, no-azure-blob-storage
+# Tags: no-fasttest, no-azure-blob-storage, long
 # Tag no-fasttest: 45 seconds running
+# Tag long: the test has intentional `sleepEachRow` calls; under sanitizer/coverage builds the
+# total duration can exceed 180s (CIDB p95 on `amd_tsan, parallel` is ~356s), which triggers
+# the `clickhouse-test` flaky-check `TEST_MAX_RUN_TIME_IN_SECONDS` cap — the `long` tag
+# exempts the test from that cap.
 
 # Creation of a database with Ordinary engine emits a warning.
 CLICKHOUSE_CLIENT_SERVER_LOGS_LEVEL=fatal

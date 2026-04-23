@@ -98,8 +98,7 @@ off_t LimitSeekableReadBuffer::seek(off_t off, int whence)
     /// on pointer differences. Computing `pos + position_change` directly is undefined behavior
     /// when `pos` is null (e.g. when the inner buffer hasn't been materialized yet) or when
     /// `position_change` is large enough that the resulting pointer escapes the allocation.
-    if (pos && working_buffer.begin() <= pos + position_change
-           && pos + position_change <= working_buffer.end())
+    if (working_buffer.begin() - pos <= position_change && position_change <= working_buffer.end() - pos)
     {
         /// Position is still inside the buffer.
         pos += position_change;

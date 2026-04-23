@@ -186,7 +186,7 @@ std::pair<ColumnString::Ptr, ColumnString::Ptr> EmbeddedRocksDBBulkSink::seriali
             SharedLockGuard lock(storage.rocksdb_ptr_mx);
             if (!storage.rocksdb_ptr)
                 throw Exception(ErrorCodes::TABLE_IS_DROPPED, "Table is dropped");
-            auto * system_clock = storage.rocksdb_ptr->GetEnv()->GetSystemClock().get();
+            auto system_clock = storage.rocksdb_ptr->GetEnv()->GetSystemClock();
             lock.unlock();
             rocksdb::Status st = system_clock->GetCurrentTime(&curtime);
             if (!st.ok())

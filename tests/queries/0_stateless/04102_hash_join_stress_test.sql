@@ -1,3 +1,6 @@
+-- Tags: long
+-- long: times out in private
+
 -- Test suite for HashJoin main loop optimization (PR #82308)
 -- Validates correctness across all join kinds, strictnesses, key configurations,
 -- NULL handling, and join mask (ON condition) paths.

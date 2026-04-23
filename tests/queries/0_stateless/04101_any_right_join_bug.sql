@@ -1,6 +1,3 @@
--- Tags: long
--- long: times out in private
-
 -- Test: ANY RIGHT JOIN with multiple OR conditions (disjuncts) produces wrong results
 -- when query_plan_join_swap_table=0 forces the RIGHT join path.
 

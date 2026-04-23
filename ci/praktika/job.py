@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, List, Optional
 
 from . import Artifact
@@ -278,7 +278,7 @@ class Job:
                     # Check if included
                     for include in self.digest_config.include_paths:
                         include_norm = os.path.normpath(include)
-                        if fnmatch.fnmatch(file, include_norm) or file.startswith(
+                        if PurePosixPath("/" + file).match("/" + include_norm) or file.startswith(
                             include_norm + os.sep
                         ):
                             return True

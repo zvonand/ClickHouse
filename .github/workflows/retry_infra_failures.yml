@@ -123,9 +123,12 @@ jobs:
                   break
                 fi
 
-                # Check if the top-level result has the "infra" label
+                # Check if the top-level result has the "infra" label.
+                # Labels are stored as dicts ({"name": "infra", ...}); older
+                # entries may be bare strings, so handle both.
                 has_infra_label=$(echo "$result_json" | jq -r '
-                  (.ext.labels // []) | any(. == "infra")
+                  (.ext.labels // []) |
+                  any((if type == "object" then .name else . end) == "infra")
                 ')
                 if [ "$has_infra_label" = "true" ]; then
                   continue

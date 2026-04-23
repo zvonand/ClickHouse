@@ -2,6 +2,10 @@
 -- branches of Functions/FunctionsConversion.h, across numeric / Decimal / Date /
 -- DateTime / Date32 / UUID / IPv4 / IPv6 / FixedString / big-integer types.
 
+-- CI randomizes the session timezone; pin it so zero/default DateTime values
+-- render consistently.
+SET session_timezone = 'UTC';
+
 SELECT '--- numeric OrZero / OrNull / OrDefault on valid + invalid input ---';
 SELECT toInt32OrZero('42'), toInt32OrZero('bad');
 SELECT toInt32OrNull('42'), toInt32OrNull('bad');

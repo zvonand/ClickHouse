@@ -2,6 +2,10 @@
 -- Functions/parseDateTime.cpp (mysql* / joda* methods inside the Instruction
 -- struct and the parseMysqlFormat/parseJodaFormat switches in the factory).
 
+-- CI randomizes the session timezone; pin it so zero/default DateTime values
+-- render consistently.
+SET session_timezone = 'UTC';
+
 SELECT '--- mysqlDayOfWeekTextShort: %a ---';
 SELECT parseDateTime('Mon', '%a');
 SELECT parseDateTime('TUE', '%a');

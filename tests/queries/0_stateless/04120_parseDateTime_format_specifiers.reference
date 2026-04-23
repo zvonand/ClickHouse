@@ -47,9 +47,9 @@
 1970-01-01 12:00:00
 --- %s timestamp: out-of-range, malformed ---
 --- Error fallback: parseDateTimeOrZero / parseDateTimeOrNull ---
-1970-01-01 01:00:00
+1970-01-01 00:00:00
 \N
-1970-01-01 01:00:00
+1970-01-01 00:00:00
 \N
 --- Timezone argument ---
 2023-01-02 03:04:05
@@ -63,9 +63,9 @@
 2023-01-02 03:04:05
 --- parseDateTime64 variants ---
 2023-01-02 03:04:05.123456
-1970-01-01 01:00:00.000000
+1970-01-01 00:00:00.000000
 \N
 2023-01-02 03:04:05.123456
-1970-01-01 01:00:00
+1970-01-01 00:00:00
 \N
 --- parseDateTime64 wrong type argument ---

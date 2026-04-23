@@ -4,6 +4,9 @@
 -- generated SQL currently uses a shared alias `ga` and rejects multi-agg
 -- forms. That is a server-side limitation, not a parser limitation.
 
+-- CI randomizes the session timezone; pin it so the time-axis output is stable.
+SET session_timezone = 'UTC';
+
 DROP TABLE IF EXISTS ms_num;
 CREATE TABLE ms_num (x Int64, v Int64, g String) ENGINE = Memory;
 INSERT INTO ms_num VALUES (0, 1, 'a'), (1, 2, 'a'), (2, 3, 'b'), (3, 4, 'b');

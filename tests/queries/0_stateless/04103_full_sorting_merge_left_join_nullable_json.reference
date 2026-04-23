@@ -1,0 +1,4 @@
+1	a	{"port":443}	['{"proto":"tcp"}']
+2	b	\N	[]
+1	a	{"port":443}	['{"proto":"tcp"}']	['{"ok":true}']	['tag1']
+2	b	\N	[]	[]	[]

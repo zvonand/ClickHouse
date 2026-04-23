@@ -8,14 +8,15 @@
 #include <Backups/DDLAdjustingForBackupVisitor.h>
 #include <Backups/IBackupCoordination.h>
 #include <Core/Settings.h>
-#include <Databases/DDLDependencyVisitor.h>
 #include <Databases/IDatabase.h>
-#include <Databases/TablesDependencyGraph.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/DatabaseCatalog.h>
+#include <Interpreters/StorageID.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Storages/IStorage.h>
 #include <Storages/MergeTree/extractZooKeeperPathFromReplicatedTableDef.h>
+#include <Storages/StorageMaterializedView.h>
+#include <Common/typeid_cast.h>
 #include <base/chrono_io.h>
 #include <base/insertAtEnd.h>
 #include <base/scope_guard.h>
@@ -527,10 +528,12 @@ void BackupEntriesCollector::gatherTablesMetadata()
 
     table_infos.clear();
 
-    /// Build a dependency graph over all tables being backed up. We use it
-    /// to decide whether a table is a target of a refreshable materialized view
-    /// that is also being backed up (see `shouldBackupTableData`).
-    TablesDependencyGraph tables_dependencies("BackupEntriesCollector");
+    /// Collect target tables of refreshable materialized views that use the REPLACE
+    /// refresh strategy (APPEND is excluded) among the tables being backed up.
+    /// We build this snapshot from the storages we've already found, so the decision
+    /// in `shouldBackupTableData` doesn't need to query `DatabaseCatalog` again and
+    /// is scoped to the tables within the backup.
+    std::unordered_set<StorageID, StorageID::DatabaseAndTableNameHash, StorageID::DatabaseAndTableNameEqual> rmv_replace_target_ids;
 
     for (const auto & [database_name, database_info] : database_infos)
     {
@@ -559,7 +562,6 @@ void BackupEntriesCollector::gatherTablesMetadata()
                     / escapeForFileName(table_name_in_backup.table);
             }
 
-            /// Add information to `table_infos`.
             const auto qualified_name = QualifiedTableName{database_name, table_name};
             auto & res_table_info = table_infos[qualified_name];
             res_table_info.database = database_info.database;
@@ -568,20 +570,20 @@ void BackupEntriesCollector::gatherTablesMetadata()
             res_table_info.metadata_path_in_backup = metadata_path_in_backup;
             res_table_info.data_path_in_backup = data_path_in_backup;
 
-            tables_dependencies.addDependencies(
-                qualified_name,
-                getDependenciesFromCreateQuery(
-                    context->getGlobalContext(), qualified_name, create_table_query, context->getCurrentDatabase()).dependencies);
+            if (const auto * mv = typeid_cast<const StorageMaterializedView *>(storage.get()))
+            {
+                if (mv->isRefreshable() && !mv->isAppendRefreshStrategy())
+                    rmv_replace_target_ids.insert(mv->getTargetTableId());
+            }
         }
     }
 
-    tables_dependencies.checkNoCyclicDependencies();
-
-    /// Second pass: now that the graph is fully built, decide whether the data
-    /// of each table should be backed up and validate partition-related constraints.
+    /// Second pass: now that we have the full snapshot of tables and RMV targets,
+    /// decide whether the data of each table should be backed up and validate
+    /// partition-related constraints.
     for (auto & [qualified_name, res_table_info] : table_infos)
     {
-        res_table_info.should_backup_data = shouldBackupTableData(qualified_name, res_table_info.storage, tables_dependencies);
+        res_table_info.should_backup_data = shouldBackupTableData(qualified_name, res_table_info.storage, rmv_replace_target_ids);
 
         if (!res_table_info.should_backup_data)
             continue;
@@ -882,7 +884,7 @@ void BackupEntriesCollector::makeBackupEntriesForTableData(const QualifiedTableN
 bool BackupEntriesCollector::shouldBackupTableData(
     const QualifiedTableName & table_name,
     const StoragePtr & storage,
-    const TablesDependencyGraph & tables_dependencies) const
+    const std::unordered_set<StorageID, StorageID::DatabaseAndTableNameHash, StorageID::DatabaseAndTableNameEqual> & rmv_replace_target_ids) const
 {
     if (backup_settings.structure_only)
         return false;
@@ -891,7 +893,7 @@ bool BackupEntriesCollector::shouldBackupTableData(
         return true;
 
     if (!backup_settings.backup_data_from_refreshable_materialized_view_targets
-        && BackupUtils::isTargetForReplaceRefreshableMaterializedView(storage->getStorageID(), tables_dependencies, context))
+        && rmv_replace_target_ids.contains(storage->getStorageID()))
     {
         LOG_TRACE(log, "Skipping table data for {} (a target of a refreshable materialized view)", table_name.getFullName());
         return false;

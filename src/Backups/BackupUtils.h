@@ -9,8 +9,6 @@ namespace DB
 class IBackup;
 class AccessRightsElements;
 class DDLRenamingMap;
-class TablesDependencyGraph;
-struct StorageID;
 struct QualifiedTableName;
 
 namespace BackupUtils
@@ -30,15 +28,6 @@ bool compareRestoredDatabaseDef(const IAST & restored_database_create_query, con
 bool isInnerTable(const QualifiedTableName & table_name);
 bool isInnerTable(const String & database_name, const String & table_name);
 
-/// Returns true if the table is a target of a refreshable materialized view
-/// using the REPLACE refresh strategy.
-/// Targets with the APPEND strategy are excluded.
-/// The dependency graph must contain all tables being backed up along with their
-/// referential dependencies; only dependents present in the graph are considered.
-bool isTargetForReplaceRefreshableMaterializedView(
-    const StorageID & storage_id,
-    const TablesDependencyGraph & tables_dependencies,
-    const ContextPtr & context);
 }
 
 }

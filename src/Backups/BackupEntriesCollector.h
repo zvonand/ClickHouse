@@ -5,6 +5,7 @@
 #include <Backups/BackupSettings.h>
 #include <Core/QualifiedTableName.h>
 #include <Databases/DDLRenamingVisitor.h>
+#include <Interpreters/StorageID.h>
 #include <Parsers/ASTBackupQuery.h>
 #include <Storages/IStorage_fwd.h>
 #include <Storages/TableLockHolder.h>
@@ -20,12 +21,10 @@ using BackupEntries = std::vector<std::pair<String, BackupEntryPtr>>;
 class IBackupCoordination;
 class IDatabase;
 using DatabasePtr = std::shared_ptr<IDatabase>;
-struct StorageID;
 struct IAccessEntity;
 using AccessEntityPtr = std::shared_ptr<const IAccessEntity>;
 class QueryStatus;
 using QueryStatusPtr = std::shared_ptr<QueryStatus>;
-class TablesDependencyGraph;
 
 
 /// Collects backup entries for all databases and tables which should be put to a backup.
@@ -101,7 +100,7 @@ private:
     bool shouldBackupTableData(
         const QualifiedTableName & table_name,
         const StoragePtr & storage,
-        const TablesDependencyGraph & tables_dependencies) const;
+        const std::unordered_set<StorageID, StorageID::DatabaseAndTableNameHash, StorageID::DatabaseAndTableNameEqual> & rmv_replace_target_ids) const;
 
     void addBackupEntryUnlocked(const String & file_name, BackupEntryPtr backup_entry);
 

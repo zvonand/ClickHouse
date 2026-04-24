@@ -48,14 +48,23 @@ FROM (SELECT number % 2 AS p, number AS x FROM numbers(6))
 ORDER BY p, x;
 
 SELECT '--- row_number / rank / dense_rank / percent_rank / cume_dist ---';
--- Add a stable tiebreaker id so row_number() is deterministic under ties.
-SELECT x, row_number() OVER w, rank() OVER w, dense_rank() OVER w,
-       percent_rank() OVER w, cume_dist() OVER w
+-- row_number() needs a stable tiebreaker to be deterministic under ties.
+-- rank() / dense_rank() need no tiebreaker so ties are visible.
+-- percent_rank() / cume_dist() require an explicit UNBOUNDED..UNBOUNDED frame.
+SELECT x, tb,
+    row_number() OVER w_stable AS rn,
+    rank() OVER w_x AS rnk,
+    dense_rank() OVER w_x AS drnk,
+    percent_rank() OVER w_full AS prank,
+    cume_dist() OVER w_full AS cd
 FROM (
     SELECT x, rowNumberInAllBlocks() AS tb
     FROM (SELECT arrayJoin([1, 1, 2, 3, 3, 4]) AS x)
 )
-WINDOW w AS (ORDER BY x, tb)
+WINDOW
+    w_stable AS (ORDER BY x, tb),
+    w_x      AS (ORDER BY x),
+    w_full   AS (ORDER BY x RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 ORDER BY x, tb;
 
 SELECT '--- ntile ---';

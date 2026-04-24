@@ -1,6 +1,7 @@
--- Tags: no-fasttest
+-- Tags: no-fasttest, no-replicated-database
 -- ^^ ANTLR4 support is disabled in the fast-test build, and the PromQL
--- grammar requires it.
+-- grammar requires it. The experimental TimeSeries table engine does not
+-- round-trip through DatabaseReplicated and the cleanup query hangs.
 --
 -- Exercise Prometheus/PromQL parsing (Parsers/Prometheus/PrometheusQueryParsingUtil.cpp
 -- and the ANTLR visitor) via the prometheusQuery() / prometheusQueryRange() table

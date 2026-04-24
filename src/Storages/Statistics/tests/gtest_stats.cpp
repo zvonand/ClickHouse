@@ -7,6 +7,7 @@
 #include <Columns/ColumnNullable.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/DataTypeNullable.h>
+#include <DataTypes/DataTypeString.h>
 #include <IO/ReadBufferFromString.h>
 #include <IO/WriteBufferFromString.h>
 #include <Interpreters/convertFieldToType.h>
@@ -207,6 +208,95 @@ ColumnStatisticsPtr createTestStats(
 
     return MergeTreeStatisticsFactory::instance().get(desc);
 }
+}
+
+TEST(Statistics, UniqBuildNullableStringIgnoresNulls)
+{
+    tryRegisterAggregateFunctions();
+
+    auto data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeString>());
+
+    MutableColumnPtr col = data_type->createColumn();
+    auto * nullable_col = assert_cast<ColumnNullable *>(col.get());
+
+    nullable_col->insert(Field(String("alpha")));
+    nullable_col->insertDefault();
+    nullable_col->insert(Field(String("beta")));
+    nullable_col->insert(Field(String("alpha")));
+    nullable_col->insertDefault();
+
+    auto stats = createTestStats({StatisticsType::Uniq}, data_type);
+
+    ASSERT_NO_THROW(stats->build(std::move(col)));
+    EXPECT_EQ(stats->getNumRows(), 5u);
+    EXPECT_EQ(stats->estimateCardinality(), 2u);
+
+    String serialized;
+    WriteBufferFromString write_buf(serialized);
+    stats->serialize(write_buf);
+    write_buf.finalize();
+
+    ReadBufferFromString read_buf(serialized);
+    auto deserialized = ColumnStatistics::deserialize(read_buf, data_type);
+    EXPECT_EQ(deserialized->getNumRows(), 5u);
+    EXPECT_EQ(deserialized->estimateCardinality(), 2u);
+}
+
+TEST(Statistics, DeserializeNonNullableUniqAsNullable)
+{
+    tryRegisterAggregateFunctions();
+
+    auto non_nullable_type = std::make_shared<DataTypeString>();
+
+    MutableColumnPtr col = non_nullable_type->createColumn();
+    col->insert(Field(String("alpha")));
+    col->insert(Field(String("beta")));
+    col->insert(Field(String("alpha")));
+
+    auto stats = createTestStats({StatisticsType::Uniq}, non_nullable_type);
+    stats->build(std::move(col));
+
+    String serialized;
+    WriteBufferFromString write_buf(serialized);
+    stats->serialize(write_buf);
+    write_buf.finalize();
+
+    auto nullable_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeString>());
+    ReadBufferFromString read_buf(serialized);
+    auto deserialized = ColumnStatistics::deserialize(read_buf, nullable_type);
+
+    EXPECT_EQ(deserialized->getNumRows(), 3u);
+    EXPECT_EQ(deserialized->estimateCardinality(), 2u);
+}
+
+TEST(Statistics, DeserializeNullableUniqAsNonNullable)
+{
+    tryRegisterAggregateFunctions();
+
+    auto nullable_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeString>());
+
+    MutableColumnPtr col = nullable_type->createColumn();
+    auto * nullable_col = assert_cast<ColumnNullable *>(col.get());
+    nullable_col->insert(Field(String("alpha")));
+    nullable_col->insertDefault();
+    nullable_col->insert(Field(String("beta")));
+    nullable_col->insert(Field(String("alpha")));
+    nullable_col->insertDefault();
+
+    auto stats = createTestStats({StatisticsType::Uniq}, nullable_type);
+    stats->build(std::move(col));
+
+    String serialized;
+    WriteBufferFromString write_buf(serialized);
+    stats->serialize(write_buf);
+    write_buf.finalize();
+
+    auto non_nullable_type = std::make_shared<DataTypeString>();
+    ReadBufferFromString read_buf(serialized);
+    auto deserialized = ColumnStatistics::deserialize(read_buf, non_nullable_type);
+
+    EXPECT_EQ(deserialized->getNumRows(), 5u);
+    EXPECT_EQ(deserialized->estimateCardinality(), 2u);
 }
 
 TEST(Statistics, EstimateGreaterUsesNonNullRows)

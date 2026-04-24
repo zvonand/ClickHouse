@@ -211,7 +211,7 @@ PaimonTableStatePtr PaimonMetadata::getCurrentState() const
 PaimonTableStatePtr PaimonMetadata::loadLatestState() const
 {
     /// Get latest snapshot info
-    auto snapshot_info_opt = table_client->getLastestTableSnapshotInfo();
+    auto snapshot_info_opt = table_client->getLatestTableSnapshotInfo();
     if (!snapshot_info_opt)
     {
         LOG_WARNING(log, "Paimon table has no snapshots yet");

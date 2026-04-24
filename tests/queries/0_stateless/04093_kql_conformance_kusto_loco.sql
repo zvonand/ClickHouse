@@ -207,8 +207,6 @@ print '-- DynamicTests::NegativeExpression --';
 print -(1+5);
 print '-- DynamicTests::ArrayAccessWithNegativeIndex --';
 print o=dynamic({"a":[1,2]}) | project z=o.a[-1];
-print '-- SimpleFunctionTests::TrimStartVerbatim --';
-print trim_start(@'a+','aaainnerbbba');
 print '-- SimpleFunctionTests::TrimStart --';
 print trim_start(@'a+','aaainnerbbba');
 print '-- SimpleFunctionTests::TrimEnd --';

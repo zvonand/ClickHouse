@@ -121,8 +121,6 @@ true
 -6
 -- DynamicTests::ArrayAccessWithNegativeIndex --
 2
--- SimpleFunctionTests::TrimStartVerbatim --
-innerbbba
 -- SimpleFunctionTests::TrimStart --
 innerbbba
 -- SimpleFunctionTests::TrimEnd --

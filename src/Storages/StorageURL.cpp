@@ -53,6 +53,7 @@
 #include <DataTypes/DataTypeString.h>
 #include <QueryPipeline/QueryPipelineBuilder.h>
 #include <Poco/Net/HTTPRequest.h>
+#include <Poco/Timestamp.h>
 
 namespace ProfileEvents
 {
@@ -216,7 +217,7 @@ IStorageURLBase::IStorageURLBase(
             VirtualsMaterializationPlace::Reader);
     }
 
-    setVirtuals(virtual_columns_desc);
+    storage_metadata.setVirtuals(virtual_columns_desc);
     setInMemoryMetadata(storage_metadata);
 }
 
@@ -393,7 +394,7 @@ StorageURLSource::StorageURLSource(
             http_buf->setCancellationCheck([this]() { return isCancelled(); });
         }
 
-        auto last_mod_time = uri_and_buf.second->tryGetLastModificationTime();
+        current_file_last_modified = uri_and_buf.second->tryGetLastModificationTime();
         read_buf = std::move(uri_and_buf.second);
 
         current_file_size = tryGetFileSizeFromReadBuffer(*read_buf);
@@ -404,7 +405,7 @@ StorageURLSource::StorageURLSource(
         QueryPipelineBuilder builder;
         std::optional<size_t> num_rows_from_cache = std::nullopt;
         if (need_only_count && getContext()->getSettingsRef()[Setting::use_cache_for_count_from_files])
-            num_rows_from_cache = tryGetNumRowsFromCache(curr_uri.toString(), last_mod_time);
+            num_rows_from_cache = tryGetNumRowsFromCache(curr_uri.toString(), current_file_last_modified);
 
         if (num_rows_from_cache)
         {
@@ -508,6 +509,9 @@ Chunk StorageURLSource::generate()
                     .path = curr_uri.getPath(),
                     .storage_id = storage_id,
                     .size = current_file_size,
+                    .last_modified = current_file_last_modified
+                        ? std::optional<Poco::Timestamp>(Poco::Timestamp::fromEpochTime(*current_file_last_modified))
+                        : std::nullopt,
                 },
                 getContext());
 
@@ -1284,7 +1288,7 @@ void ReadFromURL::createIterator(const ActionsDAG::Node * predicate)
     else if (is_url_with_globs)
     {
         /// Iterate through disclosed globs and make a source for each file
-        auto glob_iterator = std::make_shared<StorageURLSource::DisclosedGlobIterator>(storage->uri, max_addresses, predicate, storage->getVirtualsPtr()->getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::Reader).getNamesAndTypesList(), info.hive_partition_columns_to_read_from_file_path, context);
+        auto glob_iterator = std::make_shared<StorageURLSource::DisclosedGlobIterator>(storage->uri, max_addresses, predicate, storage_snapshot->metadata->virtuals.getSampleBlock(VirtualsKind::All, VirtualsMaterializationPlace::Reader).getNamesAndTypesList(), info.hive_partition_columns_to_read_from_file_path, context);
 
         /// check if we filtered out all the paths
         if (glob_iterator->size() == 0)

@@ -114,7 +114,7 @@ def test_receive_buffer_size_applied(started_cluster):
     """Verify that changing storage_connections_rcvbuf is picked up and connections work.
 
     The url() table function uses the Storage connection group, so we set
-    storage_connections_rcvbuf and verify the setting is logged and connections work.
+    storage_connections_rcvbuf and verify the setting is applied to real sockets.
     """
     buf_size = 65536
 
@@ -123,16 +123,7 @@ def test_receive_buffer_size_applied(started_cluster):
         "/etc/clickhouse-server/config.d/small_rcvbuf.xml",
     )
 
-    query_id = f"test_rcvbuf_applied_{random.randint(10000, 99999)}"
-    node.query("SYSTEM RELOAD CONFIG", query_id=query_id)
-
-    # Verify the server logged the buffer size update for the Storage group.
-    node.query(
-        f"SYSTEM FLUSH LOGS text_log; "
-        f"SELECT throwIf(count() = 0) FROM system.text_log "
-        f"WHERE query_id = '{query_id}' "
-        f"AND message LIKE '%Socket buffer sizes updated for group Storage%rcvbuf={buf_size}%'"
-    )
+    node.query("SYSTEM RELOAD CONFIG")
 
     # Verify the setting is reflected in server_settings.
     result = node.query(

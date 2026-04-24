@@ -15,13 +15,9 @@ from kafka.protocol.admin import DescribeGroupsRequest_v1, DescribeGroupsRespons
 from kafka.protocol.group import MemberAssignment
 
 from helpers.client import QueryRuntimeException
-from helpers.cluster import ClickHouseCluster, is_arm
+from helpers.cluster import ClickHouseCluster
 from helpers.network import PartitionManager
 from helpers.test_tools import TSV
-
-if is_arm():
-    # skip due to no arm support for clickhouse/kerberos-kdc docker image
-    pytestmark = pytest.mark.skip
 
 cluster = ClickHouseCluster(__file__)
 instance = cluster.add_instance(

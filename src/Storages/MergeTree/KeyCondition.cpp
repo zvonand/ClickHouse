@@ -786,7 +786,7 @@ static const ActionsDAG::Node & cloneDAGWithInversionPushDown(
     ActionsDAG & inverted_dag,
     std::unordered_map<const ActionsDAG::Node *, const ActionsDAG::Node *> & inputs_mapping,
     const ContextPtr & context,
-    const bool need_inversion);
+    bool need_inversion);
 
 /// Rewrite `<op>(coalesce(a_1, ..., a_N), const)` (or with `ifNull`, or with the constant on the
 /// left) into

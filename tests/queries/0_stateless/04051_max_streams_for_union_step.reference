@@ -54,6 +54,12 @@ Concat × 3 2 → 1
   (Expression)
   ExpressionTransform
     (ReadFromSystemOne)
+  (Expression)
+  ExpressionTransform
+    (ReadFromSystemOne)
+  (Expression)
+  ExpressionTransform
+    (ReadFromSystemOne)
 (Union)
   (Expression)
   ExpressionTransform

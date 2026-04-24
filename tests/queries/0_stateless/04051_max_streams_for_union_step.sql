@@ -34,7 +34,11 @@ UNION ALL
 SELECT 4
 SETTINGS max_threads = 2, max_streams_for_union_step = 3, max_streams_for_union_step_to_max_threads_ratio = 1;
 
--- 4. Ratio = 0 disables ratio-based limit, only max_streams_for_union_step = 3 applies
+-- 4. Ratio = 0 disables ratio-based limit, only max_streams_for_union_step = 3 applies.
+-- Uses 6 branches so the 6 → 3 narrowing produces an even 2,2,2 split — the EXPLAIN
+-- PIPELINE output groups Concat processors by name only, so an uneven split (e.g. 4 → 3)
+-- would render with the IO ports of an arbitrary Concat in the group, which is unstable
+-- because `narrowPipe` shuffles its distribution.
 EXPLAIN PIPELINE
 SELECT 1
 UNION ALL
@@ -43,6 +47,10 @@ UNION ALL
 SELECT 3
 UNION ALL
 SELECT 4
+UNION ALL
+SELECT 5
+UNION ALL
+SELECT 6
 SETTINGS max_threads = 2, max_streams_for_union_step = 3, max_streams_for_union_step_to_max_threads_ratio = 0;
 
 -- 5. Both settings 0: no narrowing at all
@@ -89,14 +97,16 @@ UNION ALL
 SELECT 4
 SETTINGS max_threads = 1, max_streams_for_union_step = 0, max_streams_for_union_step_to_max_threads_ratio = 0.5;
 
--- 9. Negative ratio must be rejected
+-- 9. Negative ratio must be rejected by `UnionStep::updatePipeline`
 SELECT 1 UNION ALL SELECT 2
 SETTINGS max_streams_for_union_step_to_max_threads_ratio = -1; -- { serverError PARAMETER_OUT_OF_BOUND }
 
--- 10. Non-finite ratio (infinity) must be rejected
+-- 10. Non-finite ratio (infinity) is rejected by the Float setting parser before
+-- our validation runs. The `isFinite` guard in `UnionStep::updatePipeline` is
+-- still useful as defense in depth for distributed query serialization paths.
 SELECT 1 UNION ALL SELECT 2
-SETTINGS max_streams_for_union_step_to_max_threads_ratio = inf; -- { serverError PARAMETER_OUT_OF_BOUND }
+SETTINGS max_streams_for_union_step_to_max_threads_ratio = inf; -- { clientError CANNOT_PARSE_NUMBER }
 
--- 11. Non-finite ratio (NaN) must be rejected
+-- 11. Non-finite ratio (NaN) is also rejected by the Float setting parser.
 SELECT 1 UNION ALL SELECT 2
-SETTINGS max_streams_for_union_step_to_max_threads_ratio = nan; -- { serverError PARAMETER_OUT_OF_BOUND }
+SETTINGS max_streams_for_union_step_to_max_threads_ratio = nan; -- { clientError CANNOT_PARSE_NUMBER }

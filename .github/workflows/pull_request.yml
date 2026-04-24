@@ -330,10 +330,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          set -o pipefail
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'CI Tests' --workflow "PR" --ci 2>&1 | python3 -u -c 'import sys,datetime
-          prefix=lambda: datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-          for line in sys.stdin: sys.stdout.write(prefix() + " " + line); sys.stdout.flush()' | tee ./ci/tmp/job.log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'CI Tests' --workflow "PR" --ci --timestamp
 
   fast_test_arm_darwin:
     runs-on: [self-hosted, macos_m2]
@@ -4008,10 +4005,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          set -o pipefail
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Unit tests (asan_ubsan, function_prop_fuzzer)' --workflow "PR" --ci 2>&1 | python3 -u -c 'import sys,datetime
-          prefix=lambda: datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-          for line in sys.stdin: sys.stdout.write(prefix() + " " + line); sys.stdout.flush()' | tee ./ci/tmp/job.log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Unit tests (asan_ubsan, function_prop_fuzzer)' --workflow "PR" --ci --timestamp
 
   unit_tests_tsan_function_prop_fuzzer:
     runs-on: [self-hosted, amd-large]
@@ -4046,10 +4040,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          set -o pipefail
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Unit tests (tsan, function_prop_fuzzer)' --workflow "PR" --ci 2>&1 | python3 -u -c 'import sys,datetime
-          prefix=lambda: datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-          for line in sys.stdin: sys.stdout.write(prefix() + " " + line); sys.stdout.flush()' | tee ./ci/tmp/job.log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Unit tests (tsan, function_prop_fuzzer)' --workflow "PR" --ci --timestamp
 
   unit_tests_msan_function_prop_fuzzer:
     runs-on: [self-hosted, amd-large]
@@ -4084,10 +4075,7 @@ jobs:
         id: run
         run: |
           . ./ci/tmp/praktika_setup_env.sh
-          set -o pipefail
-          PYTHONUNBUFFERED=1 python3 -m praktika run 'Unit tests (msan, function_prop_fuzzer)' --workflow "PR" --ci 2>&1 | python3 -u -c 'import sys,datetime
-          prefix=lambda: datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-          for line in sys.stdin: sys.stdout.write(prefix() + " " + line); sys.stdout.flush()' | tee ./ci/tmp/job.log
+          PYTHONUNBUFFERED=1 python3 -m praktika run 'Unit tests (msan, function_prop_fuzzer)' --workflow "PR" --ci --timestamp
 
   unit_tests_amd_llvm_coverage:
     runs-on: [self-hosted, amd-large]

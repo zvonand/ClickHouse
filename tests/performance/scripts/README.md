@@ -20,9 +20,7 @@ to have false positives.
 
 In addition to the static `report.html` and `logs.tar.zst` bundle described
 below, every perf-comparison run uploads its results to the `play.clickhouse.com`
-ClickHouse cluster. The UI at
-[/core/qa/perf-comparison](https://github.com/ClickHouse/ClickHouse) reads
-from these tables so you can filter by PR, commit, arch, workflow, etc.
+ClickHouse cluster.
 
 | Table | Contents |
 | --- | --- |

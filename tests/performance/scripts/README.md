@@ -34,11 +34,6 @@ ClickHouse cluster.
 | `perf_metric_changes_v1` | Changes in `system.asynchronous_metric_log` medians. |
 | `perf_flamegraph_stacks_v1` | Collapsed flamegraph stacks per query/side/trace type. |
 
-DDL and rollout notes for all of the above live in
-[ci/jobs/scripts/perf/README-db.md](../../../ci/jobs/scripts/perf/README-db.md).
-Raw `system.query_log` / `system.trace_log` / `system.text_log` per server
-are not yet replicated into ClickHouse for perf tests (see "Future work" in
-that doc); for now those still come from `logs.tar.zst`.
 
 ### How to Read the Report
 

@@ -473,19 +473,19 @@ bool KQLOperators::convert(std::vector<String> & tokens, IParser::Pos & pos)
                     String low = IParserKQLFunction::getExpression(pos);
                     ++pos;
 
-                    /// Skip ".." (Dot Dot)
-                    if (isValidKQLPos(pos) && String(pos->begin, pos->end) == ".")
-                        ++pos;
-                    if (isValidKQLPos(pos) && String(pos->begin, pos->end) == ".")
-                        ++pos;
+                    /// Require ".." (Dot Dot) between low and high
+                    if (!isValidKQLPos(pos) || String(pos->begin, pos->end) != ".")
+                        throw Exception(ErrorCodes::SYNTAX_ERROR, "Syntax error near {}: expected `..`", op);
+                    ++pos;
+                    if (!isValidKQLPos(pos) || String(pos->begin, pos->end) != ".")
+                        throw Exception(ErrorCodes::SYNTAX_ERROR, "Syntax error near {}: expected `..`", op);
+                    ++pos;
 
                     String high = IParserKQLFunction::getExpression(pos);
                     ++pos;
-                    /// Skip closing bracket
-                    if (isValidKQLPos(pos) && pos->type == TokenType::ClosingRoundBracket)
-                        ;
-                    else
-                        --pos;
+                    /// Require the closing bracket
+                    if (!isValidKQLPos(pos) || pos->type != TokenType::ClosingRoundBracket)
+                        throw Exception(ErrorCodes::SYNTAX_ERROR, "Syntax error near {}: expected `)`", op);
 
                     if (op_value == KQLOperatorValue::between)
                         new_expr = fmt::format("toBool({0} >= {1} and {0} <= {2})", tokens.back(), low, high);

@@ -991,8 +991,18 @@ def test_caches_with_query_limit(cluster):
             );
         """
     )
-    node.query("insert into fs_cache_query_limit select number,randomString(4096) from system.numbers limit 1000")
-    node.query("select * from fs_cache_query_limit format Null")
+    # The data size must significantly exceed `max_size` so that file segments
+    # already added to the per-query priority get evicted from the main priority
+    # within a single query. That re-add path is what triggers the original
+    # logical error in `IFileCachePriority::check` (with `max_elements = 0` in
+    # the per-query priority) and in `FileCacheQueryLimit::QueryContext::tryRemove`.
+    node.query(
+        "insert into fs_cache_query_limit select number, randomString(4096) from system.numbers limit 100000"
+    )
+    # Re-read multiple times to amplify the eviction/re-add pressure within a
+    # single query, increasing the probability of hitting both fixed code paths.
+    for _ in range(3):
+        node.query("select * from fs_cache_query_limit format Null")
 
 
 @pytest.mark.parametrize("cache_policy", ["lru", "slru"])

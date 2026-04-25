@@ -76,7 +76,7 @@ Examples:
         """
     )
     parser.add_argument('output_dir', help='Output directory containing profiles/ and results.json')
-    parser.add_argument('--profiler', help='Path to parser_memory_profiler binary')
+    parser.add_argument('--profiler', help='Path to clickhouse-examples binary')
     parser.add_argument('--jeprof', help='Path to jeprof binary')
     parser.add_argument('--flamegraph', help='Path to flamegraph.pl')
     parser.add_argument('--timeout', type=int, default=TIMEOUT, help=f'Timeout for jeprof commands (default: {TIMEOUT}s)')

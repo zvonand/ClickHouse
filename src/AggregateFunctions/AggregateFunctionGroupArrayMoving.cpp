@@ -377,7 +377,7 @@ groupArrayMovingAvg(window_size)(numbers_for_summing)
     FunctionDocumentation::Parameters parameters = {
         {"window_size", "Size of the calculation window. If left unspecified, the function takes the window size equal to the number of rows in the column.", {"UInt64"}}
     };
-    FunctionDocumentation::ReturnedValue returned_value = {"Returns an array of the same size and type as the input data.", {"Array"}};
+    FunctionDocumentation::ReturnedValue returned_value = {"Returns an array of the same size as the input data. For non-Decimal input, the array contains Float64 values. For Decimal input, the array contains Decimal values with the input scale.", {"Array"}};
     FunctionDocumentation::Examples examples = {
     {
         "Usage example",

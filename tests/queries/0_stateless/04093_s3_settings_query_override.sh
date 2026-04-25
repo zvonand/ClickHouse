@@ -19,9 +19,12 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # Use query-level SETTINGS with a small value to force multipart upload.
 # If query-level settings are properly re-applied after endpoint config,
 # the small value will be used and we'll see multipart upload in ProfileEvents.
+# Use random String values so the data does not compress below the 10 000-byte
+# multipart threshold; a small row count keeps the test fast under random
+# settings.
 $CLICKHOUSE_CLIENT --query "
-INSERT INTO TABLE FUNCTION s3('http://localhost:11111/test/04093_s3_settings_query_override.csv', 'CSV', 'number UInt64')
-SELECT number FROM numbers(1000000)
+INSERT INTO TABLE FUNCTION s3('http://localhost:11111/test/04093_s3_settings_query_override.csv', 'CSV', 's String')
+SELECT randomPrintableASCII(100) FROM numbers(500)
 SETTINGS s3_max_single_part_upload_size = 10000, s3_truncate_on_insert = 1
 "
 

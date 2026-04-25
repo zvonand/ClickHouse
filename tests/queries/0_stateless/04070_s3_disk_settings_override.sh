@@ -24,9 +24,12 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 $CLICKHOUSE_CLIENT --query "DROP TABLE IF EXISTS t_04070_s3_disk_override"
 
+# Use a String column with random data so that LZ4 cannot compress it down
+# below the 10 000-byte multipart threshold. A small row count keeps the test
+# fast under the flaky check's random settings (debug build).
 $CLICKHOUSE_CLIENT --query "
-CREATE TABLE t_04070_s3_disk_override (number UInt64)
-ENGINE = MergeTree ORDER BY number
+CREATE TABLE t_04070_s3_disk_override (s String)
+ENGINE = MergeTree ORDER BY tuple()
 SETTINGS storage_policy = 's3_04070'
 "
 
@@ -38,7 +41,7 @@ SETTINGS storage_policy = 's3_04070'
 $CLICKHOUSE_CLIENT --query "SYSTEM RELOAD CONFIG" |& grep -v -e 'Address already in use'
 
 $CLICKHOUSE_CLIENT --query "
-INSERT INTO t_04070_s3_disk_override SELECT number FROM numbers(1000000)
+INSERT INTO t_04070_s3_disk_override SELECT randomString(100) FROM numbers(500)
 "
 
 $CLICKHOUSE_CLIENT --query "SYSTEM FLUSH LOGS query_log"

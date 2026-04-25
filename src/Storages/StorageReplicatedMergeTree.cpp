@@ -1906,7 +1906,25 @@ bool StorageReplicatedMergeTree::checkPartsImpl(bool skip_sanity_checks)
         if (load_state.is_broken || load_state.part->rows_count || !load_state.uncovered)
             continue;
 
-        set_of_empty_unexpected_parts.add(load_state.part->name);
+        /// Two empty unexpected parts on disk can have intersecting block ranges without one
+        /// fully containing the other (for example, `all_0_5_2` and `all_2_11_3`). The
+        /// `uncovered` flag is computed as "no other unexpected part contains me", so both
+        /// parts can pass that check yet still intersect each other. Use `tryAdd` and skip
+        /// the conflicting part rather than aborting startup with `LOGICAL_ERROR`. The set
+        /// is only used as a heuristic to detect unexpected parts that look like leftovers
+        /// of dropped parts; keeping just one of two intersecting empty markers as a
+        /// covering candidate is sufficient — any unexpected part that the skipped marker
+        /// would have covered will fall through to the regular handling path below.
+        String reason;
+        if (set_of_empty_unexpected_parts.tryAdd(load_state.part->name, &reason)
+            == ActiveDataPartSet::AddPartOutcome::HasIntersectingPart)
+        {
+            LOG_WARNING(
+                log,
+                "Skipping empty unexpected part {} from covering set: {}",
+                load_state.part->name,
+                reason);
+        }
     }
     if (auto empty_count = set_of_empty_unexpected_parts.size())
         LOG_WARNING(log, "Found {} empty unexpected parts (probably some dropped parts were not cleaned up before restart): [{}]",

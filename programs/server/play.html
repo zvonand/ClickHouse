@@ -2568,13 +2568,14 @@ let databases_toggle = document.getElementById('databases-toggle');
 
 let menu_elem = document.getElementById('menu');
 
-/// Hide table-info balloons while scrolling: they use position:fixed
-/// and would detach from their anchors.
+/// Hide table-info balloons on any scroll: they use position:fixed
+/// and would detach from their anchors. Use capture phase so the listener
+/// fires regardless of which element scrolls (scroll events do not bubble).
 function hideTableBalloons() {
     for (const el of document.querySelectorAll('.table-addendum'))
         el.style.visibility = 'hidden';
 }
-document.getElementById('databases').addEventListener('scroll', hideTableBalloons);
+document.addEventListener('scroll', hideTableBalloons, { capture: true, passive: true });
 
 function toggleDatabases() {
     if (!databases_toggle.dataset['opened']) {

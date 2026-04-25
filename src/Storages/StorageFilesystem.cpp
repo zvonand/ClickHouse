@@ -97,7 +97,9 @@ void fillCheapColumnValue(const String & column_name, IColumn & column, const Qu
         column.insert(outputDepth(queue_entry.depth));
     else if (column_name == "type")
     {
-        auto status = file.status(ec);
+        /// Use symlink_status so the entry's own type is reported.
+        /// Otherwise a symlink would be reported as the target type (`regular`, `directory`, ...).
+        auto status = file.symlink_status(ec);
         column.insert(ec ? Int8(9) : fileTypeToEnumValue(status.type()));
     }
     else if (column_name == "is_symlink")

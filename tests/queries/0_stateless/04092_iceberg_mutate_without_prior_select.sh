@@ -9,25 +9,29 @@
 # `updateExternalDynamicMetadataIfExists` before reading data, so the storage
 # snapshot lacked the `datalake_table_state` required by `IcebergMetadata::iterate`.
 
+# Use `IcebergS3` rather than `IcebergLocal`, because the local object storage
+# becomes read-only after `ATTACH` (it honours the `is_readonly` flag passed to
+# `createObjectStorage`), which would block the mutation. S3 ignores that flag.
+
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
 TABLE="t_${CLICKHOUSE_DATABASE}_${RANDOM}"
-TABLE_PATH="${USER_FILES_PATH}/${TABLE}/"
+TABLE_PATH="04092_iceberg_mutate/${CLICKHOUSE_TEST_UNIQUE_NAME}"
 
 ${CLICKHOUSE_CLIENT} --query "DROP TABLE IF EXISTS ${TABLE}"
 ${CLICKHOUSE_CLIENT} --query "
     CREATE TABLE ${TABLE} (c0 String)
-    ENGINE = IcebergLocal('${TABLE_PATH}', 'Parquet')
+    ENGINE = IcebergS3(s3_conn, filename = '${TABLE_PATH}')
 "
 
-# Populate the Iceberg data files on disk.
+# Populate the Iceberg data files in S3.
 ${CLICKHOUSE_CLIENT} --allow_insert_into_iceberg=1 --query "INSERT INTO ${TABLE} VALUES ('a')"
 
 # DETACH + ATTACH rebuilds the storage object from the stored CREATE statement,
 # so its in-memory metadata has no `datalake_table_state` loaded — the same
-# state as after a server restart. The Iceberg files on disk are preserved.
+# state as after a server restart. The Iceberg files in S3 are preserved.
 ${CLICKHOUSE_CLIENT} --query "DETACH TABLE ${TABLE}"
 ${CLICKHOUSE_CLIENT} --query "ATTACH TABLE ${TABLE}"
 
@@ -40,4 +44,3 @@ ${CLICKHOUSE_CLIENT} --allow_insert_into_iceberg=1 --query "ALTER TABLE ${TABLE}
 ${CLICKHOUSE_CLIENT} --query "SELECT c0 FROM ${TABLE}"
 
 ${CLICKHOUSE_CLIENT} --query "DROP TABLE IF EXISTS ${TABLE}"
-rm -rf "${TABLE_PATH}"

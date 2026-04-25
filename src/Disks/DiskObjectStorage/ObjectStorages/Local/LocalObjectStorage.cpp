@@ -123,6 +123,16 @@ public:
         }
     }
 
+    /// Forward methods that the base ReadBufferFromFileDecorator does not delegate.
+    /// These are used when our wrapper is plugged into ReadBufferFromRemoteFSGather
+    /// or AsynchronousBoundedReadBuffer (e.g. for the local_blob_storage disk type).
+    size_t getFileOffsetOfBufferEnd() const override { return impl->getFileOffsetOfBufferEnd(); }
+    void setReadUntilPosition(size_t position) override { impl->setReadUntilPosition(position); }
+    void setReadUntilEnd() override { impl->setReadUntilEnd(); }
+    bool supportsRightBoundedReads() const override { return impl->supportsRightBoundedReads(); }
+    bool isSeekCheap() override { return impl->isSeekCheap(); }
+    bool isContentCached(size_t offset, size_t size) override { return impl->isContentCached(offset, size); }
+
 private:
     bool nextImpl() override
     {

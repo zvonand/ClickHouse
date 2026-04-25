@@ -176,10 +176,24 @@ public:
                 if (default_function->getFunctionName() == "tuple")
                 {
                     const auto & default_tuple_args = default_function->getArguments().getNodes();
-                    if (element_index < default_tuple_args.size())
-                        new_default_arg = default_tuple_args[element_index];
-                    else
+                    if (element_index >= default_tuple_args.size())
                         return; /// Cannot optimize — index out of range
+
+                    /// Only rewrite when all tuple arguments are constants. Otherwise, dropping the
+                    /// other elements could lose side effects (e.g. `tuple('ok', throwIf(1))` would
+                    /// no longer evaluate `throwIf(1)` after the rewrite, changing query semantics).
+                    bool all_constants = true;
+                    for (const auto & tuple_arg : default_tuple_args)
+                    {
+                        if (!tuple_arg->as<ConstantNode>())
+                        {
+                            all_constants = false;
+                            break;
+                        }
+                    }
+
+                    if (all_constants)
+                        new_default_arg = default_tuple_args[element_index];
                 }
             }
         }

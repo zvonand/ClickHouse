@@ -95,6 +95,13 @@ SELECT 'dictGetOrDefault with non-rewritable default';
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), materialize(('MCountry', 'MCity'))).1;
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), materialize(('MCountry', 'MCity'))).2;
 
+-- Test dictGetOrDefault with `tuple(...)` containing a non-constant element. The pass must bail out so
+-- side effects in the dropped elements (e.g. `materialize`) are still evaluated as part of argument
+-- evaluation, preserving original semantics.
+SELECT 'dictGetOrDefault with tuple containing non-constant';
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), tuple('OkCountry', materialize('MatCity'))).1;
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), tuple('OkCountry', materialize('MatCity'))).2;
+
 -- Test dictGetOrDefault with CTE alias default (the alias references a constant tuple expression, not a ConstantNode)
 SELECT 'dictGetOrDefault with CTE alias default';
 WITH ('CTECountry', 'CTECity') AS d

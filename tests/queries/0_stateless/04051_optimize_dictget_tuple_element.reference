@@ -40,6 +40,9 @@ FuncCity
 dictGetOrDefault with non-rewritable default
 MCountry
 MCity
+dictGetOrDefault with tuple containing non-constant
+OkCountry
+MatCity
 dictGetOrDefault with CTE alias default
 CTECountry
 CTECity

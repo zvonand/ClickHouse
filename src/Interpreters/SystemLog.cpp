@@ -402,6 +402,21 @@ std::vector<ISystemLog *> SystemLogs::getAllLogs() const
     return result;
 }
 
+bool hasAnySystemLogConfigured(const Poco::Util::AbstractConfiguration & config)
+{
+#define CHECK_HAS_SYSTEM_LOG(log_type, member, descr) \
+    if (config.has(#member)) \
+        return true;
+
+    LIST_OF_ALL_SYSTEM_LOGS(CHECK_HAS_SYSTEM_LOG)
+    #if CLICKHOUSE_CLOUD
+        LIST_OF_CLOUD_SYSTEM_LOGS(CHECK_HAS_SYSTEM_LOG)
+    #endif
+#undef CHECK_HAS_SYSTEM_LOG
+
+    return false;
+}
+
 namespace
 {
 constexpr String getLowerCaseAndRemoveUnderscores(const String & name)

@@ -22,6 +22,7 @@
 #include <Interpreters/DatabaseCatalog.h>
 #include <Interpreters/JIT/CompiledExpressionCache.h>
 #include <Interpreters/ProcessList.h>
+#include <Interpreters/SystemLog.h>
 #include <Interpreters/loadMetadata.h>
 #include <Interpreters/registerInterpreters.h>
 #include <Access/AccessControl.h>
@@ -1175,9 +1176,12 @@ void LocalServer::processConfig()
         DatabaseCatalog::instance().startupBackgroundTasks();
     }
 
-    /// Initialize system logs if configured (e.g. query_log, processors_profile_log).
+    /// Initialize system logs only when explicitly configured (e.g. `query_log`, `processors_profile_log`).
+    /// Default `clickhouse-local` invocations have no system log sections in the config, and skipping
+    /// initialization avoids a TSan-visible race between background pool task logging and `Context`
+    /// teardown that would otherwise be triggered for short-lived processes.
     /// This must happen after the system database is attached.
-    if (!getClientConfiguration().has("no-system-tables"))
+    if (!getClientConfiguration().has("no-system-tables") && hasAnySystemLogConfigured(config()))
         global_context->initializeSystemLogs();
 
     std::string default_database = getClientConfiguration().getString("database", server_default_database);

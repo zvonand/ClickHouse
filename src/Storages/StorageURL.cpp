@@ -11,6 +11,7 @@
 #include <Parsers/ASTInsertQuery.h>
 #include <Parsers/ASTLiteral.h>
 #include <Parsers/ASTFunction.h>
+#include <Parsers/ASTIdentifier.h>
 
 #include <IO/ConnectionTimeouts.h>
 #include <IO/WriteBufferFromHTTP.h>
@@ -1861,8 +1862,10 @@ StorageURL::Configuration StorageURL::getConfiguration(ASTs & args, const Contex
 {
     StorageURL::Configuration configuration;
 
+    bool is_named_collection = false;
     if (auto named_collection = tryGetNamedCollectionWithOverrides(args, local_context, true, nullptr, table_id))
     {
+        is_named_collection = true;
         StorageURL::processNamedCollectionResult(configuration, *named_collection);
         evalArgsAndCollectHeaders(args, configuration.headers, local_context, false);
     }
@@ -1882,7 +1885,24 @@ StorageURL::Configuration StorageURL::getConfiguration(ASTs & args, const Contex
 
     /// Resolve relative URLs against the url_base setting.
     const auto & url_base = local_context->getSettingsRef()[Setting::url_base].value;
-    configuration.url = resolveURLBase(configuration.url, url_base);
+    const String original_url = configuration.url;
+    configuration.url = resolveURLBase(original_url, url_base);
+
+    /// Materialize the resolved URL into engine args so that DETACH/ATTACH and server restart
+    /// reproduce the originally-resolved URL even if `url_base` is later changed or unset.
+    /// Only done for the URL engine (positional args or named collection), not for the table function.
+    if (configuration.url != original_url)
+    {
+        if (is_named_collection)
+        {
+            ASTs url_equal_args = {make_intrusive<ASTIdentifier>("url"), make_intrusive<ASTLiteral>(configuration.url)};
+            args.push_back(makeASTOperator("equals", std::move(url_equal_args)));
+        }
+        else if (!args.empty())
+        {
+            args[0] = make_intrusive<ASTLiteral>(configuration.url);
+        }
+    }
 
     if (configuration.format == "auto")
         configuration.format = FormatFactory::instance().tryGetFormatFromFileName(Poco::URI(configuration.url).getPath()).value_or("auto");

@@ -97,5 +97,16 @@ $CLICKHOUSE_CLIENT -q "DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url" 
 # Empty relative reference: should return base without fragment
 run_and_check "SELECT * FROM url('', CSV, 'c String') SETTINGS url_base = 'http://base.invalid/dir/file.csv?token=abc#frag', $FAST" 'http://base.invalid/dir/file.csv?token=abc'
 
+# URL engine: resolved URL must be materialized into engine args so the table survives
+# DETACH/ATTACH (and server restart) after url_base is unset or changed.
+$CLICKHOUSE_CLIENT -n -q "
+SET url_base = 'http://base.invalid/dir/';
+DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_persist;
+CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_persist (c String) ENGINE = URL('persist.csv', CSV);
+SET url_base = '';
+SHOW CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_persist;
+DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_persist;
+" 2>&1 | grep -oF "URL('http://base.invalid/dir/persist.csv'" | head -1
+
 # Invalid url_base (no scheme) should produce an error
 $CLICKHOUSE_CLIENT --query "SELECT * FROM url('data.csv', CSV, 'c String') SETTINGS url_base = 'example.invalid/def/', $FAST" 2>&1 | grep -oF 'must contain a scheme' | head -1

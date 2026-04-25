@@ -1207,6 +1207,16 @@ class FunctionBinaryArithmetic : public IFunction
 
         /// We use exponentiation by squaring algorithm to perform multiplying aggregate states by N in O(log(N)) operations
         /// https://en.wikipedia.org/wiki/Exponentiation_by_squaring
+        ///
+        /// The squaring step computes vec_from[i] := vec_from[i] + vec_from[i].
+        /// Calling `function->merge(state, state)` directly is undefined behaviour:
+        /// many aggregate function `merge` implementations append the source's
+        /// internal storage to the destination's. When `src == dst` and the
+        /// destination reallocates, the source iterators (pointing to the freed
+        /// buffer) are dereferenced, producing a heap-use-after-free. We avoid
+        /// the alias by copying `vec_from` into an independent column first.
+        auto column_temp = ColumnAggregateFunction::create(function);
+        column_temp->reserve(size);
         while (m)
         {
             if (m % 2)
@@ -1217,8 +1227,14 @@ class FunctionBinaryArithmetic : public IFunction
             }
             else
             {
+                column_temp->popBack(column_temp->size());
                 for (size_t i = 0; i < size; ++i)
-                    function->merge(vec_from[i], vec_from[i], arena.get());
+                    column_temp->insertFrom(vec_from[i]);
+                auto & vec_temp = column_temp->getData();
+
+                for (size_t i = 0; i < size; ++i)
+                    function->merge(vec_from[i], vec_temp[i], arena.get());
+
                 m /= 2;
             }
         }

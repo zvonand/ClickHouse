@@ -594,22 +594,19 @@ void QueryAnalyzer::mergeWindowWithParentWindow(const QueryTreeNodePtr & window_
 void QueryAnalyzer::replaceNodesWithPositionalArguments(QueryTreeNodePtr & node_list, const QueryTreeNodes & projection_nodes, IdentifierResolveScope & scope)
 {
     const auto & settings = scope.context->getSettingsRef();
-    /// Views are expanded on remote nodes, not on the initiator — check the original query
-    /// context to get the user's intent before system overrides (distributed plan nodes
-    /// disable enable_positional_arguments to prevent double-resolution of the outer query).
-    /// When there is no query context (e.g. projection parsing during CREATE TABLE), the distributed
-    /// planner override cannot be in effect, so local settings reflect the user's actual intent.
-    const bool user_enable_positional_arguments = scope.context->hasQueryContext()
-        ? scope.context->getQueryContext()->getSettingsRef()[Setting::enable_positional_arguments]
-        : settings[Setting::enable_positional_arguments];
-    if (!user_enable_positional_arguments)
+    if (!settings[Setting::enable_positional_arguments])
         return;
     const bool is_view_inner = scope.context->isViewInnerQuery();
     if (!is_view_inner)
     {
-        /// Only resolve on the initiator to avoid double-resolution on remote/local-plan nodes.
-        if (!settings[Setting::enable_positional_arguments])
+        /// Skip resolution on distributed/parallel-replicas local plan nodes: the initiator
+        /// already resolved positional arguments in the outer query. View-inner contexts are
+        /// exempt because views are expanded on the local node and were never resolved by the
+        /// initiator.
+        if (scope.context->isPositionalArgumentsAlreadyResolved())
             return;
+        /// Skip on remote shard execution (SECONDARY_QUERY): same reasoning as above for
+        /// paths not covered by setPositionalArgumentsAlreadyResolved.
         if (scope.context->getClientInfo().query_kind != ClientInfo::QueryKind::INITIAL_QUERY)
             return;
     }

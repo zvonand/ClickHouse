@@ -1,6 +1,11 @@
 import pytest
 
-from helpers.cluster import ClickHouseCluster
+from helpers.cluster import ClickHouseCluster, is_arm
+
+# The `kerberos_kdc` docker image is amd64-only.
+if is_arm():
+    pytestmark = pytest.mark.skip
+
 
 cluster = ClickHouseCluster(__file__)
 instance1 = cluster.add_instance(

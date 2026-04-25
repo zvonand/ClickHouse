@@ -2357,12 +2357,14 @@ void MergeTreeSettingsImpl::sanityCheck(size_t background_pool_tasks, bool allow
     }
 
 
-    /// Skip these checks when the background pool was auto-lowered by the low-memory heuristic:
-    /// on small systems the pool may be tuned below the default thresholds, and we do not want
-    /// to fail table creation in that mode. For all other cases (including explicit operator
-    /// configuration of a small pool), the checks still fire so misconfigurations are caught early.
+    /// Skip these checks when the background pool was auto-lowered by the low-memory heuristic
+    /// AND the corresponding table-level threshold is at its default. On small systems the pool
+    /// may be tuned below the default thresholds, and we do not want to fail table creation in
+    /// that mode. However, if the operator explicitly overrides one of these thresholds at the
+    /// table level, the check must still fire so a misconfiguration that would silently disable
+    /// mutations or merge sizing is caught early.
     if (number_of_free_entries_in_pool_to_execute_mutation > background_pool_tasks
-        && !background_pool_auto_lowered)
+        && !(background_pool_auto_lowered && !number_of_free_entries_in_pool_to_execute_mutation.changed))
     {
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "The value of 'number_of_free_entries_in_pool_to_execute_mutation' setting"
             " ({}) (default values are defined in <merge_tree> section of config.xml"
@@ -2375,7 +2377,7 @@ void MergeTreeSettingsImpl::sanityCheck(size_t background_pool_tasks, bool allow
     }
 
     if (number_of_free_entries_in_pool_to_lower_max_size_of_merge > background_pool_tasks
-        && !background_pool_auto_lowered)
+        && !(background_pool_auto_lowered && !number_of_free_entries_in_pool_to_lower_max_size_of_merge.changed))
     {
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "The value of 'number_of_free_entries_in_pool_to_lower_max_size_of_merge' setting"
             " ({}) (default values are defined in <merge_tree> section of config.xml"
@@ -2388,7 +2390,7 @@ void MergeTreeSettingsImpl::sanityCheck(size_t background_pool_tasks, bool allow
     }
 
     if (number_of_free_entries_in_pool_to_execute_optimize_entire_partition > background_pool_tasks
-        && !background_pool_auto_lowered)
+        && !(background_pool_auto_lowered && !number_of_free_entries_in_pool_to_execute_optimize_entire_partition.changed))
     {
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "The value of 'number_of_free_entries_in_pool_to_execute_optimize_entire_partition' setting"
             " ({}) (default values are defined in <merge_tree> section of config.xml"

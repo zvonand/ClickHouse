@@ -1,11 +1,14 @@
--- Test that skip indexes are properly skipped when ALTER MODIFY COLUMN changes
+-- Test that skip indexes are properly handled when `ALTER MODIFY COLUMN` changes
 -- the column type and the mutation has not yet been applied.
--- This verifies that `getAllUpdatedColumns` correctly reports columns changed by
--- ALTER mutations, not just data mutations (UPDATE/DELETE).
+-- This verifies that `supportsSkipIndexesOnDataRead` disables the data-read phase
+-- of skip-index application while there are pending alter mutations: in that phase
+-- the index would be applied without the per-part `can_use_index` check, so the
+-- on-disk index data (serialized with the old type) would be evaluated against the
+-- new type and produce wrong results.
 --
 -- Uses UInt64 → Float64 conversion because both types use 8-byte fixed-width
--- serialization: the old UInt64 bytes are reinterpreted as Float64 without
--- deserialization errors, producing tiny denormalized values that silently cause
+-- serialization: the old UInt64 bytes get reinterpreted as Float64 without a
+-- deserialization error, producing tiny denormalized values that silently cause
 -- the set index to incorrectly skip granules (returning 0 rows instead of 128).
 
 DROP TABLE IF EXISTS test_skip_index_alter;
@@ -26,7 +29,7 @@ SETTINGS index_granularity = 128;
 INSERT INTO test_skip_index_alter SELECT number, if(number < 128, 200, 300) FROM numbers(256);
 
 -- Verify initial index usage works
-SELECT count() FROM test_skip_index_alter WHERE value = 300 SETTINGS force_data_skipping_indices = 'idx_value';
+SELECT count() FROM test_skip_index_alter WHERE value = 300 SETTINGS force_data_skipping_indices = 'idx_value', use_skip_indexes_on_data_read = 1;
 
 -- Stop merges so the mutation doesn't get applied
 SYSTEM STOP MERGES test_skip_index_alter;
@@ -36,17 +39,17 @@ SET alter_sync = 0, mutations_sync = 0;
 ALTER TABLE test_skip_index_alter MODIFY COLUMN value Float64;
 
 -- The index data is now incompatible with the new type.
--- Without the fix, the skip index is used on old parts and the UInt64 data
--- is reinterpreted as Float64 (same byte width but different encoding),
--- producing tiny denormalized values that don't match 300.0, so the index
--- incorrectly skips all granules and returns 0 rows.
--- With the fix, the index is correctly skipped for old parts.
-SELECT count() FROM test_skip_index_alter WHERE value = 300.0 SETTINGS force_data_skipping_indices = 'idx_value';
+-- Without the fix, the data-read phase reads the on-disk index (serialized as UInt64)
+-- using the new Float64 deserialization, producing tiny denormalized values that don't
+-- match 300.0, so the index incorrectly skips all granules and returns 0 rows.
+-- With the fix, the data-read phase is disabled while alter mutations are pending,
+-- and the primary-key analysis correctly excludes the incompatible index per part.
+SELECT count() FROM test_skip_index_alter WHERE value = 300.0 SETTINGS force_data_skipping_indices = 'idx_value', use_skip_indexes_on_data_read = 1;
 
 SYSTEM START MERGES test_skip_index_alter;
 OPTIMIZE TABLE test_skip_index_alter FINAL SETTINGS mutations_sync = 2;
 
 -- After mutation completes, the index should work with the new type
-SELECT count() FROM test_skip_index_alter WHERE value = 300.0 SETTINGS force_data_skipping_indices = 'idx_value';
+SELECT count() FROM test_skip_index_alter WHERE value = 300.0 SETTINGS force_data_skipping_indices = 'idx_value', use_skip_indexes_on_data_read = 1;
 
 DROP TABLE test_skip_index_alter;

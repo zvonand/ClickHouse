@@ -26,4 +26,11 @@ $CLICKHOUSE_CLIENT --send_table_structure_on_insert_with_inline_data 0 --query "
 
 $CLICKHOUSE_CLIENT --query "SELECT * FROM test_inline_insert ORDER BY x"
 
+# Negative test: combining inline insert data with external data from stdin must be rejected.
+# This guards against a regression where the new error path silently accepts mixed input.
+$CLICKHOUSE_CLIENT --inline-insert-data --query "INSERT INTO test_inline_insert FORMAT TSV
+" <<<"100	stdin_value" |& grep -F -c 'Processing inline insert data with both inlined and external data (from stdin or infile) is not supported'
+$CLICKHOUSE_CLIENT --send_table_structure_on_insert_with_inline_data 0 --query "INSERT INTO test_inline_insert FORMAT TSV
+" <<<"101	stdin_value" |& grep -F -c 'Processing inline insert data with both inlined and external data (from stdin or infile) is not supported'
+
 $CLICKHOUSE_CLIENT --query "DROP TABLE test_inline_insert"

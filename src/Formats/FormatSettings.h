@@ -359,7 +359,6 @@ struct FormatSettings
         bool allow_geoparquet_parser = true;
         bool write_geometadata = true;
         size_t max_dictionary_size = 1024 * 1024;
-        bool output_unsupported_types_as_binary = false;
     } parquet{};
 
     struct Pretty

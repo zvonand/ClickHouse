@@ -1196,9 +1196,6 @@ Write enum using parquet physical type: BYTE_ARRAY and logical type: ENUM
     DECLARE(Bool, output_format_parquet_write_checksums, true, R"(
 Put crc32 checksums in parquet page headers.
 )", 0) \
-    DECLARE(Bool, output_format_parquet_unsupported_types_as_binary, false, R"(
-Output types having no conversion as raw binary data. If false - such types would raise UNKNOWN_TYPE exception.
-)", 0) \
     DECLARE(String, output_format_avro_codec, "", R"(
 Compression codec used for output. Possible values: 'null', 'deflate', 'snappy', 'zstd'.
 )", 0) \
@@ -1582,6 +1579,7 @@ Supported modes:
     MAKE_OBSOLETE(M, Bool, output_format_parquet_use_custom_encoder, true) \
     MAKE_OBSOLETE(M, ParquetVersion, output_format_parquet_version, "2.latest") \
     MAKE_OBSOLETE(M, Bool, output_format_parquet_compliant_nested_types, true) \
+    MAKE_OBSOLETE(M, Bool, output_format_parquet_unsupported_types_as_binary, false) \
 
 #endif // __CLION_IDE__
 

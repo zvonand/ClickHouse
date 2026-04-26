@@ -154,13 +154,15 @@ public:
             if (!isString(json_path_column.type))
             {
                 throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                                "JSONPath functions require second argument "
-                                "to be a JSONPath of type String, illegal type: {}", json_path_column.type->getName());
+                                "Second argument of JSONPath functions must be a String JSONPath, "
+                                "a Tuple(String) of JSONPaths, or an Array(String) of JSONPaths, illegal type: {}",
+                                json_path_column.type->getName());
             }
             if (!isColumnConst(*json_path_column.column))
             {
                 throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                                "Second argument (JSONPath) must be a constant String, Tuple(String), or Array(String)");
+                                "Second argument of JSONPath functions must be a constant String, "
+                                "a Tuple(String) of JSONPaths, or an Array(String) of JSONPaths");
             }
 
             /// Prepare to parse 1 argument (JSONPath)
@@ -237,11 +239,12 @@ public:
 
             if (!isString(json_column.type))
                 throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                    "JSONPath functions require first argument to be String, got: {}", json_column.type->getName());
+                    "First argument of JSONPath functions must be a String, got: {}", json_column.type->getName());
 
             if (!isColumnConst(*path_column.column))
                 throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                    "Second argument (JSONPath structure) must be a constant Tuple(String) or Array(String)");
+                    "Second argument of JSONPath functions must be a constant String, "
+                    "a Tuple(String) of JSONPaths, or an Array(String) of JSONPaths");
 
             const auto & const_col = assert_cast<const ColumnConst &>(*path_column.column);
             const auto & const_data = const_col.getDataColumn();
@@ -355,7 +358,7 @@ public:
             }
 
             throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                "JSONPath structure must contain only String, Tuple, or Array elements, got {}",
+                "JSONPath structure must contain only String, Tuple, or Array elements, got: {}",
                 path_type->getName());
         }
 

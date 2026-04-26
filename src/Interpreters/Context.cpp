@@ -7388,6 +7388,7 @@ void Context::initializeBackgroundExecutorsIfNeeded()
     /// Each merge can use 40-80 MiB; with the default pool_size=16 and ratio=2,
     /// 32 concurrent merges would need 1.3-2.6 GiB just for merge buffers.
     /// Only apply this cap when the user hasn't explicitly configured `background_pool_size`.
+    bool background_pool_auto_lowered = false;
     size_t available_memory = getMemoryAmount();
     if (available_memory > 0 && available_memory < (4ul << 30)
         && !server_settings[ServerSetting::background_pool_size].changed)
@@ -7402,6 +7403,7 @@ void Context::initializeBackgroundExecutorsIfNeeded()
             /// Clamp the concurrency ratio to at most 1 to avoid increasing it beyond what the user configured.
             if (!server_settings[ServerSetting::background_merges_mutations_concurrency_ratio].changed)
                 background_merges_mutations_concurrency_ratio = std::min(static_cast<float>(background_merges_mutations_concurrency_ratio), 1.0f);
+            background_pool_auto_lowered = true;
             /// Update shared settings so the MergeTree sanity check sees the lowered values.
             /// Writes to shared->server_settings must be synchronized with other readers via shared->mutex.
             {
@@ -7413,6 +7415,12 @@ void Context::initializeBackgroundExecutorsIfNeeded()
         }
     }
     size_t background_pool_max_tasks_count = static_cast<size_t>(static_cast<double>(background_pool_size) * background_merges_mutations_concurrency_ratio);
+    /// After auto-lowering, a small `background_pool_size` combined with a user-configured
+    /// fractional `background_merges_mutations_concurrency_ratio` (e.g. `1 * 0.5 = 0`) can
+    /// produce zero task count, which fails the `MergeTreeBackgroundExecutor` startup check.
+    /// Clamp to at least 1 in the auto-lowered path so the server can still start.
+    if (background_pool_auto_lowered && background_pool_max_tasks_count == 0)
+        background_pool_max_tasks_count = 1;
     String background_merges_mutations_scheduling_policy = server_settings[ServerSetting::background_merges_mutations_scheduling_policy];
     size_t background_move_pool_size = server_settings[ServerSetting::background_move_pool_size];
     size_t background_fetches_pool_size = server_settings[ServerSetting::background_fetches_pool_size];

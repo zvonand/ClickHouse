@@ -196,7 +196,31 @@ void QueryMetricLog::finishQuery(const String & query_id, TimePoint finish_time,
 
     if (query_info)
     {
-        auto elem = query_status.createLogMetricElement(query_id, *query_info, finish_time, false);
+        /// Backfill periodic events that were due to fire but didn't, e.g. because the
+        /// `BackgroundSchedulePool` fell behind under heavy load (typical on TSan builds and
+        /// in highly parallel CI runs). When a scheduled `collectMetric` task fires after
+        /// the query has already finished, it returns early because `getQueryInfo` no longer
+        /// finds the query in the `ProcessList`, so the periodic event is silently dropped
+        /// and `system.query_metric_log` ends up with fewer rows than the documented behavior
+        /// promises. The backfill uses the `query_info` captured at finish — deltas remain
+        /// monotonically correct via the existing `new_value < old_value` guard inside
+        /// `createLogMetricElement`.
+        const auto interval = std::chrono::milliseconds(query_status.info.interval_milliseconds);
+        while (query_status.info.next_collect_time < finish_time)
+        {
+            const auto missed_time = query_status.info.next_collect_time;
+            query_status.info.next_collect_time += interval;
+            auto missed_elem = query_status.createLogMetricElement(query_id, *query_info, missed_time, /*schedule_next=*/false);
+            if (missed_elem)
+                add(std::move(missed_elem.value()));
+        }
+
+        /// Always emit the final event so `system.query_metric_log` reliably contains a
+        /// "query finished" row. We pass `is_final=true` to bypass the deduplication guard
+        /// inside `createLogMetricElement`: in the rare case where the last periodic and the
+        /// finish moment share the same timestamp, the guard would otherwise silently drop
+        /// the final event.
+        auto elem = query_status.createLogMetricElement(query_id, *query_info, finish_time, /*schedule_next=*/false, /*is_final=*/true);
         if (elem)
             add(std::move(elem.value()));
     }
@@ -257,20 +281,29 @@ void QueryMetricLogStatus::scheduleNext(String query_id)
     }
 }
 
-std::optional<QueryMetricLogElement> QueryMetricLogStatus::createLogMetricElement(const String & query_id, const QueryStatusInfo & query_info, TimePoint query_info_time, bool schedule_next)
+std::optional<QueryMetricLogElement> QueryMetricLogStatus::createLogMetricElement(const String & query_id, const QueryStatusInfo & query_info, TimePoint query_info_time, bool schedule_next, bool is_final)
 {
     LOG_TEST(logger, "Collecting query_metric_log for query {} and interval {} ms with QueryStatusInfo from {}. Next collection time: {}",
         query_id, info.interval_milliseconds, timePointToString(query_info_time),
         schedule_next ? timePointToString(info.next_collect_time + std::chrono::milliseconds(info.interval_milliseconds)) : "finished");
 
-    if (query_info_time <= info.last_collect_time)
+    /// The dedup guard prevents two periodic collections from producing rows with the same
+    /// timestamp (very rare, but possible if a scheduled task is rescheduled to "now" while
+    /// another collection is already in flight). The final event MUST bypass this guard:
+    /// if the last periodic and the finish moment happen to share a timestamp, the final
+    /// would otherwise be silently dropped, leaving `system.query_metric_log` without the
+    /// "query finished" row.
+    if (!is_final && query_info_time <= info.last_collect_time)
     {
         LOG_TEST(logger, "Query {} has a more recent metrics collected at {}. This metrics are from {}. Skipping this one",
             timePointToString(info.last_collect_time), timePointToString(query_info_time), query_id);
         return {};
     }
 
-    info.last_collect_time = query_info_time;
+    /// Use std::max so we don't move `last_collect_time` backwards when the final event
+    /// arrives slightly earlier than a periodic that just ran (clock-skew or lock-ordering
+    /// race). Monotonicity of `last_collect_time` is what the dedup guard above relies on.
+    info.last_collect_time = std::max(info.last_collect_time, query_info_time);
 
     QueryMetricLogElement elem;
     elem.event_time = timeInSeconds(query_info_time);

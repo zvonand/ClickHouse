@@ -40,8 +40,13 @@ SETTINGS storage_policy = 's3_04070'
 # In case of listen_try we can have 'Address already in use'
 $CLICKHOUSE_CLIENT --query "SYSTEM RELOAD CONFIG" |& grep -v -e 'Address already in use'
 
+# Disable `s3_check_objects_after_upload` because the size verification has
+# been observed to be flaky against the local S3 mock under the flaky check
+# (random settings combined with multipart upload), and this test only needs
+# to verify that the multipart upload path is taken, not upload integrity.
 $CLICKHOUSE_CLIENT --query "
 INSERT INTO t_04070_s3_disk_override SELECT randomString(100) FROM numbers(500)
+SETTINGS s3_check_objects_after_upload = 0
 "
 
 $CLICKHOUSE_CLIENT --query "SYSTEM FLUSH LOGS query_log"

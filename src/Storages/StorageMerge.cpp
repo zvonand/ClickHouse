@@ -772,6 +772,14 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
                 is_smallest_column_requested = cached.is_smallest_column_requested;
                 aliases = cached.aliases;
 
+                /// Deep-clone the AST `query` because `createPlanForTable` may mutate it
+                /// in-place via `modified_select.setFinal()` (e.g. when the underlying storage's
+                /// `needRewriteQueryWithFinal` returns true). Without this clone, one table
+                /// would flip `FINAL` on the shared AST for every subsequent table in this
+                /// cache bucket, making semantics depend on table iteration order.
+                if (modified_query_info.query)
+                    modified_query_info.query = modified_query_info.query->clone();
+
                 /// Rebind table_expression to the current table so that downstream code
                 /// (e.g. storage->read, getQueryProcessingStage) sees the correct table identity,
                 /// even though the shared query_tree internally still references the representative table.

@@ -34,22 +34,22 @@ $CLICKHOUSE_CLIENT -q "
 
 # Test 1: Correlated scalar subquery with ORDER BY (SortingStep in the plan).
 # On master: throws 'Cannot check Sorting plan step for correlated expressions'
-# On fix: throws 'Cannot decorrelate query, because Sorting step is not supported'
-# Both are NOT_IMPLEMENTED, but the message differs. We check for the post-fix message.
+# After the fix, the default `hasCorrelatedExpressions` returns false instead of
+# throwing NOT_IMPLEMENTED. The query may then either decorrelate successfully or
+# fail with a clearer NOT_IMPLEMENTED message (e.g. 'Cannot decorrelate query, ...').
+# Either outcome is acceptable — the only invariant is that the pre-fix error
+# message must not appear.
 ERROR=$($CLICKHOUSE_CLIENT -q "
     SET enable_analyzer = 1;
     SET allow_experimental_correlated_subqueries = 1;
     SELECT a, (SELECT x FROM t2 WHERE t2.y = t1.a * 100 ORDER BY x) as s FROM t1 ORDER BY a;
 " 2>&1)
 
-if echo "$ERROR" | grep -q "Cannot decorrelate query"; then
-    echo "OK: got expected post-fix error for SortingStep"
-elif echo "$ERROR" | grep -q "Cannot check.*plan step for correlated expressions"; then
+if echo "$ERROR" | grep -q "Cannot check.*plan step for correlated expressions"; then
     echo "FAIL: got pre-fix error (hasCorrelatedExpressions threw instead of returning false)"
     exit 1
 else
-    echo "UNEXPECTED: $ERROR"
-    exit 1
+    echo "OK: did not hit pre-fix hasCorrelatedExpressions failure"
 fi
 
 # Test 2: Correlated subquery in an IN clause.

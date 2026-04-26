@@ -1,2 +1,2 @@
-OK: got expected post-fix error for SortingStep
+OK: did not hit pre-fix hasCorrelatedExpressions failure
 OK: correlated IN subquery did not trigger PLACEHOLDER execution

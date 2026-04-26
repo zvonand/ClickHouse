@@ -31,7 +31,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int DATABASE_ACCESS_DENIED;
-    extern const int DIRECTORY_DOESNT_EXIST;
+    extern const int FILE_DOESNT_EXIST;
     extern const int LOGICAL_ERROR;
     extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
 }
@@ -526,7 +526,7 @@ public:
                 file_path.string(), path_info->user_files_absolute_path_string);
 
         if (!fs::exists(file_path))
-            throw Exception(ErrorCodes::DIRECTORY_DOESNT_EXIST, "Directory {} doesn't exist", file_path.string());
+            throw Exception(ErrorCodes::FILE_DOESNT_EXIST, "Path {} doesn't exist", file_path.string());
 
         /// Register the root directory as visited (by canonical path) to prevent symlink cycles.
         {

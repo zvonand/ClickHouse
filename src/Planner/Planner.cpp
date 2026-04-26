@@ -9,6 +9,7 @@
 #include <Common/Exception.h>
 #include <Common/FieldVisitorToString.h>
 #include <Common/FieldVisitors.h>
+#include <Common/MemoryTrackerUtils.h>
 #include <Common/ProfileEvents.h>
 #include <Common/logger_useful.h>
 
@@ -118,6 +119,7 @@ namespace Setting
     extern const SettingsUInt64 max_subquery_depth;
     extern const SettingsUInt64 max_rows_in_distinct;
     extern const SettingsMaxThreads max_threads;
+    extern const SettingsUInt64 max_threads_min_free_memory_per_thread;
     extern const SettingsBool parallel_replicas_allow_in_with_subquery;
     extern const SettingsString parallel_replicas_custom_key;
     extern const SettingsUInt64 parallel_replicas_min_number_of_rows_per_replica;
@@ -1868,7 +1870,8 @@ void Planner::buildPlanForUnionNode()
     const auto & query_context = planner_context->getQueryContext();
     addConvertingToCommonHeaderActionsIfNeeded(query_plans, union_common_header, query_plans_headers, query_context);
     const auto & settings = query_context->getSettingsRef();
-    auto max_threads = settings[Setting::max_threads];
+    auto max_threads = getMaxThreadsForAvailableMemory(
+        settings[Setting::max_threads], settings[Setting::max_threads_min_free_memory_per_thread]);
 
     bool is_distinct = union_mode == SelectUnionMode::UNION_DISTINCT || union_mode == SelectUnionMode::INTERSECT_DISTINCT
         || union_mode == SelectUnionMode::EXCEPT_DISTINCT;

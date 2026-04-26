@@ -4,6 +4,7 @@
 #include <Core/Settings.h>
 
 #include <Core/ParallelReplicasMode.h>
+#include <Common/MemoryTrackerUtils.h>
 #include <Common/quoteString.h>
 #include <Common/scope_guard_safe.h>
 
@@ -116,6 +117,7 @@ namespace Setting
     extern const SettingsNonZeroUInt64 max_parallel_replicas;
     extern const SettingsFloat max_streams_to_max_threads_ratio;
     extern const SettingsMaxThreads max_threads;
+    extern const SettingsUInt64 max_threads_min_free_memory_per_thread;
     extern const SettingsBool optimize_sorting_by_input_stream_properties;
     extern const SettingsBool optimize_trivial_count_query;
     extern const SettingsUInt64 parallel_replicas_count;
@@ -776,7 +778,8 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
         if (const auto & filter_actions = table_expression_data.getFilterActions())
             table_expression_query_info.filter_actions_dag = std::make_shared<const ActionsDAG>(filter_actions->clone());
 
-        size_t max_streams = settings[Setting::max_threads];
+        size_t max_streams = getMaxThreadsForAvailableMemory(
+            settings[Setting::max_threads], settings[Setting::max_threads_min_free_memory_per_thread]);
         size_t max_threads_execute_query = settings[Setting::max_threads];
 
         /**

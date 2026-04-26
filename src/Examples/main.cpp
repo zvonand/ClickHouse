@@ -99,7 +99,6 @@ int mainEntryExampleStringHashMap(int argc, char ** argv);
 /// string_hash_map_aggregation uses the same source as string_hash_map
 int mainEntryExampleStringHashSet(int argc, char ** argv);
 int mainEntryExampleTwoLevelHashMap(int argc, char ** argv);
-int mainEntryExampleJitExample(int argc, char ** argv);
 int mainEntryExampleLexer(int argc, char ** argv);
 int mainEntryExampleSelectParser(int argc, char ** argv);
 int mainEntryExampleCreateParser(int argc, char ** argv);
@@ -207,7 +206,6 @@ std::pair<std::string_view, MainFunc> examples[] =
     {"string_hash_map_aggregation", mainEntryExampleStringHashMap},
     {"string_hash_set", mainEntryExampleStringHashSet},
     {"two_level_hash_map", mainEntryExampleTwoLevelHashMap},
-    {"jit_example", mainEntryExampleJitExample},
     {"lexer", mainEntryExampleLexer},
     {"select_parser", mainEntryExampleSelectParser},
     {"create_parser", mainEntryExampleCreateParser},

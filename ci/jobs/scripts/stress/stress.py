@@ -647,19 +647,35 @@ def main():
                 # are visible in CIDB. The full log is also kept as a CI
                 # artifact (see process_results in stress_job.py), giving
                 # investigators access to the complete diagnostic output.
+                #
+                # Read only the last 32 KiB rather than the whole file: on
+                # deadlock failures `hung_check.log` can be very large (a
+                # full processlist plus a `gdb` backtrace for every server
+                # process), and the stress-test machine is already under
+                # memory pressure. The diagnostic content we need
+                # (`Found hung queries`, the processlist with stacktraces,
+                # the `gdb` backtraces) is printed at the end of the log,
+                # so the tail is exactly the relevant region.
                 info_field = ""
                 try:
-                    log_text = hung_check_log.read_text(errors="replace")
-                    # 32 KiB is enough for the processlist and a handful of
-                    # stacktraces. Keep the tail because the diagnostic
-                    # content (Found hung queries, processlist with
-                    # stacktraces, gdb backtraces) appears at the end.
-                    max_chars = 32 * 1024
-                    if len(log_text) > max_chars:
+                    tail_bytes_size = 32 * 1024
+                    with open(hung_check_log, "rb") as f:
+                        f.seek(0, os.SEEK_END)
+                        size = f.tell()
+                        offset = max(0, size - tail_bytes_size)
+                        f.seek(offset)
+                        tail_bytes = f.read()
+                    log_text = tail_bytes.decode("utf-8", errors="replace")
+                    if offset > 0:
+                        # Drop the (likely partial) first line so the tail
+                        # always starts on a line boundary.
+                        nl = log_text.find("\n")
+                        if nl >= 0:
+                            log_text = log_text[nl + 1 :]
                         log_text = (
-                            "(truncated; see hung_check.log artifact for the"
-                            " full output; showing last 32 KiB)\n...\n"
-                            + log_text[-max_chars:]
+                            "(truncated; see hung_check.log artifact for"
+                            " the full output; showing last 32 KiB)\n...\n"
+                            + log_text
                         )
                     # Escape so tab and newline survive the TSV encoding,
                     # matching the decoder in read_test_results().

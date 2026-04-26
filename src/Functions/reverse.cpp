@@ -25,10 +25,6 @@ class FunctionReverse : public IFunction
 {
 public:
     static constexpr auto name = "reverse";
-    static FunctionPtr create(ContextPtr)
-    {
-        return std::make_shared<FunctionReverse>();
-    }
 
     String getName() const override
     {
@@ -119,13 +115,16 @@ public:
 
 
 /// Also works with arrays.
-class ReverseOverloadResolver : public IFunctionOverloadResolver, private WithContext
+class ReverseOverloadResolver : public IFunctionOverloadResolver
 {
 public:
     static constexpr auto name = "reverse";
-    static FunctionOverloadResolverPtr create(ContextPtr context_) { return std::make_unique<ReverseOverloadResolver>(context_); }
+    static FunctionOverloadResolverPtr create(ContextPtr context) { return std::make_unique<ReverseOverloadResolver>(context); }
 
-    explicit ReverseOverloadResolver(ContextPtr context_) : WithContext(context_) {}
+    explicit ReverseOverloadResolver(ContextPtr context)
+        : array_reverse(FunctionFactory::instance().get("arrayReverse", context))
+    {
+    }
 
     String getName() const override { return name; }
     size_t getNumberOfArguments() const override { return 1; }
@@ -135,14 +134,17 @@ public:
     FunctionBasePtr buildImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & return_type) const override
     {
         if (isArray(arguments.at(0).type))
-            return FunctionFactory::instance().getImpl("arrayReverse", getContext())->build(arguments);
+            return array_reverse->build(arguments);
         return std::make_unique<FunctionToFunctionBaseAdaptor>(
-            FunctionReverse::create(getContext()),
+            std::make_shared<FunctionReverse>(),
             DataTypes{std::from_range_t{}, arguments | std::views::transform([](auto & elem) { return elem.type; })},
             return_type);
     }
 
     DataTypePtr getReturnTypeImpl(const DataTypes & arguments) const override { return FunctionReverse{}.getReturnTypeImpl(arguments); }
+
+private:
+    FunctionOverloadResolverPtr array_reverse;
 };
 
 }

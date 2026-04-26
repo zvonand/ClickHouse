@@ -1,6 +1,7 @@
 #include <Common/Exception.h>
 #include <Parsers/ASTExpressionList.h>
 #include <Parsers/ASTSelectWithUnionQuery.h>
+#include <Parsers/ASTSetQuery.h>
 #include <Parsers/CommonParsers.h>
 #include <Parsers/ExpressionElementParsers.h>
 #include <Parsers/IParserBase.h>
@@ -10,6 +11,7 @@
 #include <Parsers/ParserSetQuery.h>
 #include <Parsers/ParserSelectWithUnionQuery.h>
 #include <Parsers/ASTLiteral.h>
+#include <Poco/String.h>
 
 
 namespace DB
@@ -72,16 +74,23 @@ bool ParserKQLStatement::parseImpl(Pos & pos, ASTPtr & node, Expected & expected
     ParserSetQuery set_p;
 
     {
-        auto set_pos = pos;
         if (set_p.parse(pos, node, expected))
         {
-            String set_text(set_pos->begin, pos->begin);
-            /// Clear let bindings on dialect switches in both directions:
-            /// - switching to clickhouse: end of KQL session
-            /// - switching to kql: start of a fresh KQL session (reset stale state
-            ///   from a previous session on the same thread)
-            if (set_text.find("clickhouse") != String::npos || set_text.find("kql") != String::npos)
-                kqlLetBindingsClear();
+            /// Clear let bindings when the parsed `SET` actually changes `dialect`.
+            /// Inspecting the AST avoids substring false positives (unrelated settings
+            /// whose text happens to contain "kql"/"clickhouse") and case-sensitivity
+            /// gaps (`SET dialect = 'KQL'`) that the raw text check used to have.
+            if (const auto * set_ast = node ? node->as<ASTSetQuery>() : nullptr)
+            {
+                for (const auto & change : set_ast->changes)
+                {
+                    if (Poco::toLower(change.name) == "dialect")
+                    {
+                        kqlLetBindingsClear();
+                        break;
+                    }
+                }
+            }
             return true;
         }
     }

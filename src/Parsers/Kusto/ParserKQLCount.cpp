@@ -5,6 +5,7 @@
 #include <Parsers/Kusto/ParserKQLQuery.h>
 #include <Parsers/Kusto/Utilities.h>
 
+#include <Poco/String.h>
 #include <fmt/format.h>
 
 namespace DB
@@ -19,7 +20,7 @@ bool ParserKQLCount::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     if (isValidKQLPos(pos) && pos->type != TokenType::Semicolon && pos->type != TokenType::PipeMark)
     {
         String token(pos->begin, pos->end);
-        if (token == "as")
+        if (Poco::toLower(token) == "as")
         {
             ++pos;
             if (isValidKQLPos(pos) && pos->type == TokenType::BareWord)

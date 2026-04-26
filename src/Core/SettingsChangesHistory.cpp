@@ -44,6 +44,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"parallel_replicas_prefer_local_replica", true, true, "New setting. When disabled, replicas for parallel reading are selected purely by the load balancing algorithm without forcing the local replica into the set."},
             {"predicate_statistics_sample_rate", 0, 0, "New setting to collect predicate selectivity statistics into system.predicate_statistics_log"},
             {"allow_key_condition_coalesce_rewrite", false, true, "New setting to rewrite predicates of the form `coalesce(a_1, ..., a_N) <op> const` (and equivalently `ifNull`, or with the constant on the left) into a disjunction before index analysis, so per-column primary key and skip indexes on each `a_i` can be used. Partial-constant forms such as `coalesce(a, 42, b)` and `coalesce(a, b, 42)` are also handled."},
+            {"enable_blob_storage_log_for_read_operations", false, false, "New setting to log blob storage read operations to system.blob_storage_log"},
         });
         addSettingsChanges(settings_changes_history, "26.4",
         {
@@ -62,7 +63,6 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"http_max_request_header_size", 0, 10485760, "New setting to limit total HTTP request header size before authentication."},
             {"http_headers_read_timeout", 0, 30, "New setting to limit total time for reading HTTP request headers, protecting against slowloris attacks."},
             {"distributed_index_analysis_only_on_coordinator", false, false, "New setting."},
-            {"enable_blob_storage_log_for_read_operations", false, false, "New setting to log blob storage read operations to system.blob_storage_log"},
             {"query_plan_optimize_lazy_final", false, false, "New setting to optimize reading with FINAL from ReplacingMergeTree using set-based index analysis"},
             {"max_rows_for_lazy_final", 10000000, 10000000, "New setting for maximum number of rows in the set for lazy FINAL optimization"},
             {"max_bytes_for_lazy_final", 256000000, 256000000, "New setting for maximum number of bytes in the set for lazy FINAL optimization"},

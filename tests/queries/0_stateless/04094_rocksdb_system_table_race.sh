@@ -11,10 +11,15 @@ set -o pipefail
 # Test for race conditions when querying system.rocksdb / reading / writing /
 # optimizing an EmbeddedRocksDB table while it is being dropped and recreated.
 #
-# The reader/writer/optimize loops can race naturally with DROP TABLE in
-# create_drop_thread, so transient failures like "Table ... does not exist"
-# are expected. Tolerate them with `|| true` so the workers keep running for
-# the full timeout instead of exiting on the first such error under errexit.
+# The reader/writer/optimize loops on the user table can race naturally with
+# DROP TABLE in create_drop_thread, so transient failures like
+# "Table ... does not exist" are expected. Tolerate them with `|| true` so the
+# workers keep running for the full timeout instead of exiting on the first
+# such error under errexit.
+#
+# `read_stat_thread` is intentionally NOT tolerant: querying `system.rocksdb`
+# is the path that exercises the original race, so any exception there must
+# fail the test rather than be silently swallowed.
 
 function create_drop_thread()
 {
@@ -30,7 +35,7 @@ function read_stat_thread()
 {
     local TIMELIMIT=$((SECONDS+TIMEOUT))
     while [ $SECONDS -lt "$TIMELIMIT" ]; do
-        $CLICKHOUSE_CLIENT -q "SELECT * FROM system.rocksdb FORMAT Null" || true
+        $CLICKHOUSE_CLIENT -q "SELECT * FROM system.rocksdb FORMAT Null"
     done
 }
 

@@ -30,9 +30,27 @@ void ASTWithAlias::formatImpl(WriteBuffer & ostr, const FormatSettings & setting
     }
     else
     {
+        /// When the parent operator requires parentheses around this expression and the
+        /// expression has an alias, wrap the entire `expr AS alias` in parentheses.
+        /// This is required for two reasons:
+        ///   * Without the wrap, `a AND b AS x AND c` would re-parse with the alias
+        ///     attached to `b` only instead of to `(a AND b)`.
+        ///   * After re-parsing, the parser sets `parenthesized=true` on the inner node
+        ///     because of the surrounding parens. `IAST::format` then emits the parens
+        ///     itself (around the entire `formatImpl` output, including the alias),
+        ///     producing `(expr AS alias)`. Emitting `(expr AS alias)` here on the first
+        ///     pass keeps the format-parse-format consistency.
+        const bool wrap_around_alias = frame.need_parens && !alias.empty();
+        if (wrap_around_alias)
+        {
+            ostr.write('(');
+            frame.need_parens = false;
+        }
         formatImplWithoutAlias(ostr, settings, state, frame);
         if (!alias.empty())
             writeAlias(alias, ostr, settings);
+        if (wrap_around_alias)
+            ostr.write(')');
     }
 }
 

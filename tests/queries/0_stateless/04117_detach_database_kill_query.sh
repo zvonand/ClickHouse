@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Tags: no-parallel
+# Tags: no-parallel, no-random-settings
 # Tag no-parallel: creates and detaches a database
+# Tag no-random-settings: relies on predictable per-row execution timing of `sleepEachRow`
 
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
@@ -24,7 +25,7 @@ trap cleanup EXIT
 wait_for_query_to_start()
 {
     local qid="$1"
-    local timeout=30
+    local timeout=60
     local start=$EPOCHSECONDS
     while [[ "$($CLICKHOUSE_CLIENT --query "SELECT count() FROM system.processes WHERE query_id = '$qid'")" == "0" ]]; do
         if (( EPOCHSECONDS - start > timeout )); then
@@ -38,12 +39,21 @@ wait_for_query_to_start()
 $CLICKHOUSE_CLIENT --query "DROP DATABASE IF EXISTS \`$DB\` SYNC"
 $CLICKHOUSE_CLIENT --query "CREATE DATABASE \`$DB\` ENGINE = Atomic"
 $CLICKHOUSE_CLIENT --query "CREATE TABLE \`$DB\`.t (x UInt64) ENGINE = MergeTree ORDER BY x"
-$CLICKHOUSE_CLIENT --query "INSERT INTO \`$DB\`.t SELECT number FROM numbers(10)"
+$CLICKHOUSE_CLIENT --query "INSERT INTO \`$DB\`.t SELECT number FROM numbers(100)"
 
-# Start a long-running SELECT that holds a reference to the table's StoragePtr via a snapshot.
-# This keeps `waitDetachedTableNotInUse` busy-waiting indefinitely.
+# Start a long-running SELECT that holds a `StoragePtr` reference to the table.
+# - The WHERE clause references column `x` so the optimizer cannot eliminate the per-row
+#   evaluation regardless of random settings or query condition caching.
+# - With `max_threads=1` and 100 rows, `sleepEachRow(3)` is called sequentially per row,
+#   yielding ~300 seconds of runtime. That is far longer than the test needs and gives
+#   `waitDetachedTableNotInUse` a wide window to enter its busy-wait. The SELECT is
+#   killed in `cleanup` so the long runtime never delays the test itself.
+# - `function_sleep_max_microseconds_per_block` must be raised because the default 3 s
+#   safety threshold would make `sleepEachRow(3) * 100 rows` throw `TOO_SLOW`.
 $CLICKHOUSE_CLIENT --query_id "$SELECT_QID" \
-    --query "SELECT count() FROM \`$DB\`.t WHERE NOT ignore(sleepEachRow(3))" >/dev/null 2>&1 &
+    --max_threads=1 \
+    --function_sleep_max_microseconds_per_block=600000000 \
+    --query "SELECT count() FROM \`$DB\`.t WHERE x + sleepEachRow(3) >= 0" >/dev/null 2>&1 &
 
 wait_for_query_to_start "$SELECT_QID"
 
@@ -62,7 +72,7 @@ wait_for_query_to_start "$DETACH_QID"
 $CLICKHOUSE_CLIENT --query "KILL QUERY WHERE query_id = '$DETACH_QID' SYNC FORMAT Null"
 
 # Allow up to a few seconds for the cancelled DETACH client to exit, but well under
-# the SELECT's total sleep budget (10 rows * 3 seconds = 30 seconds).
+# the SELECT's total sleep budget (100 rows * 3 seconds = 300 seconds).
 detach_exited=0
 for _ in $(seq 1 100); do
     if ! kill -0 "$DETACH_BG_PID" 2>/dev/null; then

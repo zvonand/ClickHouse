@@ -336,6 +336,7 @@ void registerDatabaseS3(DatabaseFactory & factory)
     };
     factory.registerDatabase("S3", create_fn, {
         .supports_arguments = true,
+        .is_external = true,
         .source_access_type = AccessTypeObjects::Source::S3,
     });
 }

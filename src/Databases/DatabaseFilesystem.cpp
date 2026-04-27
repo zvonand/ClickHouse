@@ -265,6 +265,7 @@ void registerDatabaseFilesystem(DatabaseFactory & factory)
     };
     factory.registerDatabase("Filesystem", create_fn, {
         .supports_arguments = true,
+        .is_external = true,
         .source_access_type = AccessTypeObjects::Source::FILE,
     });
 }

@@ -264,6 +264,7 @@ void registerDatabaseHDFS(DatabaseFactory & factory)
     };
     factory.registerDatabase("HDFS", create_fn, {
         .supports_arguments = true,
+        .is_external = true,
         .source_access_type = AccessTypeObjects::Source::HDFS,
     });
 }

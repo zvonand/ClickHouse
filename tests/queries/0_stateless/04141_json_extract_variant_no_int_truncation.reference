@@ -34,3 +34,11 @@ v:        3.14
 active:   Float64
 f64_slot: 3.14
 i64_slot: ᴺᵁᴸᴸ
+string_int_no_float_picks_string
+3.14	String	3.14	\N
+string_smaller_int_no_float_picks_string
+3.14	String	3.14	\N
+string_int_no_float_integer_literal_picks_int
+3	Int64	3
+string_with_multiple_ints_picks_string
+3.14	String

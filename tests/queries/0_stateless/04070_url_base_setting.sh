@@ -99,12 +99,13 @@ run_and_check "SELECT * FROM url('', CSV, 'c String') SETTINGS url_base = 'http:
 
 # URL engine: resolved URL must be materialized into engine args so the table survives
 # DETACH/ATTACH (and server restart) after url_base is unset or changed.
+# Use FORMAT TabSeparatedRaw so single quotes are not escaped in the output.
 $CLICKHOUSE_CLIENT -n -q "
 SET url_base = 'http://base.invalid/dir/';
 DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_persist;
 CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_persist (c String) ENGINE = URL('persist.csv', CSV);
 SET url_base = '';
-SHOW CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_persist;
+SHOW CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_persist FORMAT TabSeparatedRaw;
 DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_persist;
 " 2>&1 | grep -oF "URL('http://base.invalid/dir/persist.csv'" | head -1
 

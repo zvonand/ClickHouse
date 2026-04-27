@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
-# Tags: no-fasttest, no-random-settings
+# Tags: no-fasttest, no-parallel, no-random-settings
 # Tag no-fasttest: needs s3
+# Tag no-parallel: `SYSTEM RELOAD CONFIG` is global server state. Under the
+# flaky check, the same test runs many times concurrently; the parallel
+# `SYSTEM RELOAD CONFIG` calls serialize inside the server and a single
+# instance has been observed waiting ~3 minutes before its reload starts,
+# blowing the 180s per-test budget even though the actual reload work is
+# fast. Serializing this test removes the queueing.
 # Tag no-random-settings: SYSTEM RELOAD CONFIG combined with multipart S3 upload
 # can exceed the flaky-check 180s timeout in debug builds when random settings
 # (e.g. heavy filesystem cache injection, large reduce_blocking_parts_sleep_ms)

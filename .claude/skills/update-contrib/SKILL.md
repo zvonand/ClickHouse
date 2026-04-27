@@ -275,7 +275,7 @@ grep -rl "$LIB" tests/queries/0_stateless/ --include='*.sql' --include='*.sh' -l
 
 ### 12. Commit
 
-Create the commit. Use the title format `Use \`<lib>\` <version>` for straightforward bumps, or a more descriptive title if the update has a specific motivation.
+Create the commit. Use the title format `Bump \`<lib>\` from <old_version> to <new_version>` for straightforward bumps, or a more descriptive title if the update has a specific motivation.
 
 Before committing, make sure you stage all affected integration artifacts, not just the submodule pointer. In particular, for Rust-based contrib updates this usually means:
 

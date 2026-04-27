@@ -2,19 +2,22 @@
 # Tags: long, no-sanitizers, no-flaky-check
 # Test for https://github.com/ClickHouse/ClickHouse/issues/32465
 # Enormously large query is slow when run from a Merge table with many underlying tables.
-# The query tree gets cloned for each underlying table, so planning time is O(N * query_complexity).
-# This test verifies the query completes within a reasonable time (under 10 seconds).
+# Pre-fix, the query tree was cloned per underlying table, so planning was O(N * query_complexity).
+# Post-fix, planning on the Merge table is close to single-underlying-table planning,
+# so this test compares the two latencies and asserts a bounded ratio.
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
-NUM_TABLES=100
+NUM_TABLES=200
 
-# Create underlying tables
+# Create underlying tables (batched in a single connection to avoid 200 client startups).
+CREATE_QUERIES=""
 for i in $(seq 0 $((NUM_TABLES - 1))); do
-    $CLICKHOUSE_CLIENT -q "CREATE TABLE ${CLICKHOUSE_DATABASE}.t_merge_perf_${i} (date Date, category String, value Int64, customer_id String) ENGINE = MergeTree ORDER BY (date, category)"
+    CREATE_QUERIES+="CREATE TABLE ${CLICKHOUSE_DATABASE}.t_merge_perf_${i} (date Date, category String, value Int64, customer_id String) ENGINE = MergeTree ORDER BY (date, category);"
 done
+$CLICKHOUSE_CLIENT -nm -q "$CREATE_QUERIES"
 
 # Create Merge table
 $CLICKHOUSE_CLIENT -q "CREATE TABLE ${CLICKHOUSE_DATABASE}.t_merge_perf_all (date Date, category String, value Int64, customer_id String) ENGINE = Merge('${CLICKHOUSE_DATABASE}', '^t_merge_perf_\\\\d+\$')"
@@ -138,10 +141,31 @@ GROUP BY
     addDays(CAST(date, 'Date'), -1 * (((7 + if(toDayOfWeek(date) = 7, 1, toDayOfWeek(date) + 1)) - 2) % 7))
 FORMAT Null"
 
-# Run query on merge table with a 10-second timeout.
-# Before the optimization this took ~0.65s with 100 tables.
-# With the optimization it should complete well under 10 seconds.
-$CLICKHOUSE_CLIENT --max_query_size 1048576 --max_execution_time 10 -q "$QUERY" && echo "OK" || { echo "FAIL: query on merge table timed out" >&2; exit 1; }
+# Compare planning time on the Merge table against a single underlying table.
+# Pre-fix, planning was O(N * query_tree_size), so merge-table latency scaled with N.
+# Post-fix, the Merge planner shares the cloned query tree across tables of identical
+# structure, so merge-table latency stays close to single-table latency.
+# A loose 10x ratio is enough to catch the regression while tolerating CI noise.
+QUERY_SINGLE_TIMING="${QUERY/t_merge_perf_all/t_merge_perf_0}"
+
+# Warm up the data-side cache with a small query so the timed runs measure planning.
+$CLICKHOUSE_CLIENT -q "SELECT count() FROM ${CLICKHOUSE_DATABASE}.t_merge_perf_0 FORMAT Null"
+
+T_START=$(date +%s%N)
+$CLICKHOUSE_CLIENT --max_query_size 1048576 --max_execution_time 10 -q "$QUERY" >/dev/null || { echo "FAIL: query on merge table timed out" >&2; exit 1; }
+T_END=$(date +%s%N)
+TIME_MERGE_NS=$((T_END - T_START))
+
+T_START=$(date +%s%N)
+$CLICKHOUSE_CLIENT --max_query_size 1048576 --max_execution_time 10 -q "$QUERY_SINGLE_TIMING" >/dev/null || { echo "FAIL: query on single table timed out" >&2; exit 1; }
+T_END=$(date +%s%N)
+TIME_SINGLE_NS=$((T_END - T_START))
+
+if [ "$TIME_MERGE_NS" -gt $((TIME_SINGLE_NS * 10)) ]; then
+    echo "FAIL: merge-table query (${TIME_MERGE_NS}ns) is more than 10x slower than single-table query (${TIME_SINGLE_NS}ns)" >&2
+    exit 1
+fi
+echo "OK"
 
 # Also verify correctness: same query on single table vs merge table should produce equal results.
 QUERY_RESULT="SELECT
@@ -173,8 +197,9 @@ else
     exit 1
 fi
 
-# Cleanup
+# Cleanup (batched in a single connection).
+DROP_QUERIES="DROP TABLE IF EXISTS ${CLICKHOUSE_DATABASE}.t_merge_perf_all;"
 for i in $(seq 0 $((NUM_TABLES - 1))); do
-    $CLICKHOUSE_CLIENT -q "DROP TABLE IF EXISTS ${CLICKHOUSE_DATABASE}.t_merge_perf_${i}"
+    DROP_QUERIES+="DROP TABLE IF EXISTS ${CLICKHOUSE_DATABASE}.t_merge_perf_${i};"
 done
-$CLICKHOUSE_CLIENT -q "DROP TABLE IF EXISTS ${CLICKHOUSE_DATABASE}.t_merge_perf_all"
+$CLICKHOUSE_CLIENT -nm -q "$DROP_QUERIES"

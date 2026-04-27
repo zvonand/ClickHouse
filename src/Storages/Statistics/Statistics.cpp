@@ -370,9 +370,9 @@ std::shared_ptr<ColumnStatistics> ColumnStatistics::deserialize(ReadBuffer & buf
             auto type = static_cast<StatisticsType>(i);
             if (auto stat_ptr = factory.tryCreateSingle(type, data_type))
             {
-                auto * buf_before = buf.position();
+                const auto count_before = buf.count();
                 stat_ptr->deserialize(buf, version);
-                auto consumed = static_cast<UInt64>(buf.position() - buf_before);
+                const auto consumed = static_cast<UInt64>(buf.count() - count_before);
                 if (consumed < stat_size)
                     buf.ignore(stat_size - consumed);
                 else if (consumed > stat_size)

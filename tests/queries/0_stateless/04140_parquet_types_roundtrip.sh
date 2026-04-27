@@ -61,9 +61,25 @@ SELECT number AS n, toString(number) AS s FROM numbers(5000) FORMAT Parquet
 echo '--- multiple row groups: count ---'
 ${CLICKHOUSE_LOCAL} --query "SELECT count(), sum(n) FROM file('${OUT}', 'Parquet')"
 
-echo '--- filter pushdown on id column ---'
+echo '--- filter pushdown: row groups pruned ---'
+# 5000 rows / 500 per group = 10 row groups; only the row group covering [100,200]
+# should survive Parquet statistics pruning, leaving 9 pruned. Read the counters
+# from --print-profile-events and emit a stable "read=N pruned=M" marker so a
+# regression that disables pushdown would change M from 9 to 0.
+${CLICKHOUSE_LOCAL} --print-profile-events --query "
+    SELECT count() FROM file('${OUT}', 'Parquet') WHERE n BETWEEN 100 AND 200
+" 2>&1 | awk '
+    /ParquetReadRowGroups:/   { read = $(NF-1) }
+    /ParquetPrunedRowGroups:/ { pruned = $(NF-1) }
+    END                       { print "read=" read " pruned=" pruned }
+'
+
+echo '--- filter pushdown: result correctness ---'
 ${CLICKHOUSE_LOCAL} --query "SELECT count() FROM file('${OUT}', 'Parquet') WHERE n BETWEEN 100 AND 200"
 ${CLICKHOUSE_LOCAL} --query "SELECT min(n), max(n) FROM file('${OUT}', 'Parquet') WHERE n < 50"
+
+echo '--- filter pushdown: result identical with pushdown off ---'
+${CLICKHOUSE_LOCAL} --query "SELECT count() FROM file('${OUT}', 'Parquet') WHERE n BETWEEN 100 AND 200 SETTINGS input_format_parquet_filter_push_down = 0"
 
 # -----------------------------------------------------------------------------
 # 4. Column pruning: SELECT a subset forces projection.
@@ -74,6 +90,15 @@ SELECT number AS a, number * 2 AS b, number * 3 AS c FROM numbers(100) FORMAT Pa
 echo '--- column pruning ---'
 ${CLICKHOUSE_LOCAL} --query "SELECT sum(b) FROM file('${OUT}', 'Parquet')"
 ${CLICKHOUSE_LOCAL} --query "SELECT sum(a), sum(c) FROM file('${OUT}', 'Parquet')"
+
+# Parquet column pruning: reading a single column issues fewer decoding tasks
+# than reading all three. We don't pin an exact ratio (it depends on the decoder
+# internals), only that single-column < three-column. A regression that read all
+# columns regardless of projection would make these equal.
+echo '--- column pruning: decoding tasks shrink with projection ---'
+ONE=$(${CLICKHOUSE_LOCAL} --print-profile-events --query "SELECT sum(b) FROM file('${OUT}', 'Parquet')" 2>&1 | awk '/ParquetDecodingTasks:/ { print $(NF-1) }')
+ALL=$(${CLICKHOUSE_LOCAL} --print-profile-events --query "SELECT * FROM file('${OUT}', 'Parquet') FORMAT Null" 2>&1 | awk '/ParquetDecodingTasks:/ { print $(NF-1) }')
+if [ "$ONE" -lt "$ALL" ]; then echo "pruned"; else echo "not pruned (one=$ONE all=$ALL)"; fi
 
 # -----------------------------------------------------------------------------
 # 5. Nullable handling.

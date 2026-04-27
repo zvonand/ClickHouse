@@ -1,6 +1,7 @@
--- Reproducer for a bug where UNION ALL branches sharing the same GlobalPlannerContext
--- would throw "Column identifier is already registered" when both branches referenced
--- a table expression with no alias and the same column name.
+-- Regression test for a bug where `UNION ALL` branches that share the same
+-- `GlobalPlannerContext` would throw "Column identifier is already registered" when both
+-- branches referenced a table expression with no alias and the same column name.
+-- The underlying issue was fixed by other PRs (#101048 and #101051); this test stays as a guard.
 
 SELECT * FROM
 (

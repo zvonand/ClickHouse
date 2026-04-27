@@ -249,17 +249,20 @@ protected:
         {
             const auto & [name, type] = packed;
 
-            /// Resolve the column through metadata to get proper subcolumn info
-            /// (e.g., "c0.null" for Nullable, "arr.size0" for Array).
-            /// The header's NameAndTypePair lacks subcolumn_delimiter_position,
-            /// so getNameInStorage() would return the full name instead of the parent.
-            auto resolved = columns_desc.tryGetColumnOrSubcolumn(GetColumnsOptions::All, name);
-            if (resolved && buffer.data.has(resolved->getNameInStorage()))
-                columns.emplace_back(getColumnFromBlock(buffer.data, *resolved));
-            else if (buffer.data.has(name))
-                columns.emplace_back(getColumnFromBlock(buffer.data, packed));
-            else
+            if (metadata->isVirtualColumn(name))
+            {
                 columns.emplace_back(fillVirtualColumn(name, type, buffer.data.rows()));
+                continue;
+            }
+
+            auto resolved = columns_desc.tryGetColumnOrSubcolumn(GetColumnsOptions::All, name);
+            auto col = resolved ? tryGetColumnFromBlock(buffer.data, *resolved) : nullptr;
+
+            if (!col)
+                throw Exception(ErrorCodes::LOGICAL_ERROR,
+                    "Column or subcolumn '{}' not found in Buffer table", name);
+
+            columns.emplace_back(std::move(col));
         }
 
         res.setColumns(std::move(columns), buffer.data.rows());

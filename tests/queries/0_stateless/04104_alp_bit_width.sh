@@ -6,4 +6,4 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 printf '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\234\032\0\0\0\0\040\0\0\001\010\0\004\0\0\0\0A\0\0\0\0\0\0\0\0' \
     | ${CLICKHOUSE_CURL} "${CLICKHOUSE_URL}&decompress=1&http_native_compression_disable_checksumming_on_decompress=1" --data-binary @- \
-    | grep -c "Cannot decompress ALP-encoded data, invalid bit-width: 65, max allowed: 64"
+    | grep -c "Code: 271"

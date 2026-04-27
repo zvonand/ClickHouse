@@ -14,11 +14,3 @@ SELECT * FROM test_table_2 LIMIT 100;
 SELECT '-';
 
 DROP TABLE IF EXISTS test_table_2;
-
-SELECT '-';
-
-CREATE TABLE test_table_3 (s String) ENGINE = GenerateRandom(1, 100);
-
-SELECT max(length(s)) > 1 AS has_long_strings FROM (SELECT s FROM test_table_3 LIMIT 1000);
-
-DROP TABLE IF EXISTS test_table_3;

@@ -92,6 +92,12 @@ TEST(PortFunction, UserinfoWithoutPort)
 
     // URL: //@example.com - empty userinfo, no port
     EXPECT_EQ(evaluateFunction("port", {"//@example.com"}), UInt64(0));
+
+    // URL: http://user@example.com - scheme + userinfo, no port (regression for sanitizer report)
+    EXPECT_EQ(evaluateFunction("port", {"http://user@example.com"}), UInt64(0));
+
+    // URL: https://user@example.com - scheme + userinfo, no port
+    EXPECT_EQ(evaluateFunction("port", {"https://user@example.com"}), UInt64(0));
 }
 
 TEST(PortFunction, UserinfoWithPort)
@@ -140,6 +146,12 @@ TEST(PortFunction, RFCVersion)
 
     // URL: //paul@www.example.com:8080
     EXPECT_EQ(evaluateFunction("portRFC", {"//paul@www.example.com:8080"}), UInt64(8080));
+
+    // URL: http://user@example.com - scheme + userinfo, no port (regression for sanitizer report)
+    EXPECT_EQ(evaluateFunction("portRFC", {"http://user@example.com"}), UInt64(0));
+
+    // URL: https://user@example.com - scheme + userinfo, no port
+    EXPECT_EQ(evaluateFunction("portRFC", {"https://user@example.com"}), UInt64(0));
 }
 
 TEST(PortFunction, TwoArgumentWithDefault)
@@ -162,6 +174,12 @@ TEST(PortFunction, TwoArgumentWithDefault)
 
     // URL with non-digit suffix should return default
     EXPECT_EQ(evaluateFunction("port", {{std::make_shared<DataTypeString>(), "http://example.com:abc"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(443));
+
+    // URL with scheme + userinfo, no port: should return default (regression for sanitizer report)
+    EXPECT_EQ(evaluateFunction("port", {{std::make_shared<DataTypeString>(), "http://user@example.com"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(443));
+
+    // URL with scheme + userinfo + explicit port: should return that port
+    EXPECT_EQ(evaluateFunction("port", {{std::make_shared<DataTypeString>(), "http://user@example.com:8080"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(8080));
 }
 
 TEST(PortFunction, TwoArgumentOverflow)
@@ -188,4 +206,10 @@ TEST(PortFunction, TwoArgumentWithRFC)
 
     // Non-digit suffix should return default
     EXPECT_EQ(evaluateFunction("portRFC", {{std::make_shared<DataTypeString>(), "http://example.com:xyz"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(443));
+
+    // URL with scheme + userinfo, no port: should return default (regression for sanitizer report)
+    EXPECT_EQ(evaluateFunction("portRFC", {{std::make_shared<DataTypeString>(), "http://user@example.com"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(443));
+
+    // URL with scheme + userinfo + explicit port: should return that port
+    EXPECT_EQ(evaluateFunction("portRFC", {{std::make_shared<DataTypeString>(), "http://user@example.com:8080"}, {std::make_shared<DataTypeUInt16>(), UInt64(443)}}), UInt64(8080));
 }

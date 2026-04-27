@@ -15,8 +15,11 @@ DETACH_QID="detach_04117_${CLICKHOUSE_DATABASE}"
 
 cleanup()
 {
-    $CLICKHOUSE_CLIENT --query "KILL QUERY WHERE query_id = '$DETACH_QID' SYNC FORMAT Null" 2>/dev/null || true
+    # Kill the SELECT first so its `StoragePtr` reference is released. On a build that
+    # does not include the cancellation check in `waitDetachedTableNotInUse`, killing
+    # the DETACH first with SYNC would block until the SELECT finishes on its own.
     $CLICKHOUSE_CLIENT --query "KILL QUERY WHERE query_id = '$SELECT_QID' SYNC FORMAT Null" 2>/dev/null || true
+    $CLICKHOUSE_CLIENT --query "KILL QUERY WHERE query_id = '$DETACH_QID' SYNC FORMAT Null" 2>/dev/null || true
     $CLICKHOUSE_CLIENT --database_atomic_wait_for_drop_and_detach_synchronously=0 --query "ATTACH DATABASE IF NOT EXISTS \`$DB\`" 2>/dev/null || true
     $CLICKHOUSE_CLIENT --database_atomic_wait_for_drop_and_detach_synchronously=0 --query "DROP DATABASE IF EXISTS \`$DB\` SYNC" 2>/dev/null || true
 }
@@ -69,7 +72,12 @@ wait_for_query_to_start "$DETACH_QID"
 # Cancel the synchronous DETACH. With the fix, the busy-wait observes the cancellation
 # on its next iteration and the query exits promptly. Without the fix, the busy-wait
 # loop ignores `KILL QUERY` and the DETACH would hang until the SELECT finishes.
-$CLICKHOUSE_CLIENT --query "KILL QUERY WHERE query_id = '$DETACH_QID' SYNC FORMAT Null"
+# Use `ASYNC` so the kill returns immediately. With `SYNC`, the kill itself would block
+# until the DETACH actually exits, masking the bug: on a buggy build the kill would
+# wait the full 300 seconds for the SELECT to finish (and for the DETACH to then
+# complete naturally), and the timing-based check below would still print
+# "DETACH cancelled".
+$CLICKHOUSE_CLIENT --query "KILL QUERY WHERE query_id = '$DETACH_QID' ASYNC FORMAT Null" >/dev/null
 
 # Allow up to a few seconds for the cancelled DETACH client to exit, but well under
 # the SELECT's total sleep budget (100 rows * 3 seconds = 300 seconds).

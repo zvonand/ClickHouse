@@ -110,3 +110,25 @@ SETTINGS max_streams_for_union_step_to_max_threads_ratio = inf; -- { clientError
 -- 11. Non-finite ratio (NaN) is also rejected by the Float setting parser.
 SELECT 1 UNION ALL SELECT 2
 SETTINGS max_streams_for_union_step_to_max_threads_ratio = nan; -- { clientError CANNOT_PARSE_NUMBER }
+
+-- 12. UNION DISTINCT goes through `UnionStep` followed by a DistinctStep,
+-- so the narrowing must apply to the union pipeline and not break correctness.
+SELECT count() FROM
+(
+    SELECT 1 AS x
+    UNION DISTINCT SELECT 2
+    UNION DISTINCT SELECT 1
+    UNION DISTINCT SELECT 3
+    UNION DISTINCT SELECT 2
+)
+SETTINGS max_streams_for_union_step = 2, max_streams_for_union_step_to_max_threads_ratio = 0;
+
+SELECT sum(x) FROM
+(
+    SELECT 1 AS x
+    UNION DISTINCT SELECT 2
+    UNION DISTINCT SELECT 1
+    UNION DISTINCT SELECT 3
+    UNION DISTINCT SELECT 2
+)
+SETTINGS max_threads = 4, max_streams_for_union_step = 0, max_streams_for_union_step_to_max_threads_ratio = 1;

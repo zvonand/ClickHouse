@@ -96,4 +96,10 @@ else
     echo "DETACH still running after KILL QUERY"
 fi
 
+# Kill the SELECT now to release the `StoragePtr` reference. On a buggy build, where
+# `KILL QUERY` cannot interrupt the busy-wait in `waitDetachedTableNotInUse`, this is
+# what allows the DETACH to actually finish, so that the `wait` below does not block
+# for the full ~300 seconds of the SELECT's `sleepEachRow` budget.
+$CLICKHOUSE_CLIENT --query "KILL QUERY WHERE query_id = '$SELECT_QID' SYNC FORMAT Null" 2>/dev/null || true
+
 wait "$DETACH_BG_PID" 2>/dev/null || true

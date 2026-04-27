@@ -28,6 +28,7 @@
 #include <Storages/ObjectStorage/StorageObjectStorageSource.h>
 #include <base/scope_guard.h>
 #include <base/defines.h>
+#include <base/MemorySanitizer.h>
 #include <Common/Exception.h>
 #include <Common/Macros.h>
 #include <Common/assert_cast.h>
@@ -165,6 +166,12 @@ PaimonMetadata::PaimonMetadata(
     , refresh_interval_sec(computeRefreshInterval(persistent_components.metadata_refresh_interval_sec))
     , refresh_in_progress(false)
 {
+    /// The settings framework accesses field values through a pointer-to-member
+    /// dereference across an inheritance chain (impl.get()->*t), which MSan cannot
+    /// track correctly, causing a false positive "use-of-uninitialized-value" for
+    /// refresh_interval_sec in the background thread. Unpoison explicitly.
+    __msan_unpoison(&refresh_interval_sec, sizeof(refresh_interval_sec));
+
     /// Load initial state
     auto initial_state = loadLatestState();
     if (initial_state)

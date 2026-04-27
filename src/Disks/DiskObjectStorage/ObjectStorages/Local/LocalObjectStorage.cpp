@@ -285,8 +285,6 @@ void LocalObjectStorage::listObjects(const std::string & path, RelativePathsWith
     if (!fs::exists(path) || !fs::is_directory(path))
         return;
 
-    /// Iterative walk: constant C++ stack depth, and does not follow directory
-    /// symlinks by default (safe against cycles).
     for (const auto & entry : fs::recursive_directory_iterator(path))
     {
         if (entry.is_directory())

@@ -253,6 +253,8 @@ void ReadBufferFromAzureBlobStorage::initialize(size_t attempt)
 
     for (size_t i = 0; i < max_single_download_retries; ++i)
     {
+        /// Measures time-to-first-byte: just the `Download` API call, not data transfer.
+        /// Each download attempt is logged individually as a separate `Read` event.
         Stopwatch blob_log_watch;
         try
         {

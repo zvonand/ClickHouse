@@ -12,6 +12,10 @@
 -- serialization: the old UInt64 bytes get reinterpreted as Float64 without a
 -- deserialization error, producing tiny denormalized values that silently cause
 -- the set index to incorrectly skip granules (returning 0 rows instead of 128).
+--
+-- `max_rows_to_read = 0` is needed to enable the data-read phase in
+-- `supportsSkipIndexesOnDataRead` (it disables itself when `read_overflow_mode = throw`
+-- and `max_rows_to_read` is set, which `clickhouse-test` injects by default).
 
 DROP TABLE IF EXISTS test_skip_index_alter_replicated;
 
@@ -30,7 +34,7 @@ SETTINGS index_granularity = 128;
 INSERT INTO test_skip_index_alter_replicated SELECT number, if(number < 128, 200, 300) FROM numbers(256);
 
 -- Verify initial index usage works
-SELECT count() FROM test_skip_index_alter_replicated WHERE value = 300 SETTINGS force_data_skipping_indices = 'idx_value', use_skip_indexes_on_data_read = 1;
+SELECT count() FROM test_skip_index_alter_replicated WHERE value = 300 SETTINGS force_data_skipping_indices = 'idx_value', use_skip_indexes_on_data_read = 1, max_rows_to_read = 0;
 
 -- Stop merges so the mutation doesn't get applied
 SYSTEM STOP MERGES test_skip_index_alter_replicated;
@@ -45,12 +49,12 @@ ALTER TABLE test_skip_index_alter_replicated MODIFY COLUMN value Float64;
 -- match 300.0, so the index incorrectly skips all granules and returns 0 rows.
 -- With the fix, the data-read phase is disabled while alter mutations are pending,
 -- and the primary-key analysis correctly excludes the incompatible index per part.
-SELECT count() FROM test_skip_index_alter_replicated WHERE value = 300.0 SETTINGS force_data_skipping_indices = 'idx_value', use_skip_indexes_on_data_read = 1;
+SELECT count() FROM test_skip_index_alter_replicated WHERE value = 300.0 SETTINGS force_data_skipping_indices = 'idx_value', use_skip_indexes_on_data_read = 1, max_rows_to_read = 0;
 
 SYSTEM START MERGES test_skip_index_alter_replicated;
 OPTIMIZE TABLE test_skip_index_alter_replicated FINAL SETTINGS mutations_sync = 2;
 
 -- After mutation completes, the index should work with the new type
-SELECT count() FROM test_skip_index_alter_replicated WHERE value = 300.0 SETTINGS force_data_skipping_indices = 'idx_value', use_skip_indexes_on_data_read = 1;
+SELECT count() FROM test_skip_index_alter_replicated WHERE value = 300.0 SETTINGS force_data_skipping_indices = 'idx_value', use_skip_indexes_on_data_read = 1, max_rows_to_read = 0;
 
 DROP TABLE test_skip_index_alter_replicated;

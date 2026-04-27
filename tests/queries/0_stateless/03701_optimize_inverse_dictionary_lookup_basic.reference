@@ -200,11 +200,11 @@ SELECT
     __table1.color_id AS color_id,
     __table1.payload AS payload
 FROM default.t AS __table1
-WHERE NOT __table1.color_id IN (
+WHERE NOT (__table1.color_id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'colors\') AS __table1
     WHERE __table1.name = \'red\'
-)
+))
 ORDER BY
     __table1.color_id ASC,
     __table1.payload ASC
@@ -217,19 +217,19 @@ SELECT
     __table1.color_id AS color_id,
     __table1.payload AS payload
 FROM default.t AS __table1
-WHERE (__table1.color_id IN (
+WHERE ((__table1.color_id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'colors\') AS __table1
     WHERE __table1.name = \'red\'
-) AND __table1.color_id IN (
+)) AND (__table1.color_id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'colors\') AS __table1
     WHERE __table1.n < 10
-)) OR __table1.color_id IN (
+))) OR (__table1.color_id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'colors\') AS __table1
     WHERE __table1.name = \'green\'
-)
+))
 ORDER BY
     __table1.color_id ASC,
     __table1.payload ASC
@@ -305,11 +305,11 @@ SELECT
     __table1.payload AS payload,
     __table2.payload AS payload2
 FROM default.t AS __table1
-ALL INNER JOIN default.t AS __table2 ON __table1.color_id = __table2.color_id AND __table1.color_id IN (
+ALL INNER JOIN default.t AS __table2 ON (__table1.color_id = __table2.color_id) AND (__table1.color_id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'colors\') AS __table1
     WHERE __table1.name = \'red\'
-)
+))
 ORDER BY
     __table1.color_id ASC,
     __table1.payload ASC,
@@ -323,11 +323,11 @@ SELECT
     __table1.payload AS payload,
     __table2.payload AS payload2
 FROM default.t AS __table1
-ALL LEFT JOIN default.t AS __table2 ON __table1.color_id = __table2.color_id AND __table1.color_id IN (
+ALL LEFT JOIN default.t AS __table2 ON (__table1.color_id = __table2.color_id) AND (__table1.color_id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'colors\') AS __table1
     WHERE __table1.name = \'red\'
-)
+))
 ORDER BY
     __table1.color_id ASC,
     __table1.payload ASC,
@@ -342,20 +342,20 @@ SELECT multiIf - plan
 SELECT
     __table1.color_id AS color_id,
     __table1.payload AS payload,
-    if(__table1.color_id IN (
+    if((__table1.color_id IN (
         SELECT __table1.id AS id
         FROM dictionary(\'colors\') AS __table1
         WHERE __table1.name = \'red\'
-    ), \'match\', \'no_match\') AS tag
+    )), \'match\', \'no_match\') AS tag
 FROM default.t AS __table1
 ORDER BY
     __table1.color_id ASC,
     __table1.payload ASC,
-    if(__table1.color_id IN (
+    if((__table1.color_id IN (
         SELECT __table1.id AS id
         FROM dictionary(\'colors\') AS __table1
         WHERE __table1.name = \'red\'
-    ), \'match\', \'no_match\') ASC
+    )), \'match\', \'no_match\') ASC
 SELECT multiIf
 1	a	match
 2	b	no_match
@@ -372,11 +372,11 @@ FROM default.t AS __table1
 countIf
 2
 sumIf - plan
-SELECT sumIf(__table1.color_id, __table1.color_id IN (
+SELECT sumIf(__table1.color_id, (__table1.color_id IN (
         SELECT __table1.id AS id
         FROM dictionary(\'colors\') AS __table1
         WHERE __table1.name = \'red\'
-    )) AS sum_id_match
+    ))) AS sum_id_match
 FROM default.t AS __table1
 sumIf
 4
@@ -389,7 +389,7 @@ ORDER BY
     __table1.color_id IN (
         SELECT __table1.id AS id
         FROM dictionary(\'colors\') AS __table1
-        WHERE (__table1.name = \'red\')
+        WHERE __table1.name = \'red\'
     ) DESC,
     __table1.color_id ASC,
     __table1.payload ASC
@@ -404,19 +404,19 @@ SELECT
     __table1.color_id IN (
         SELECT __table1.id AS id
         FROM dictionary(\'colors\') AS __table1
-        WHERE (__table1.name = \'red\')
+        WHERE __table1.name = \'red\'
     ) AS is_red,
     count() AS c
 FROM default.t AS __table1
 GROUP BY __table1.color_id IN (
         SELECT __table1.id AS id
         FROM dictionary(\'colors\') AS __table1
-        WHERE (__table1.name = \'red\')
+        WHERE __table1.name = \'red\'
     )
 ORDER BY __table1.color_id IN (
         SELECT __table1.id AS id
         FROM dictionary(\'colors\') AS __table1
-        WHERE (__table1.name = \'red\')
+        WHERE __table1.name = \'red\'
     ) ASC
 GROUP BY
 0	3
@@ -432,7 +432,7 @@ ORDER BY
 LIMIT _CAST(1, \'UInt64\') BY __table1.color_id IN (
         SELECT __table1.id AS id
         FROM dictionary(\'colors\') AS __table1
-        WHERE (__table1.name = \'red\')
+        WHERE __table1.name = \'red\'
     )
 LIMIT BY
 1	a
@@ -443,7 +443,7 @@ SELECT
     row_number() OVER (PARTITION BY __table1.color_id IN (
         SELECT __table1.id AS id
         FROM dictionary(\'colors\') AS __table1
-        WHERE (__table1.name = \'red\')
+        WHERE __table1.name = \'red\'
     ) ORDER BY __table1.color_id ASC) AS rn
 FROM default.t AS __table1
 ORDER BY
@@ -451,7 +451,7 @@ ORDER BY
     row_number() OVER (PARTITION BY __table1.color_id IN (
         SELECT __table1.id AS id
         FROM dictionary(\'colors\') AS __table1
-        WHERE (__table1.name = \'red\')
+        WHERE __table1.name = \'red\'
     ) ORDER BY __table1.color_id ASC) ASC
 WINDOW PARTITION BY
 1	1

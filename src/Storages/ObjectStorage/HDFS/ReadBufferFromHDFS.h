@@ -68,8 +68,10 @@ private:
 
     String hdfs_file_path;
     BlobStorageLogWriterPtr blob_storage_log;
+    /// `mutable` because they are updated from `readBigAt`, which is a `const` override.
     mutable std::atomic<size_t> total_bytes_read = 0;
     mutable std::atomic<size_t> total_read_microseconds = 0;
+    mutable std::atomic<bool> read_attempted = false;
     mutable std::atomic<bool> read_failed = false;
 };
 }

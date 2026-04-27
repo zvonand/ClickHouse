@@ -207,7 +207,10 @@ ReadBufferFromHDFS::ReadBufferFromHDFS(
 
 ReadBufferFromHDFS::~ReadBufferFromHDFS()
 {
-    if (blob_storage_log && total_bytes_read > 0 && !read_failed)
+    /// Emit a successful `Read` event whenever a read was attempted, even if zero bytes
+    /// were returned (empty objects). This keeps HDFS behavior consistent with S3/Azure,
+    /// which log every successful API call regardless of payload length.
+    if (blob_storage_log && read_attempted && !read_failed)
     {
         blob_storage_log->addEvent(
             BlobStorageLogElement::EventType::Read,
@@ -238,6 +241,7 @@ bool ReadBufferFromHDFS::nextImpl()
     }
 
     Stopwatch watch;
+    read_attempted = true;
     try
     {
         auto result = impl->next();
@@ -302,6 +306,7 @@ String ReadBufferFromHDFS::getFileName() const
 size_t ReadBufferFromHDFS::readBigAt(char * buffer, size_t size, size_t offset, const std::function<bool(size_t)> &) const
 {
     Stopwatch watch;
+    read_attempted = true;
     try
     {
         size_t bytes_read = impl->pread(buffer, size, offset);

@@ -51,11 +51,18 @@ function count()
 function wait_for_row_count()
 {
     local threshold="$1"
-    local timeout=30
+    # FileLog polls the directory using exponential backoff (initial 500ms,
+    # max 32s — see `poll_directory_watch_events_backoff_max`). Under sanitizer
+    # builds and shared CI runners the polling cycle can drift close to the
+    # 32s upper bound, so a tight 30s timeout occasionally fires before the
+    # background `StorageFileLog::threadFunc` task picks the new file up.
+    # 120s gives ~4x the worst-case backoff window. Same pattern as
+    # `02889_file_log_save_errors`.
+    local timeout=120
     local start=$EPOCHSECONDS
     while [[ $(count) -lt threshold ]]; do
         if ((EPOCHSECONDS - start > timeout)); then
-            echo "Timeout while waiting for the minimum number of rows, expected at least ${threshold} row(s)."
+            echo "Timeout (${timeout}s) waiting for the minimum number of rows, expected at least ${threshold} row(s). Got $(count)."
             exit 1
         fi
         sleep 0.5

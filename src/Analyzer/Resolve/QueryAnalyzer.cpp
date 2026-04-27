@@ -5723,27 +5723,22 @@ void QueryAnalyzer::resolveUnion(const QueryTreeNodePtr & union_node, Identifier
             ? non_recursive_query->as<QueryNode &>().getProjectionColumns()
             : non_recursive_query->as<UnionNode &>().computeProjectionColumns();
 
-        /// Save clones of unresolved recursive queries for iterative type inference.
-        /// The column types are determined by iteratively applying getLeastSupertype
-        /// across the non-recursive and recursive sides until the types stabilize.
-        const size_t max_type_inference_iterations = non_recursive_query_mutable_context->getSettingsRef()[Setting::recursive_cte_max_steps_in_type_inference];
+        /// Column types are determined by iteratively applying `getLeastSupertype` across the non-recursive
+        /// and recursive sides until the types stabilize (or until the configured limit of widening steps).
+        /// Each widening step requires re-resolving the recursive queries with the new column types,
+        /// so we save clones of the unresolved recursive queries up-front and reuse them on each pass.
+        const size_t max_widening_steps = non_recursive_query_mutable_context->getSettingsRef()[Setting::recursive_cte_max_steps_in_type_inference];
 
         std::vector<QueryTreeNodePtr> original_recursive_queries;
-        if (max_type_inference_iterations > 0)
+        if (max_widening_steps > 0)
             for (size_t i = 1; i < queries_nodes.size(); ++i)
                 original_recursive_queries.push_back(queries_nodes[i]->clone());
 
         TemporaryTableHolderPtr final_temporary_table_holder;
         StoragePtr final_temporary_table_storage;
 
-        for (size_t iteration = 0; ; ++iteration)
+        auto resolve_recursive_queries_with_current_types = [&]
         {
-            if (iteration > 0)
-            {
-                for (size_t i = 1; i < queries_nodes.size(); ++i)
-                    queries_nodes[i] = original_recursive_queries[i - 1]->clone();
-            }
-
             auto temporary_table_holder = std::make_shared<TemporaryTableHolder>(
                 non_recursive_query_mutable_context,
                 ColumnsDescription{NamesAndTypesList{temporary_table_columns.begin(), temporary_table_columns.end()}},
@@ -5755,7 +5750,6 @@ void QueryAnalyzer::resolveUnion(const QueryTreeNodePtr & union_node, Identifier
             recursive_cte_table_node = std::make_shared<TableNode>(temporary_table_storage, non_recursive_query_mutable_context);
             recursive_cte_table_node->setTemporaryTableName(union_node_typed.getCTEName());
 
-            /// Resolve recursive queries with current column types
             for (size_t i = 1; i < queries_nodes.size(); ++i)
             {
                 auto & query_node = queries_nodes[i];
@@ -5777,11 +5771,14 @@ void QueryAnalyzer::resolveUnion(const QueryTreeNodePtr & union_node, Identifier
 
             final_temporary_table_holder = std::move(temporary_table_holder);
             final_temporary_table_storage = std::move(temporary_table_storage);
+        };
 
-            if (iteration >= max_type_inference_iterations)
-                break;
+        /// Initial resolve with column types from the non-recursive query.
+        resolve_recursive_queries_with_current_types();
 
-            /// Compute getLeastSupertype for each column across all queries
+        /// Iteratively widen column types via getLeastSupertype, re-resolving the recursive queries each time.
+        for (size_t step = 0; step < max_widening_steps; ++step)
+        {
             bool types_changed = false;
             for (size_t i = 1; i < queries_nodes.size(); ++i)
             {
@@ -5806,6 +5803,11 @@ void QueryAnalyzer::resolveUnion(const QueryTreeNodePtr & union_node, Identifier
 
             if (!types_changed)
                 break;
+
+            for (size_t i = 1; i < queries_nodes.size(); ++i)
+                queries_nodes[i] = original_recursive_queries[i - 1]->clone();
+
+            resolve_recursive_queries_with_current_types();
         }
 
         recursive_cte_table.emplace(std::move(final_temporary_table_holder), std::move(final_temporary_table_storage), std::move(temporary_table_columns));

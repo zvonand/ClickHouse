@@ -90,6 +90,11 @@ SELECT 'dictGetOrDefault with tuple function default';
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), tuple('FuncCountry', 'FuncCity')).1;
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), tuple('FuncCountry', 'FuncCity')).2;
 
+-- Same as above, but with named access — exercises the default-value rewrite path through the named-index code branch.
+SELECT 'dictGetOrDefault with tuple function default named access';
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), tuple('FuncCountry', 'FuncCity')).country;
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), tuple('FuncCountry', 'FuncCity')).city;
+
 -- Test dictGetOrDefault with non-rewritable default (non-constant expression) — the pass must bail out gracefully
 SELECT 'dictGetOrDefault with non-rewritable default';
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), materialize(('MCountry', 'MCity'))).1;

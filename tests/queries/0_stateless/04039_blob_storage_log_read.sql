@@ -14,8 +14,9 @@ SYSTEM FLUSH LOGS blob_storage_log;
 SELECT count() > 0, countIf(error_code = 0) = count(), countIf(elapsed_microseconds > 0) > 0, countIf(data_size > 0) > 0
 FROM system.blob_storage_log
 WHERE event_type = 'Read'
-    AND remote_path LIKE '%04039_data/file_%'
-    AND event_date >= yesterday();
+    AND remote_path LIKE '%04039_data/file_' || currentDatabase() || '.csv'
+    AND event_date >= yesterday()
+    AND event_time > now() - INTERVAL 5 MINUTE;
 
 -- Negative test: with enable_blob_storage_log_for_read_operations=0 (default), no Read events should be logged.
 -- Use a different file name to distinguish from the positive test above.
@@ -30,8 +31,9 @@ SYSTEM FLUSH LOGS blob_storage_log;
 
 SELECT countIf(event_type = 'Read') = 0
 FROM system.blob_storage_log
-WHERE remote_path LIKE '%04039_data/neg_%'
-    AND event_date >= yesterday();
+WHERE remote_path LIKE '%04039_data/neg_' || currentDatabase() || '.csv'
+    AND event_date >= yesterday()
+    AND event_time > now() - INTERVAL 5 MINUTE;
 
 -- Gate test: enable_blob_storage_log_for_read_operations=1 but enable_blob_storage_log=0 must not produce any Read events,
 -- because the blob storage log writer is gated by the parent setting.
@@ -46,5 +48,6 @@ SYSTEM FLUSH LOGS blob_storage_log;
 
 SELECT countIf(event_type = 'Read') = 0
 FROM system.blob_storage_log
-WHERE remote_path LIKE '%04039_data/gate_%'
-    AND event_date >= yesterday();
+WHERE remote_path LIKE '%04039_data/gate_' || currentDatabase() || '.csv'
+    AND event_date >= yesterday()
+    AND event_time > now() - INTERVAL 5 MINUTE;

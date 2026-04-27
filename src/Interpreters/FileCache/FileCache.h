@@ -59,7 +59,7 @@ struct FileCacheReserveStat
     };
 
     Stat total_stat;
-    std::array<Stat, 2> stat_by_kind{};
+    std::array<Stat, magic_enum::enum_count<FileSegmentKind>()> stat_by_kind{};
 
     Stat & getStatByKind(FileSegmentKind kind) { return stat_by_kind[static_cast<uint8_t>(kind)]; }
     const Stat & getStatByKind(FileSegmentKind kind) const { return stat_by_kind[static_cast<uint8_t>(kind)]; }

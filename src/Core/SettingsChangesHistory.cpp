@@ -41,14 +41,14 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         /// Note: please check if the key already exists to prevent duplicate entries.
         addSettingsChanges(settings_changes_history, "26.5",
         {
+            {"date_time_input_format", "basic", "best_effort", "Better usability"},
+            {"cast_string_to_date_time_mode", "basic", "best_effort", "Better usability"},
             {"parallel_replicas_prefer_local_replica", true, true, "New setting. When disabled, replicas for parallel reading are selected purely by the load balancing algorithm without forcing the local replica into the set."},
             {"predicate_statistics_sample_rate", 0, 0, "New setting to collect predicate selectivity statistics into system.predicate_statistics_log"},
             {"allow_key_condition_coalesce_rewrite", false, true, "New setting to rewrite predicates of the form `coalesce(a_1, ..., a_N) <op> const` (and equivalently `ifNull`, or with the constant on the left) into a disjunction before index analysis, so per-column primary key and skip indexes on each `a_i` can be used. Partial-constant forms such as `coalesce(a, 42, b)` and `coalesce(a, b, 42)` are also handled."},
         });
         addSettingsChanges(settings_changes_history, "26.4",
         {
-            {"date_time_input_format", "basic", "best_effort", "Better usability"},
-            {"cast_string_to_date_time_mode", "basic", "best_effort", "Better usability"},
             {"allow_iceberg_remove_orphan_files", false, false, "New setting to gate Iceberg orphan file removal"},
             {"iceberg_orphan_files_older_than_seconds", 259200, 259200, "New setting for default orphan file age threshold"},
             {"output_format_arrow_unsupported_types_as_binary", false, true, "New setting to convert unsupported CH types to arrow binary instead of UNKNOWN_TYPE exception."},

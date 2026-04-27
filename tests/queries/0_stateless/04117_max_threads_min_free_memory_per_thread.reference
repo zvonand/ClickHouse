@@ -15,6 +15,10 @@
 8
 -- INSERT SELECT, insert limiter 16Gi: expected 1 sink --
 1
+-- GROUP BY, limiter disabled: pipeline-wide parallelism > 1 --
+8
+-- GROUP BY, limiter 16Gi: pipeline-wide parallelism capped to 1 --
+1
 === enable_analyzer=1 ===
 -- SELECT, limiter disabled --
 8
@@ -31,4 +35,8 @@
 -- INSERT SELECT, both limiters disabled: expected 8 sinks --
 8
 -- INSERT SELECT, insert limiter 16Gi: expected 1 sink --
+1
+-- GROUP BY, limiter disabled: pipeline-wide parallelism > 1 --
+8
+-- GROUP BY, limiter 16Gi: pipeline-wide parallelism capped to 1 --
 1

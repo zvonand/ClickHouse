@@ -781,9 +781,10 @@ JoinTreeQueryPlan buildQueryPlanForTableExpression(QueryTreeNodePtr table_expres
         if (const auto & filter_actions = table_expression_data.getFilterActions())
             table_expression_query_info.filter_actions_dag = std::make_shared<const ActionsDAG>(filter_actions->clone());
 
-        size_t max_streams = getMaxThreadsForAvailableMemory(
+        const size_t memory_limited_max_threads = getMaxThreadsForAvailableMemory(
             settings[Setting::max_threads], settings[Setting::max_threads_min_free_memory_per_thread]);
-        size_t max_threads_execute_query = settings[Setting::max_threads];
+        size_t max_streams = memory_limited_max_threads;
+        size_t max_threads_execute_query = memory_limited_max_threads;
 
         /**
          * To simultaneously query more remote servers when async_socket_for_remote is off

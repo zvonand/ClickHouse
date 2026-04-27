@@ -2712,7 +2712,8 @@ void InterpreterSelectQuery::executeFetchColumns(QueryProcessingStage::Enum proc
             settings[Setting::max_columns_to_read].value);
 
     /// General limit for the number of threads.
-    size_t max_threads_execute_query = settings[Setting::max_threads];
+    size_t max_threads_execute_query = getMaxThreadsForAvailableMemory(
+        settings[Setting::max_threads], settings[Setting::max_threads_min_free_memory_per_thread]);
 
     /**
      * To simultaneously query more remote servers when async_socket_for_remote is off

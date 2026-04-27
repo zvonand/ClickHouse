@@ -314,23 +314,6 @@ bool SettingsConstraints::checkImpl(const Settings & current_settings,
     if (!getNewValueToCheck(current_settings, change, new_value, reaction == THROW_ON_VIOLATION))
         return false;
 
-    /// Restricted for QUERY source only: users cannot enable these via SET or query-level overrides.
-    /// PROFILE/USER/ROLE sources are allowed — `CREATE SETTINGS PROFILE` is RBAC-protected.
-    if (source == SettingSource::QUERY)
-    {
-        if (!current_settings[Setting::dynamic_disk_allow_from_env] && setting_name == "dynamic_disk_allow_from_env")
-            return Checker(PreformattedMessage::create("Cannot modify 'dynamic_disk_allow_from_env' setting when it is disabled for the user"),
-                           ErrorCodes::QUERY_IS_PROHIBITED).check(change, new_value, reaction, source);
-
-        if (!current_settings[Setting::dynamic_disk_allow_include] && setting_name == "dynamic_disk_allow_include")
-            return Checker(PreformattedMessage::create("Cannot modify 'dynamic_disk_allow_include' setting when it is disabled for the user"),
-                           ErrorCodes::QUERY_IS_PROHIBITED).check(change, new_value, reaction, source);
-
-        if (!current_settings[Setting::dynamic_disk_allow_from_zk] && setting_name == "dynamic_disk_allow_from_zk")
-            return Checker(PreformattedMessage::create("Cannot modify 'dynamic_disk_allow_from_zk' setting when it is disabled for the user"),
-                           ErrorCodes::QUERY_IS_PROHIBITED).check(change, new_value, reaction, source);
-    }
-
     return getChecker(current_settings, setting_name).check(change, new_value, reaction, source);
 }
 

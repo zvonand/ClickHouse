@@ -250,8 +250,8 @@ protected:
 
             if (metadata->isVirtualColumn(name))
                 columns.push_back(fillVirtualColumn(name, type, buffer.data.rows()));
-            else if (auto physical_column = tryGetColumnFromBlock(buffer.data, metadata->columns.getColumnOrSubcolumn(GetColumnsOptions::All, name)));
-                columns.push_back(std::move(physical_column))
+            else if (auto physical_column = tryGetColumnFromBlock(buffer.data, metadata->columns.getColumnOrSubcolumn(GetColumnsOptions::All, name)))
+                columns.push_back(std::move(physical_column));
             else
                 throw Exception(ErrorCodes::LOGICAL_ERROR, "Column or subcolumn '{}' not found in Buffer table", name);
         }

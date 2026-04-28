@@ -105,6 +105,10 @@ bool DatatypeDynamic::convertImpl(String & out, IParser::Pos & pos)
             json_str += String(pos->begin, pos->end);
             ++pos;
         }
+        /// Reject malformed property bags where the closing `}` was never seen.
+        /// Otherwise `dynamic({"a":1` would be silently rewritten to a valid JSON object.
+        if (brace_depth != 0 || !isValidKQLPos(pos) || pos->type != TokenType::ClosingCurlyBrace)
+            return false;
         json_str += '}';
         /// Cast to JSON type for native member access (o.field)
         /// Escape single quotes in the JSON string to avoid SQL injection

@@ -7,6 +7,7 @@
 #include <Parsers/Kusto/ParserKQLQuery.h>
 #include <Parsers/Kusto/Utilities.h>
 #include <Parsers/Kusto/KustoFunctions/IParserKQLFunction.h>
+#include <Poco/String.h>
 
 #include <fmt/format.h>
 
@@ -79,7 +80,8 @@ bool ParserKQLTop::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
             }
             else if (depth == 0 && split_pos->type == TokenType::BareWord)
             {
-                String tok(split_pos->begin, split_pos->end);
+                /// KQL keywords are case-insensitive, so accept `ASC`/`Desc`/etc.
+                const String tok = Poco::toLower(String(split_pos->begin, split_pos->end));
                 if (tok == "asc" || tok == "desc")
                     seen_asc_desc = true;
             }

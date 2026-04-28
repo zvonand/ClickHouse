@@ -443,11 +443,12 @@ static bool preprocessUnionJoin(IParser::Pos & pos, ASTPtr & node, Expected & ex
     /// Guard: if closing bracket was never found, bail out
     if (!isValidKQLPos(scan_pos) || scan_pos->type != TokenType::ClosingRoundBracket)
         return false;
+    /// Guard: empty parenthesized subquery (`union ()` / `join () on a`).
+    /// Check before decrementing so we never construct a string from an inverted iterator range.
+    if (scan_pos == right_start)
+        return false;
     auto right_end_pos = scan_pos;
     --right_end_pos;
-    /// Guard: empty parenthesized subquery
-    if (right_end_pos < right_start)
-        return false;
     String right_query(right_start->begin, right_end_pos->end);
     ++scan_pos; /// skip closing bracket
 

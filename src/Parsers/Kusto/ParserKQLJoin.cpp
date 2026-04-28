@@ -78,14 +78,18 @@ bool ParserKQLJoin::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
             ++pos;
     }
 
-    /// Guard: if closing bracket was not found or subquery is empty
+    /// Guard: closing bracket missing
     if (!isValidKQLPos(pos) || pos->type != TokenType::ClosingRoundBracket)
+        return false;
+    /// Guard: empty parenthesized subquery (`join (...) ()`).
+    /// We must check before decrementing `end_pos`, otherwise `--end_pos` would step
+    /// before `content_start` and `String(content_start->begin, end_pos->end)` would
+    /// be built from an inverted iterator range.
+    if (pos == content_start)
         return false;
     /// pos is at the closing bracket. Get text from content_start to the token before pos.
     auto end_pos = pos;
     --end_pos;
-    if (end_pos < content_start)
-        return false;
     String right_query(content_start->begin, end_pos->end);
     ++pos; /// skip closing bracket
 

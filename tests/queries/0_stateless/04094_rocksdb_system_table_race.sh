@@ -60,12 +60,20 @@ TIMEOUT=10
 $CLICKHOUSE_CLIENT -q "DROP TABLE IF EXISTS ${CLICKHOUSE_DATABASE}.rocksdb_race"
 $CLICKHOUSE_CLIENT -q "CREATE TABLE ${CLICKHOUSE_DATABASE}.rocksdb_race (key String, value UInt32) Engine=EmbeddedRocksDB PRIMARY KEY(key)"
 
-create_drop_thread 2>/dev/null &
-read_stat_thread 2>/dev/null &
-select_thread 2>/dev/null &
-optimize_thread 2>/dev/null &
+create_drop_thread 2>/dev/null & p1=$!
+read_stat_thread 2>/dev/null & p2=$!
+select_thread 2>/dev/null & p3=$!
+optimize_thread 2>/dev/null & p4=$!
 
-wait
+# Bare `wait` returns 0 even if a background worker already exited non-zero,
+# so explicitly wait on each PID and propagate the first failure. This is
+# important for `read_stat_thread`, which is intended to fail the test if the
+# `system.rocksdb` race regresses.
+status=0
+for p in "$p1" "$p2" "$p3" "$p4"; do
+    wait "$p" || status=$?
+done
+((status == 0)) || exit "$status"
 
 $CLICKHOUSE_CLIENT -q "DROP TABLE IF EXISTS ${CLICKHOUSE_DATABASE}.rocksdb_race"
 echo "OK"

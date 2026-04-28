@@ -144,6 +144,9 @@ public:
     static std::shared_ptr<Aws::Auth::AWSCredentialsProvider>
     create(DB::S3::PocoHTTPClientConfiguration & aws_client_configuration, uint64_t expiration_window_seconds_, String role_arn_ = "");
 
+    /// True when a role ARN and `web_identity_token_file` are set (environment, profile, or `kms_role_arn_override` for the role).
+    static bool isWebIdentityConfigured(const String & kms_role_arn_override = {});
+
     explicit AwsAuthSTSAssumeRoleWebIdentityCredentialsProvider(
         DB::S3::PocoHTTPClientConfiguration & aws_client_configuration,
         uint64_t expiration_window_seconds_,

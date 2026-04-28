@@ -3,6 +3,8 @@
 #include <IO/Expect404ResponseScope.h>
 #include <Poco/Net/HTTPResponse.h>
 
+#include <string_view>
+
 #if USE_AWS_S3
 
 #include <Core/SettingsEnums.h>
@@ -69,10 +71,32 @@ bool startsWith(const char * str, const char * prefix)
     return *prefix == 0;
 }
 
-bool is404Muted(const char * message)
+/// Case-insensitive substring search; right now only used on the cold 400-error path,
+/// so we don't worry about the implicit strlen here.
+bool containsCaseInsensitive(std::string_view haystack, std::string_view needle)
 {
+    const auto case_eq = [](char a, char b)
+    {
+        return std::tolower(static_cast<unsigned char>(a))
+            == std::tolower(static_cast<unsigned char>(b));
+    };
+    return std::search(haystack.begin(), haystack.end(), needle.begin(), needle.end(), case_eq) != haystack.end();
+}
+
+/// Mute logs from `AWSXMLClient::BuildAWSError` for S3 wrong-signing-region 400
+bool isWrongSigningRegionMuted(const char * message)
+{
+    static const char * prefix = "HTTP response code: 400";
+    if (!startsWith(message, prefix))
+        return false;
+
+    return containsCaseInsensitive(message, "x-amz-bucket-region");
+}
+
     /// This is the way, how to mute scary logs from `AWSXMLClient::BuildAWSError`
     /// about 404 when 404 is the expected response
+bool is404Muted(const char * message)
+{
     if (!Expect404ResponseScope::is404Expected())
         return false;
 
@@ -96,20 +120,26 @@ bool is404Muted(const char * message)
 
     return code == Poco::Net::HTTPResponse::HTTP_NOT_FOUND;
 }
+
+bool isExpectedAwsHttpResponseMuted(const char * message)
+{
+    return isWrongSigningRegionMuted(message) || is404Muted(message);
+}
 }
 
 void AWSLogger::Log(Aws::Utils::Logging::LogLevel log_level, const char * tag, const char * format_str, ...) // NOLINT
 {
-    if (is404Muted(format_str))
+    if (format_str && isExpectedAwsHttpResponseMuted(format_str))
         return;
     callLogImpl(log_level, tag, format_str); /// FIXME. Variadic arguments?
 }
 
 void AWSLogger::LogStream(Aws::Utils::Logging::LogLevel log_level, const char * tag, const Aws::OStringStream & message_stream)
 {
-    if (is404Muted(message_stream.str().c_str()))
+    const auto str = message_stream.str();
+    if (isExpectedAwsHttpResponseMuted(str.c_str()))
         return;
-    callLogImpl(log_level, tag, message_stream.str().c_str());
+    callLogImpl(log_level, tag, str.c_str());
 }
 
 void AWSLogger::callLogImpl(Aws::Utils::Logging::LogLevel log_level, const char * tag, const char * message)
@@ -123,7 +153,7 @@ void AWSLogger::callLogImpl(Aws::Utils::Logging::LogLevel log_level, const char 
 
 void AWSLogger::vaLog(Aws::Utils::Logging::LogLevel log_level, const char * tag, const char * format_str, va_list)
 {
-    if (is404Muted(format_str))
+    if (format_str && isExpectedAwsHttpResponseMuted(format_str))
         return;
     callLogImpl(log_level, tag, format_str); /// FIXME. Variadic arguments?
 }

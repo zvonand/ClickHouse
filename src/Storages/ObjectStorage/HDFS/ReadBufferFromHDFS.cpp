@@ -200,6 +200,7 @@ ReadBufferFromHDFS::ReadBufferFromHDFS(
     , impl(std::make_unique<ReadBufferFromHDFSImpl>(
                hdfs_uri_, hdfs_file_path_, config_, read_settings_, read_until_position_, use_external_buffer_, file_size_))
     , use_external_buffer(use_external_buffer_)
+    , hdfs_uri(hdfs_uri_)
     , hdfs_file_path(hdfs_file_path_)
     , blob_storage_log(std::move(blob_storage_log_))
 {
@@ -219,7 +220,7 @@ ReadBufferFromHDFS::~ReadBufferFromHDFS()
         {
             blob_storage_log->addEvent(
                 BlobStorageLogElement::EventType::Read,
-                /* bucket */ {}, /* remote_path */ hdfs_file_path, /* local_path */ {},
+                /* bucket */ hdfs_uri, /* remote_path */ hdfs_file_path, /* local_path */ {},
                 total_bytes_read,
                 total_read_microseconds,
                 /* error_code */ 0, /* error_message */ {});

@@ -66,6 +66,7 @@ private:
     std::unique_ptr<ReadBufferFromHDFSImpl> impl;
     bool use_external_buffer;
 
+    String hdfs_uri;
     String hdfs_file_path;
     BlobStorageLogWriterPtr blob_storage_log;
     /// `mutable` because they are updated from `readBigAt`, which is a `const` override.

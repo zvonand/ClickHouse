@@ -1,10 +1,9 @@
 set (DEFAULT_LIBS "-nodefaultlibs")
 
-# Always build compiler-rt from source to avoid depending on the host system's compiler-rt.
-include (cmake/build_clang_builtin.cmake)
-build_clang_builtin(${CMAKE_CXX_COMPILER_TARGET} BUILTINS_LIBRARY)
+# Builtins are built as a regular cmake target in contrib/compiler-rt-cmake/
+# and linked via global-libs. No execute_process needed.
 
-set (DEFAULT_LIBS "${DEFAULT_LIBS} ${BUILTINS_LIBRARY} -lc -lm -lrt -lpthread")
+set (DEFAULT_LIBS "${DEFAULT_LIBS} -lc -lm -lrt -lpthread")
 
 message(STATUS "Default libraries: ${DEFAULT_LIBS}")
 

@@ -10,7 +10,7 @@ add_compile_definitions(_REENTRANT _POSIX_PTHREAD_SEMANTICS __EXTENSIONS__)
 set (DEFAULT_LIBS "-nodefaultlibs")
 
 # On SunOS/illumos, building compiler-rt from source is not yet supported
-# (no toolchain file in cmake/build_clang_builtin.cmake), so we use -lgcc_s.
+# (no toolchain file in contrib/compiler-rt-cmake/), so we use -lgcc_s.
 set (BUILTINS_LIBRARY "-lgcc_s")
 
 set (DEFAULT_LIBS "${DEFAULT_LIBS} ${BUILTINS_LIBRARY} -lc -lm -lrt -lpthread -ldl -lsocket -lnsl -lsendfile -lproc -lumem")

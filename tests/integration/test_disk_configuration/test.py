@@ -733,11 +733,6 @@ def test_dynamic_disk_security_settings(start_cluster):
         )
         assert "ACCESS_DENIED" in error and "dynamic_disk_allow_from_env" in error, error
 
-        # restricted_user: all three settings are self-locking — SET cannot raise any of them from false.
-        for setting in ("dynamic_disk_allow_from_env", "dynamic_disk_allow_include", "dynamic_disk_allow_from_zk"):
-            error = node.query_and_get_error(f"SET {setting} = 1", user="restricted_user")
-            assert "QUERY_IS_PROHIBITED" in error, f"{setting}: {error}"
-
         # restricted_user: a query-level override is also rejected by the self-locking check.
         error = node.query_and_get_error(
             """

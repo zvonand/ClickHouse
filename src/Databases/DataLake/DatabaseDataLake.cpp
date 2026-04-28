@@ -127,6 +127,8 @@ namespace
 
 String getLocationSchemeForTableCreation(const std::shared_ptr<DataLake::ICatalog> & catalog)
 {
+    /// Authoritative source: the catalog itself reports the backing storage type
+    /// (typically derived from the catalog config's `default-base-location`).
     if (auto storage_type = catalog->getStorageType(); storage_type.has_value())
     {
         switch (*storage_type)
@@ -147,22 +149,31 @@ String getLocationSchemeForTableCreation(const std::shared_ptr<DataLake::ICatalo
         }
     }
 
-    /// Fallback for catalogs that currently do not expose storage type in config.
+    /// Per-catalog-type fallback for catalogs that do not expose the storage type.
+    /// This is only safe for catalogs whose backing storage is fixed by the catalog
+    /// flavor itself; for multi-vendor catalogs (REST/Hive/Glue) we refuse to guess,
+    /// because silently defaulting to `s3` would persist a wrong location URI for
+    /// catalogs actually backed by Azure/HDFS/GCS/etc.
     switch (catalog->getCatalogType())
     {
-        case DatabaseDataLakeCatalogType::GLUE:
-        case DatabaseDataLakeCatalogType::ICEBERG_HIVE:
-        case DatabaseDataLakeCatalogType::ICEBERG_REST:
-        case DatabaseDataLakeCatalogType::ICEBERG_BIGLAKE:
-            return "s3";
         case DatabaseDataLakeCatalogType::ICEBERG_ONELAKE:
+            /// OneLake is Azure-only.
             return "abfss";
+        case DatabaseDataLakeCatalogType::ICEBERG_BIGLAKE:
+            /// BigLake stores tables in GCS, which ClickHouse accesses through its
+            /// S3-compatible API — so the on-disk location uses the `s3` scheme.
+            return "s3";
+        case DatabaseDataLakeCatalogType::ICEBERG_REST:
+        case DatabaseDataLakeCatalogType::ICEBERG_HIVE:
+        case DatabaseDataLakeCatalogType::GLUE:
         case DatabaseDataLakeCatalogType::PAIMON_REST:
         case DatabaseDataLakeCatalogType::UNITY:
         case DatabaseDataLakeCatalogType::NONE:
             throw Exception(
                 ErrorCodes::BAD_ARGUMENTS,
-                "Cannot determine storage scheme for CREATE TABLE for catalog type {}",
+                "Cannot determine storage scheme for CREATE TABLE for catalog type '{}': the catalog does not "
+                "report a backing storage type. Configure the catalog so that it exposes its storage type "
+                "(for Iceberg REST, set `default-base-location` in the catalog config) and try again.",
                 catalog->getCatalogType());
     }
 

@@ -55,7 +55,7 @@ INSERT INTO t_constraint_trans VALUES (1, 2, 3, 4);
 
 SELECT count() IGNORE NULLS FROM t_constraint_trans
 WHERE a != (SELECT d)
-SETTINGS enable_analyzer = 1, convert_query_to_cnf = 1, optimize_substitute_columns = 1;
+SETTINGS enable_analyzer = 1, convert_query_to_cnf = 1, optimize_substitute_columns = 1, optimize_using_constraints = 1;
 
 DROP TABLE t_constraint_trans;
 DROP TABLE t_constraint_corr;

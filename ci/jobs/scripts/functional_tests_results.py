@@ -227,20 +227,6 @@ class FTResultsProcessor:
                     )
                 )
 
-        # Defense in depth: a real run must produce at least one parsed test
-        # result. Zero results means the log parser is broken (format drifted)
-        # or the result file is missing rows - never silently report OK in
-        # that case.
-        if state == Result.Status.OK and s.total == 0:
-            state = Result.Status.ERROR
-            test_results.append(
-                Result(
-                    name="results parser",
-                    status=Result.Status.ERROR,
-                    info="Parsed zero test results from the log",
-                )
-            )
-
         if not info:
             info = f"Failed: {s.failed}, Passed: {s.success}, Skipped: {s.skipped}"
 

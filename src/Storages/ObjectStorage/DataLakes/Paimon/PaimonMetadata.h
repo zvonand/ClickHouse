@@ -180,10 +180,12 @@ private:
 
     constexpr static String PARTITION_DEFAULT_VALUE = "__DEFAULT_PARTITION__";
 
-    /// Background refresh
-    BackgroundSchedulePoolTaskHolder refresh_task;
+    /// Background refresh. `refresh_task` must be declared last so it is destroyed first:
+    /// ~BackgroundSchedulePoolTaskHolder calls deactivate() which synchronizes with runBackgroundRefresh()
+    /// before `refresh_interval_sec`, `refresh_in_progress`, and other members are destroyed.
     size_t refresh_interval_sec = 0;
     std::atomic_bool refresh_in_progress{false};
+    BackgroundSchedulePoolTaskHolder refresh_task;
 };
 
 }

@@ -62,8 +62,8 @@ static std::optional<Exception> checkTupleNames(const Strings & names)
 
         if (name == "null")
             return Exception(ErrorCodes::BAD_ARGUMENTS,
-                "Tuple element name '{}' is forbidden because it conflicts with the subcolumn name used for null maps. "
-                "Please use a different name", name);
+                "Tuple element name 'null' is reserved because it would conflict with the subcolumn name "
+                "used for Nullable null maps if such a tuple is wrapped in Nullable. Please use a different name");
 
         if (!names_set.insert(name).second)
             return Exception(ErrorCodes::DUPLICATE_COLUMN, "Names of tuple elements must be unique. Duplicate name: {}", name);

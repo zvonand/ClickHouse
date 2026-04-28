@@ -11,7 +11,7 @@ trap 'rm $tmp_file' EXIT
 # multipart upload is interrupted mid-stream (the upload is killed by the
 # parent shell after 0.15s).
 #
-# Previously code there wasn't ready for EOF, and you will get one of the
+# Previously the code wasn't ready for EOF, and you will get one of the
 # following exceptions:
 #
 #     - ./src/IO/ReadBuffer.h:58: bool DB::ReadBuffer::next(): Assertion `!hasPendingData()' failed.

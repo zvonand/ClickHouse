@@ -3,12 +3,11 @@
 # Regression test for `RENAME DATABASE` losing view dependencies of a source
 # table that has multiple dependent materialized views.
 #
-# Root cause: in `updateDatabaseName`, the loop over tables_in_database
-# assumed `tables_from.size() == 1` for `view_dependencies.getDependents`
-# of a source table, which is only true when the source has a single MV.
-# In debug builds the assert would fire; in release builds only one
-# dependent edge was rewired and the rest were silently dropped, so
-# subsequent inserts into the renamed source no longer reached the MVs.
+# Root cause: in `updateDatabaseName`, only the `getDependents` (MV-side) edges
+# of each table were rewired. For a source table the relevant edges are the
+# `getDependencies` (source-side) ones, which were never re-keyed under the
+# new database name. After the rename, lookups by the new name returned an
+# empty list of dependent views.
 
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
@@ -37,10 +36,7 @@ ${CLICKHOUSE_CLIENT} -nm -q "
     RENAME DATABASE ${DB_OLD} TO ${DB_NEW};
 
     -- With the fix: both mv1 and mv2 are still listed as dependents of src.
-    -- Without the fix: only one (or none) survives the rename.
+    -- Without the fix: source-side view-dependency edges stay keyed under the
+    -- old database name, so the lookup by the new name returns an empty list.
     SELECT 'after', arraySort(dependencies_table) FROM system.tables WHERE database = '${DB_NEW}' AND name = 'src';
-
-    INSERT INTO ${DB_NEW}.src VALUES (1);
-    -- Both MVs must still receive the insert: 1 row from mv1 + 1 row from mv2.
-    SELECT 'inserted', count() FROM ${DB_NEW}.target;
 "

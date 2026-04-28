@@ -736,11 +736,23 @@ void DatabaseCatalog::updateDatabaseName(const String & old_name, const String &
         referential_dependencies.addDependencies(StorageID{new_name, table_name}, removed_ref_deps);
         loading_dependencies.addDependencies(StorageID{new_name, table_name}, removed_loading_deps);
 
+        /// `view_dependencies` is rewired in both directions: the table being renamed
+        /// may be a materialized view (incoming edges from its source) and/or a source
+        /// of materialized views (outgoing edges to its dependent MVs). Both sides must
+        /// be re-keyed under `new_name`, otherwise lookups by the new name fail and
+        /// inserts into the renamed source no longer reach its MVs.
         auto tables_from = view_dependencies.getDependents(StorageID{old_name, table_name});
         for (const auto & the_table_from : tables_from)
         {
             view_dependencies.removeDependency(the_table_from, StorageID{old_name, table_name}, /* remove_isolated_tables= */ true);
             view_dependencies.addDependency(the_table_from, StorageID{new_name, table_name});
+        }
+
+        auto views_from = view_dependencies.getDependencies(StorageID{old_name, table_name});
+        for (const auto & view : views_from)
+        {
+            view_dependencies.removeDependency(StorageID{old_name, table_name}, view, /* remove_isolated_tables= */ true);
+            view_dependencies.addDependency(StorageID{new_name, table_name}, view);
         }
     }
 }

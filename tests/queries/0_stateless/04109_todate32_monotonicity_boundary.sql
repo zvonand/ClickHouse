@@ -19,3 +19,25 @@ SELECT count() FROM t_todate32_mono WHERE toDate32(x) = toDate32(120000);
 -- Of the inserted x in [100000, 149999], those with x >= 120530 are interpreted as
 -- timestamps (all within the day), giving 149999 - 120530 + 1 = 29470 rows.
 SELECT count() FROM t_todate32_mono WHERE toDate32(x) = toDate32(130000);
+
+DROP TABLE IF EXISTS test;
+
+CREATE TABLE test
+(
+    x UInt64
+)
+ENGINE = MergeTree
+ORDER BY x
+SETTINGS index_granularity = 1;
+
+INSERT INTO test VALUES (120529), (120530);
+
+SELECT count()
+FROM test
+WHERE toDate32(x) = toDate32(120530)
+SETTINGS use_primary_key = 1;
+
+SELECT count()
+FROM test
+WHERE toDate32(x) = toDate32(120530)
+SETTINGS use_primary_key = 0;

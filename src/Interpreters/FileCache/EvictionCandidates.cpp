@@ -115,7 +115,7 @@ void EvictionInfo::addImpl(
 {
     size_to_evict += info->size_to_evict;
     elements_to_evict += info->elements_to_evict;
-    auto [it, inserted] = emplace(queue_id, std::move(info));
+    auto [it, inserted] = try_emplace(queue_id, std::move(info));
     if (!inserted)
     {
         if (!merge_if_exists)

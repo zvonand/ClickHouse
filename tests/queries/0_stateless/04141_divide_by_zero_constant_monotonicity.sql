@@ -31,11 +31,29 @@ SELECT count() FROM t_divide_zero_mono WHERE (divide(divide(isNull(-2), assumeNo
 -- and the binary search is skipped). `divide(1, 1)` = 1.0 excludes one row.
 SELECT count() FROM t_divide_zero_mono WHERE divide(1, a) NOT IN (1.0, 2.0);
 
+-- `intDiv(0, a)` regression: the monotonicity branch in
+-- `FunctionBinaryArithmetic::getMonotonicityForRange` is shared between `divide` and
+-- `intDiv`, but `intDiv` has different runtime semantics — `intDiv(0, 0)` raises
+-- `ILLEGAL_DIVISION` instead of returning `NaN`/`Inf`. The index-analysis path is the
+-- same, so the same fix applies. Pre-fix this query tripped the `Invalid binary
+-- search result in MergeTreeSetIndex` exception at index-analysis time on debug
+-- builds. Post-fix the index analysis safely reports non-monotonic and the runtime
+-- evaluation of `intDiv(0, 0)` on row `a = 0` legitimately throws `ILLEGAL_DIVISION`.
+SELECT count() FROM t_divide_zero_mono WHERE intDiv(0, a) NOT IN (1, 2); -- { serverError ILLEGAL_DIVISION }
+
+-- Tuple form for `intDiv` (parallel with the `divide` tuple test above).
+SELECT count() FROM t_divide_zero_mono WHERE (intDiv(0, a), b) NOT IN ((1, 'x'), (2, 'y')); -- { serverError ILLEGAL_DIVISION }
+
 -- Sanity check: an entirely positive range must still allow the legitimate `c / x` monotonic
 -- inference. `divide(2, a)` over [1, 10] is strictly decreasing, so KeyCondition can use it.
 DROP TABLE t_divide_zero_mono;
 CREATE TABLE t_divide_zero_mono (a UInt64, b String) ENGINE = MergeTree ORDER BY a SETTINGS index_granularity = 1;
 INSERT INTO t_divide_zero_mono SELECT number + 1, toString(number) FROM numbers(10);
 SELECT count() FROM t_divide_zero_mono WHERE divide(2, a) NOT IN (1.0, 2.0);
+
+-- Sanity check: `intDiv(0, a)` over the strictly positive range [1, 10] is the legitimate
+-- monotonic case (the function is constant 0 on a range that excludes 0). KeyCondition can
+-- use it; `intDiv(0, [1..10])` is 0 for all rows, none equal `1` or `2`, all 10 rows match.
+SELECT count() FROM t_divide_zero_mono WHERE intDiv(0, a) NOT IN (1, 2);
 
 DROP TABLE t_divide_zero_mono;

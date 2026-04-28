@@ -1,7 +1,9 @@
 #include <base/getFQDNOrHostName.h>
+#include <base/sleep.h>
 #include <Common/CurrentThread.h>
 #include <Common/DateLUT.h>
 #include <Common/DateLUTImpl.h>
+#include <Common/FailPoint.h>
 #include <Common/logger_useful.h>
 #include <Common/UniqueLock.h>
 #include <Core/BackgroundSchedulePool.h>
@@ -24,6 +26,11 @@
 
 namespace DB
 {
+
+namespace FailPoints
+{
+    extern const char query_metric_log_delay_collect[];
+}
 
 static auto logger = getLogger("QueryMetricLog");
 
@@ -101,6 +108,12 @@ void QueryMetricLog::shutdown()
 
 void QueryMetricLog::collectMetric(const ProcessList & process_list, String query_id)
 {
+    /// Failpoint hook for `04117_query_metric_log_backfill_missed_periodics`. Sleeping
+    /// before capturing `current_time` simulates a backlogged `BackgroundSchedulePool`
+    /// where a periodic task fires past the query's finish moment, exposing the race
+    /// the backfill+`is_final` logic in `finishQuery` repairs.
+    fiu_do_on(FailPoints::query_metric_log_delay_collect, { sleepForSeconds(1); });
+
     auto current_time = std::chrono::system_clock::now();
     const auto query_info = process_list.getQueryInfo(query_id, false, true, false);
     if (!query_info)

@@ -111,6 +111,15 @@ DataLakeMetadataPtr PaimonMetadata::create(
     const auto & data_lake_settings = configuration_ptr->getDataLakeSettings();
     bool incremental_read_enabled = data_lake_settings[DataLakeStorageSetting::paimon_incremental_read].value;
     Int64 metadata_refresh_interval_sec = data_lake_settings[DataLakeStorageSetting::paimon_metadata_refresh_interval_sec].value;
+
+    /// The settings framework accesses field values through a pointer-to-member
+    /// dereference (impl.get()->*t). MSan cannot track initialization across this
+    /// indirection, so values read via operator[] appear tainted. Unpoison at the
+    /// source to prevent taint from propagating through PaimonPersistentComponents
+    /// into PaimonMetadata members used on background threads.
+    __msan_unpoison(&incremental_read_enabled, sizeof(incremental_read_enabled));
+    __msan_unpoison(&metadata_refresh_interval_sec, sizeof(metadata_refresh_interval_sec));
+
     PaimonStreamStatePtr stream_state = nullptr;
 
     if (incremental_read_enabled)
@@ -163,10 +172,13 @@ PaimonMetadata::PaimonMetadata(
     /// The settings framework reads field values through a pointer-to-member
     /// dereference across an inheritance chain (impl.get()->*t). MSan cannot
     /// track initialization through this pattern, tainting all downstream values.
-    /// Unpoison the source value before any computation to break the taint chain.
-    Int64 interval_sec = persistent_components.metadata_refresh_interval_sec;
-    __msan_unpoison(&interval_sec, sizeof(interval_sec));
-    refresh_interval_sec = interval_sec > 0 ? static_cast<size_t>(interval_sec) : 0;
+    /// Even though the source value is already unpoisoned in create(), compiler
+    /// optimizations (register reuse, cmov) may re-introduce shadow taint through
+    /// intermediate computations. Unpoison the member directly to guarantee the
+    /// background thread always reads a clean value.
+    refresh_interval_sec = persistent_components.metadata_refresh_interval_sec > 0
+        ? static_cast<size_t>(persistent_components.metadata_refresh_interval_sec) : 0;
+    __msan_unpoison(&refresh_interval_sec, sizeof(refresh_interval_sec));
 
     /// Load initial state
     auto initial_state = loadLatestState();

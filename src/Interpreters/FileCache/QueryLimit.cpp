@@ -94,8 +94,9 @@ void FileCacheQueryLimit::QueryContext::tryRemove(
     if (record == records.end())
         return;
 
-    record->second->remove(lock);
-    records.erase({key, offset});
+    if (record->second->isValid(lock))
+        record->second->remove(lock);
+    records.erase(record);
 }
 
 IFileCachePriority::IteratorPtr FileCacheQueryLimit::QueryContext::tryGet(

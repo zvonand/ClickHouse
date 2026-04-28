@@ -2390,11 +2390,16 @@ void ClientBase::processParsedSingleQuery(
         if (insert && insert->select)
             insert->tryFindInputFunction(input_function);
 
-        /// Update async_insert after applying settings from server
-        is_async_insert_with_inlined_data = client_context->getSettingsRef()[Setting::async_insert] && insert && insert->hasInlinedData();
-
+        /// When the user explicitly requested inline insert data mode (via `--inline-insert-data` or
+        /// `send_table_structure_on_insert_with_inline_data = 0`), it takes precedence over `async_insert`
+        /// on the client side: both paths send the data inline with the query, and the explicit user choice
+        /// determines which client-side flow (and rejection message) applies.
         bool is_inline_insert_data = (inline_insert_data || !client_context->getSettingsRef()[Setting::send_table_structure_on_insert_with_inline_data])
             && insert && insert->hasInlinedData() && !insert->select;
+
+        /// Update async_insert after applying settings from server
+        is_async_insert_with_inlined_data = client_context->getSettingsRef()[Setting::async_insert]
+            && insert && insert->hasInlinedData() && !is_inline_insert_data;
 
         if (is_async_insert_with_inlined_data)
         {

@@ -648,7 +648,7 @@ std::unique_ptr<QueryPipelineBuilder> QueryPipelineBuilder::joinPipelinesRightLe
         // delays the NonJoinedBlocksTransforms until all delayed-block workers finish.
         if (delayed_root && use_parallel_non_joined)
         {
-            DelayedPortsProcessor::PortNumbers non_joined_delayed_ports;
+            std::vector<UInt64> non_joined_delayed_ports;
             non_joined_delayed_ports.reserve(num_streams);
             for (size_t i = 0; i < num_streams; ++i)
                 non_joined_delayed_ports.push_back(2 * i + 1);

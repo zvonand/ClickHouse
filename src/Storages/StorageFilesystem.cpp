@@ -378,8 +378,10 @@ private:
         /// Size.
         if (columns_map.contains("size"))
         {
-            auto is_regular = file.is_regular_file(ec);
-            if (!ec && is_regular)
+            /// Use `symlink_status` so we don't follow symlinks: a symlink to a regular file
+            /// has `type='symlink'` and should report `size=NULL`, mirroring how `content` is filled.
+            auto status = file.symlink_status(ec);
+            if (!ec && status.type() == fs::file_type::regular)
             {
                 auto sz = file.file_size(ec);
                 if (!ec)
@@ -417,8 +419,10 @@ private:
         /// Content.
         if (need_content)
         {
-            auto is_regular = file.is_regular_file(ec);
-            if (!ec && is_regular)
+            /// Use `symlink_status` so symlinks (even those resolving to regular files) get `NULL`,
+            /// matching the documented behavior and the `type='symlink'` reported above.
+            auto status = file.symlink_status(ec);
+            if (!ec && status.type() == fs::file_type::regular)
             {
                 String content;
                 ReadBufferFromFile in(file.path().string());

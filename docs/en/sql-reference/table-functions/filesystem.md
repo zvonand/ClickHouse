@@ -39,7 +39,7 @@ filesystem([path])
 | `name`              | `String`                   | File or directory name (the last component of the path). |
 | `file`              | `String` (ALIAS of `name`) | Alias for the `name` column. |
 | `type`              | `Enum8`                    | File type: `'none'`, `'not_found'`, `'regular'`, `'directory'`, `'symlink'`, `'block'`, `'character'`, `'fifo'`, `'socket'`, `'unknown'`. |
-| `size`              | `Nullable(UInt64)`         | File size in bytes. `NULL` for directories and on error. |
+| `size`              | `Nullable(UInt64)`         | File size in bytes (for regular files). `NULL` for non-regular files (directories, symlinks, etc.) and on error. |
 | `depth`             | `UInt16`                   | Recursion depth. `0` for the queried directory itself and its immediate children, `1` for entries one level deeper, and so on. |
 | `modification_time` | `Nullable(DateTime64(6))`  | Last modification time with microsecond precision. `NULL` on error. |
 | `is_symlink`        | `Bool`                     | Whether the entry is a symbolic link. |

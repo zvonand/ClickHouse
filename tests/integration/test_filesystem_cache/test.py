@@ -978,6 +978,14 @@ def test_finished_download_time(cluster):
 def test_caches_with_query_limit(cluster):
     node = cluster.instances["node"]
     name = f"test_fs_cache_with_query_limit_{uuid.uuid4()}"
+    # `enable_filesystem_query_cache_limit = 1` activates the per-query cache
+    # priority, but the per-query `QueryContext` is only created when the query
+    # itself sets `filesystem_cache_max_download_size > 0`. The per-query
+    # priority is always constructed with `max_elements = 0`, which used to hit
+    # `LOGICAL_ERROR` in `IFileCachePriority::check` as soon as any segment was
+    # added. Reading enough data to spill the per-query limit also exercises
+    # `FileCacheQueryLimit::QueryContext::tryRemove` for entries already evicted
+    # by the main priority.
     node.query(
         f"""
             DROP TABLE IF EXISTS fs_cache_query_limit SYNC;
@@ -991,18 +999,28 @@ def test_caches_with_query_limit(cluster):
             );
         """
     )
-    # The data size must significantly exceed `max_size` so that file segments
-    # already added to the per-query priority get evicted from the main priority
-    # within a single query. That re-add path is what triggers the original
-    # logical error in `IFileCachePriority::check` (with `max_elements = 0` in
-    # the per-query priority) and in `FileCacheQueryLimit::QueryContext::tryRemove`.
     node.query(
-        "insert into fs_cache_query_limit select number, randomString(4096) from system.numbers limit 100000"
+        "INSERT INTO fs_cache_query_limit SELECT number, randomString(4096) FROM system.numbers LIMIT 100000",
+        settings={"enable_filesystem_cache_on_write_operations": 0},
     )
+    # Per-query write limit must be > 0 so that `getQueryContextHolder` creates
+    # the `QueryContext` and the per-query priority actually receives entries.
     # Re-read multiple times to amplify the eviction/re-add pressure within a
     # single query, increasing the probability of hitting both fixed code paths.
     for _ in range(3):
-        node.query("select * from fs_cache_query_limit format Null")
+        node.query(
+            "SELECT * FROM fs_cache_query_limit FORMAT Null",
+            settings={
+                "filesystem_cache_max_download_size": 65536,
+                "skip_download_if_exceeds_query_cache": 0,
+            },
+        )
+
+    # Note: `max_size = 0` is rejected at cache config time (`max_size cannot
+    # be 0`), so the `max_size != 0` branch in `IFileCachePriority::check` is
+    # only reachable via the per-query priority, which hardcodes
+    # `max_elements = 0`. The reads above already exercise that branch.
+    node.query("DROP TABLE fs_cache_query_limit SYNC")
 
 
 @pytest.mark.parametrize("cache_policy", ["lru", "slru"])

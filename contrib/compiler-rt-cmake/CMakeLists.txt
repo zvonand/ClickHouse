@@ -144,12 +144,10 @@ foreach (src ${BUILTINS_ARCH_SOURCES})
     endif()
 endforeach()
 
-include(CheckCSourceCompiles)
-check_c_source_compiles("__bf16 foo(__bf16 x) { return x; } int main(void) { return 0; }"
-                        COMPILER_RT_HAS_BFLOAT16)
-if (COMPILER_RT_HAS_BFLOAT16)
-    list(APPEND BUILTINS_ARCH_SOURCES ${BUILTINS_BF16_SOURCES})
-endif()
+# __bf16 (BFloat16) is supported by clang 15+ on every architecture we target
+# (x86_64, aarch64, ppc64le, riscv64, s390x, loongarch64). ClickHouse builds
+# with clang 21+, so we unconditionally include the BF16 builtins.
+list(APPEND BUILTINS_ARCH_SOURCES ${BUILTINS_BF16_SOURCES})
 
 _prepend_dir(BUILTINS_SOURCES "${BUILTINS_SOURCE_DIR}" ${BUILTINS_ARCH_SOURCES})
 

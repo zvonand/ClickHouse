@@ -975,6 +975,7 @@ def test_finished_download_time(cluster):
     assert int(elapsed_time) > 1
     assert int(elapsed_time) < 5
 
+
 @pytest.mark.parametrize("cache_policy", ["lru", "slru"])
 def test_concurrent_eviction(cluster, cache_policy):
     """Stress-test concurrent eviction in filesystem cache with multiple readers."""

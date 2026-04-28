@@ -249,19 +249,11 @@ protected:
             const auto & [name, type] = packed;
 
             if (metadata->isVirtualColumn(name))
-            {
-                columns.emplace_back(fillVirtualColumn(name, type, buffer.data.rows()));
-                continue;
-            }
-
-            auto resolved = columns_desc.tryGetColumnOrSubcolumn(GetColumnsOptions::All, name);
-            auto col = resolved ? tryGetColumnFromBlock(buffer.data, *resolved) : nullptr;
-
-            if (!col)
-                throw Exception(ErrorCodes::LOGICAL_ERROR,
-                    "Column or subcolumn '{}' not found in Buffer table", name);
-
-            columns.emplace_back(std::move(col));
+                columns.push_back(fillVirtualColumn(name, type, buffer.data.rows()));
+            else if (auto physical_column = tryGetColumnFromBlock(buffer.data, metadata->columns.getColumnOrSubcolumn(GetColumnsOptions::All, name)))
+                columns.push_back(std::move(physical_column))
+            else
+                throw Exception(ErrorCodes::LOGICAL_ERROR, "Column or subcolumn '{}' not found in Buffer table", name);
         }
 
         res.setColumns(std::move(columns), buffer.data.rows());

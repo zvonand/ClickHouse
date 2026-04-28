@@ -20,12 +20,13 @@ SUCCESS_FINISH_SIGNS = ["All tests have finished", "No tests were run"]
 RETRIES_SIGN = "Some tests were restarted"
 
 # Regex pattern to match test result lines.
-# Accepts both the raw "test_name: [ STATUS ] time sec." form (fast_test.py)
-# and the timestamped "YYYY-MM-DD HH:MM:SS test_name: [ STATUS ] time sec." form
-# (functional_tests.py, which pipes through `ts`).
-# Test names can contain letters, digits, underscores, hyphens, and dots.
+# The shape `name: [ STATUS ] N.NN sec.` is specific enough that we don't pin
+# the leading timestamp - the bounded `^.{0,32}?` lets through any expected
+# framing (raw=0, `ts`=20, `[YYYY-MM-DD HH:MM:SS] `=22) but rules out matches
+# embedded deeper in an error/exception message (see PR #88825). Test names
+# can contain letters, digits, underscores, hyphens, and dots.
 TEST_RESULT_PATTERN = re.compile(
-    r"^(?:\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} )?"
+    r"^.{0,32}?"
     r"([\w\-\.]+):\s+(\[ (?:OK|FAIL|SKIPPED|UNKNOWN|Timeout!) \])\s+([\d.]+) sec\."
 )
 
@@ -212,16 +213,31 @@ class FTResultsProcessor:
 
         # The runner's exit code is the authoritative signal: if `clickhouse-test`
         # exited non-zero, the job must not report OK even when log parsing finds
-        # nothing to blame. This guards against parser regressions and against
-        # failure modes that don't surface as a parseable `[ FAIL ]` line.
+        # nothing to blame. The synthetic leaf is added only when the parser
+        # found nothing - otherwise the real failure already explains the result
+        # and a duplicate entry is just noise.
         if runner_exit_code is not None and runner_exit_code != 0:
             if state == Result.Status.OK:
                 state = Result.Status.FAIL
+                test_results.append(
+                    Result(
+                        name="clickhouse-test",
+                        status=Result.Status.FAIL,
+                        info=f"clickhouse-test exited with code {runner_exit_code}",
+                    )
+                )
+
+        # Defense in depth: a real run must produce at least one parsed test
+        # result. Zero results means the log parser is broken (format drifted)
+        # or the result file is missing rows - never silently report OK in
+        # that case.
+        if state == Result.Status.OK and s.total == 0:
+            state = Result.Status.ERROR
             test_results.append(
                 Result(
-                    name="clickhouse-test",
-                    status=Result.Status.FAIL,
-                    info=f"clickhouse-test exited with code {runner_exit_code}",
+                    name="results parser",
+                    status=Result.Status.ERROR,
+                    info="Parsed zero test results from the log",
                 )
             )
 

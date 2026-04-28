@@ -86,8 +86,10 @@ workflow = Workflow.Config(
             )
             for j in JobConfigs.functional_tests_jobs
         ],
-        # Azure functional tests run only in master and in the private repo:
-        # Microsoft Azure is not reliable enough for a per-PR feedback loop.
+        *[
+            job.set_run_after(FUNCTIONAL_TESTS_PARALLEL_BLOCKING_JOB_NAMES)
+            for job in JobConfigs.functional_tests_jobs_azure
+        ],
         *JobConfigs.functional_test_llvm_coverage_jobs,
         *JobConfigs.functional_test_excluded_from_llvm_job,
         *[

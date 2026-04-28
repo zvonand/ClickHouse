@@ -244,7 +244,6 @@ protected:
 
         Columns columns;
         columns.reserve(getPort().getHeader().columns());
-        const auto & columns_desc = metadata->getColumns();
         for (const auto & packed : getPort().getHeader().getNamesAndTypes())
         {
             const auto & [name, type] = packed;

@@ -910,6 +910,10 @@ bool ParserSystemQuery::parseImpl(IParser::Pos & pos, ASTPtr & node, Expected & 
                 else
                     return false;
             }
+            else
+            {
+                return false;
+            }
 
             break;
         }

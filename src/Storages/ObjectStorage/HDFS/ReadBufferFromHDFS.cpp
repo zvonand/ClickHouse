@@ -210,14 +210,24 @@ ReadBufferFromHDFS::~ReadBufferFromHDFS()
     /// Emit a successful `Read` event whenever a read was attempted, even if zero bytes
     /// were returned (empty objects). This keeps HDFS behavior consistent with S3/Azure,
     /// which log every successful API call regardless of payload length.
+    /// The destructor is implicitly `noexcept`, so wrap the potentially-throwing
+    /// `addEvent` (allocations inside `SystemLogQueue::push`) in `try/catch` to avoid
+    /// `std::terminate` if it throws during stack unwinding.
     if (blob_storage_log && read_attempted && !read_failed)
     {
-        blob_storage_log->addEvent(
-            BlobStorageLogElement::EventType::Read,
-            /* bucket */ {}, /* remote_path */ hdfs_file_path, /* local_path */ {},
-            total_bytes_read,
-            total_read_microseconds,
-            /* error_code */ 0, /* error_message */ {});
+        try
+        {
+            blob_storage_log->addEvent(
+                BlobStorageLogElement::EventType::Read,
+                /* bucket */ {}, /* remote_path */ hdfs_file_path, /* local_path */ {},
+                total_bytes_read,
+                total_read_microseconds,
+                /* error_code */ 0, /* error_message */ {});
+        }
+        catch (...)
+        {
+            tryLogCurrentException(__PRETTY_FUNCTION__);
+        }
     }
 }
 

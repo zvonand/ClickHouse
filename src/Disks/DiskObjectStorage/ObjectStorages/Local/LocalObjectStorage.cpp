@@ -88,17 +88,27 @@ public:
 
     ~ReadBufferFromFileWithLogging() override
     {
-        if (blob_log && !read_failed)
+        /// The destructor is implicitly `noexcept`. `addEvent` is potentially throwing
+        /// (e.g. allocations inside `SystemLogQueue::push`), so wrap it in `try/catch`
+        /// to avoid `std::terminate` if it throws during stack unwinding.
+        if (blob_log && read_attempted && !read_failed)
         {
-            blob_log->addEvent(
-                BlobStorageLogElement::EventType::Read,
-                /* bucket */ bucket,
-                /* remote_path */ file_path,
-                /* local_path */ {},
-                /* data_size */ bytes_read,
-                elapsed_microseconds,
-                /* error_code */ 0,
-                /* error_message */ {});
+            try
+            {
+                blob_log->addEvent(
+                    BlobStorageLogElement::EventType::Read,
+                    /* bucket */ bucket,
+                    /* remote_path */ file_path,
+                    /* local_path */ {},
+                    /* data_size */ bytes_read,
+                    elapsed_microseconds,
+                    /* error_code */ 0,
+                    /* error_message */ {});
+            }
+            catch (...)
+            {
+                tryLogCurrentException(__PRETTY_FUNCTION__);
+            }
         }
     }
 
@@ -109,6 +119,7 @@ public:
     size_t readBigAt(char * to, size_t n, size_t offset, const std::function<bool(size_t)> & progress_callback) const override
     {
         Stopwatch watch;
+        read_attempted = true;
         try
         {
             size_t result = impl->readBigAt(to, n, offset, progress_callback);
@@ -137,6 +148,7 @@ private:
     bool nextImpl() override
     {
         Stopwatch next_watch;
+        read_attempted = true;
         try
         {
             bool result = ReadBufferFromFileDecorator::nextImpl();
@@ -157,6 +169,7 @@ private:
     BlobStorageLogWriterPtr blob_log;
     mutable std::atomic<size_t> elapsed_microseconds = 0;
     mutable std::atomic<size_t> bytes_read = 0;
+    mutable std::atomic<bool> read_attempted = false;
     mutable std::atomic<bool> read_failed = false;
 };
 

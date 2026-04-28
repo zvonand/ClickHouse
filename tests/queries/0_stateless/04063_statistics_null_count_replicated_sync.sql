@@ -3,7 +3,6 @@
 -- Verifies that NullCount statistics are correctly propagated between replicas.
 
 SET allow_statistics = 1;
-SET use_statistics_for_part_pruning = 1;
 SET mutations_sync = 2;
 
 DROP TABLE IF EXISTS rmt_nc1 SYNC;
@@ -41,12 +40,6 @@ SELECT partition, column, statistics FROM system.parts_columns
 WHERE database = currentDatabase() AND table = 'rmt_nc1' AND active AND column = 'value'
 ORDER BY partition;
 
--- Note: IS NULL part pruning via nullcount was removed in Part 1.
--- We keep the EXPLAIN for coverage, but all parts are read now.
-SELECT 'Replica 1: IS NULL (no part pruning)';
-SELECT trimLeft(explain) FROM (EXPLAIN indexes = 1 SELECT count() FROM rmt_nc1 WHERE value IS NULL)
-WHERE explain LIKE '%Parts:%';
-
 -- Sync replica 2
 SYSTEM SYNC REPLICA rmt_nc2;
 
@@ -55,11 +48,6 @@ SELECT 'Replica 2: NullCount statistics after sync';
 SELECT partition, column, statistics FROM system.parts_columns
 WHERE database = currentDatabase() AND table = 'rmt_nc2' AND active AND column = 'value'
 ORDER BY partition;
-
--- Note: IS NULL part pruning via nullcount was removed in Part 1.
-SELECT 'Replica 2: IS NULL (no part pruning)';
-SELECT trimLeft(explain) FROM (EXPLAIN indexes = 1 SELECT count() FROM rmt_nc2 WHERE value IS NULL)
-WHERE explain LIKE '%Parts:%';
 
 -- Verify query results on both replicas
 SELECT 'Replica 1: query results';

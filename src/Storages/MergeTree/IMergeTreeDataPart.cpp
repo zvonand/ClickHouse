@@ -1050,7 +1050,9 @@ static const ColumnDescription * getColumnForStatisticsFile(const String & filen
     size_t num_chars_to_truncate = STATS_FILE_PREFIX.size() + STATS_FILE_SUFFIX.size();
     String column_name = unescapeForFileName(filename.substr(STATS_FILE_PREFIX.size(), filename.size() - num_chars_to_truncate));
 
-    if (!required_columns.empty() && !required_columns.contains(column_name))
+    if (!required_columns.empty()
+        && !required_columns.contains(column_name)
+        && !required_columns.contains(column_name + ".null"))
     {
         /// When optimize_functions_to_subcolumns=1, required_columns may contain
         /// subcolumn names like "col.null" instead of the physical column name "col".

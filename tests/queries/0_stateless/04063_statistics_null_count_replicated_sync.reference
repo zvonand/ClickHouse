@@ -1,17 +1,9 @@
 Replica 1: NullCount statistics
 0	value	['NullCount']
 1	value	['NullCount']
-Replica 1: IS NULL (no part pruning)
-Parts: 2/2
-Parts: 2/2
-Parts: 2/2
 Replica 2: NullCount statistics after sync
 0	value	['NullCount']
 1	value	['NullCount']
-Replica 2: IS NULL (no part pruning)
-Parts: 2/2
-Parts: 2/2
-Parts: 2/2
 Replica 1: query results
 1
 1

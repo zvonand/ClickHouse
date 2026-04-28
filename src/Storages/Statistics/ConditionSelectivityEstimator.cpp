@@ -250,7 +250,7 @@ bool ConditionSelectivityEstimator::extractAtomFromTree(const StorageMetadataPtr
             return true;
         }
 
-        if (num_args == 2)
+        else if (num_args == 2)
         {
             const bool is_in_operator = functionIsInOperator(func_name);
 
@@ -704,7 +704,7 @@ void ConditionSelectivityEstimator::RPNElement::finalize(const ColumnEstimators 
         }
     }
 
-    if (function == FUNCTION_OR)
+    else if (function == FUNCTION_OR)
     {
         /// x IS NULL OR x IS NOT NULL is a tautology → selectivity = 1
         for (const auto & col : null_check_columns)

@@ -4,8 +4,10 @@
 #include <Common/tests/gtest_global_register.h>
 
 #include <Columns/IColumn.h>
+#include <Columns/ColumnLowCardinality.h>
 #include <Columns/ColumnNullable.h>
 #include <DataTypes/DataTypesNumber.h>
+#include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypeString.h>
 #include <IO/ReadBufferFromString.h>
@@ -336,6 +338,45 @@ TEST(Statistics, EstimateGreaterUsesNonNullRows)
     auto estimate3 = stats->estimateGreater(Field(Int32(25)));
     ASSERT_TRUE(estimate3.has_value());
     EXPECT_NEAR(*estimate3, 25.0, 2.0);
+}
+
+TEST(Statistics, MinMaxBuildLowCardinalityNullable)
+{
+    /// Regression test: StatisticsMinMax::build must subtract NULL rows for
+    /// LowCardinality(Nullable(...)) columns, just like it does for ColumnNullable.
+    auto data_type = std::make_shared<DataTypeLowCardinality>(
+        std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>()));
+
+    MutableColumnPtr col = data_type->createColumn();
+
+    for (Int32 i = 0; i < 100; ++i)
+    {
+        if (i % 10 == 0)
+            col->insert(Field()); /// NULL
+        else
+            col->insert(i);
+    }
+
+    auto stats = createTestStats({StatisticsType::NullCount, StatisticsType::MinMax}, data_type);
+    stats->build(std::move(col));
+
+    ASSERT_EQ(stats->getNumRows(), 100u);
+    ASSERT_EQ(stats->getNonNullRowCount(), 90u);
+
+    /// estimateLess(0) ≈ 0 (no non-NULL values < 0)
+    auto est_less_0 = stats->estimateLess(Field(Int32(0)));
+    ASSERT_TRUE(est_less_0.has_value());
+    EXPECT_NEAR(*est_less_0, 0.0, 1.0);
+
+    /// estimateLess(100) ≈ 90 (all 90 non-NULL values are < 100)
+    auto est_less_100 = stats->estimateLess(Field(Int32(100)));
+    ASSERT_TRUE(est_less_100.has_value());
+    EXPECT_NEAR(*est_less_100, 90.0, 1.0);
+
+    /// estimateGreater(0) ≈ 90 (all non-NULL values are > 0)
+    auto est_greater_0 = stats->estimateGreater(Field(Int32(0)));
+    ASSERT_TRUE(est_greater_0.has_value());
+    EXPECT_NEAR(*est_greater_0, 90.0, 1.0);
 }
 
 TEST(Statistics, EstimateRangeInfiniteWithoutNullUsesNonNullRows)

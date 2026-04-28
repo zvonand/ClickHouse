@@ -803,7 +803,17 @@ std::vector<ReadFromMerge::ChildPlan> ReadFromMerge::createChildrenPlans(SelectQ
                     = getModifiedQueryInfo(modified_context, table, nested_storage_snapshot, real_column_names, column_names_as_aliases, is_smallest_column_requested, aliases);
 
                 if (can_cache)
-                    query_info_cache[structure_key] = {modified_query_info, column_names_as_aliases, is_smallest_column_requested, aliases};
+                {
+                    /// Store a deep clone of the AST in the cache so that subsequent in-place
+                    /// mutation by `createPlanForTable` (e.g. `modified_select.setFinal`) on
+                    /// the first table does not leak into the cached baseline. Otherwise, later
+                    /// cache hits would clone an already-mutated AST and `FINAL` propagation
+                    /// would depend on the first table's `needRewriteQueryWithFinal` result.
+                    SelectQueryInfo cached_query_info = modified_query_info;
+                    if (cached_query_info.query)
+                        cached_query_info.query = cached_query_info.query->clone();
+                    query_info_cache[structure_key] = {std::move(cached_query_info), column_names_as_aliases, is_smallest_column_requested, aliases};
+                }
             }
 
             if (!context->getSettingsRef()[Setting::allow_experimental_analyzer])

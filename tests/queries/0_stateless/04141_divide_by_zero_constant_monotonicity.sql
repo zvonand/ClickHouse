@@ -3,8 +3,11 @@
 -- monotonic across that boundary.
 -- Previously caused LOGICAL_ERROR `Invalid binary search result in MergeTreeSetIndex` in
 -- debug builds when an `IN`/`NOT IN` expression on the primary key wraps the key in `divide`
--- with a constant zero numerator. In release builds, `MergeTreeSetIndex::checkInRange` would
--- fall back to the `{true, true}` BoolMask, missing potential index pruning.
+-- with a constant zero numerator. In release builds, `MergeTreeSetIndex::checkInRange` falls
+-- back to the `{true, true}` BoolMask via the `#ifndef NDEBUG`/`#else` branch in
+-- `src/Interpreters/Set.cpp`, so the user-visible query result and pruning effectiveness are
+-- unchanged. The `Bugfix validation (functional tests)` job runs against a release master
+-- binary and therefore cannot reproduce the original `LOGICAL_ERROR`.
 -- https://github.com/ClickHouse/ClickHouse/issues/90461
 
 DROP TABLE IF EXISTS t_divide_zero_mono;

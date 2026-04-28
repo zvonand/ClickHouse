@@ -22,7 +22,8 @@ DROP TABLE IF EXISTS file_log_mv;
 
 CREATE TABLE file_log (
     id Int64
-) ENGINE = FileLog('${logs_dir}/', 'CSV');
+) ENGINE = FileLog('${logs_dir}/', 'CSV')
+SETTINGS poll_directory_watch_events_backoff_max = 1000;
 
 CREATE TABLE table_to_store_data (
     id Int64
@@ -51,13 +52,13 @@ function count()
 function wait_for_row_count()
 {
     local threshold="$1"
-    # FileLog polls the directory using exponential backoff (initial 500ms,
-    # max 32s — see `poll_directory_watch_events_backoff_max`). Under sanitizer
-    # builds and shared CI runners the polling cycle can drift close to the
-    # 32s upper bound, so a tight 30s timeout occasionally fires before the
-    # background `StorageFileLog::threadFunc` task picks the new file up.
-    # 120s gives ~4x the worst-case backoff window. Same pattern as
-    # `02889_file_log_save_errors`.
+    # `FileLog` polls the directory using exponential backoff. The default
+    # `poll_directory_watch_events_backoff_max` is 32s, which combined with
+    # `BackgroundSchedulePool` contention under sanitizer / heavy CI load can
+    # push file-detection latency well beyond a tight 30s test timeout.
+    # The table above caps `poll_directory_watch_events_backoff_max` at 1s so
+    # worst-case detection is bounded at ~1s + scheduling delay; the 120s
+    # timeout below is a generous safety net (matching the 02889 pattern).
     local timeout=120
     local start=$EPOCHSECONDS
     while [[ $(count) -lt threshold ]]; do

@@ -61,17 +61,13 @@ public:
     AzureIteratorAsync(
         const std::string & path_prefix,
         std::shared_ptr<const AzureBlobStorage::ContainerClient> client_,
-        size_t max_list_size,
-        const std::string & container_,
-        const std::string & disk_name_)
+        size_t max_list_size)
         : IObjectStorageIteratorAsync(
             CurrentMetrics::ObjectStorageAzureThreads,
             CurrentMetrics::ObjectStorageAzureThreadsActive,
             CurrentMetrics::ObjectStorageAzureThreadsScheduled,
             ThreadName::AZURE_LIST_POOL)
         , client(client_)
-        , container(container_)
-        , disk_name(disk_name_)
     {
         options.Prefix = path_prefix;
         options.PageSizeHint = static_cast<int>(max_list_size);
@@ -91,47 +87,34 @@ private:
             ProfileEvents::increment(ProfileEvents::DiskAzureListObjects);
 
         chassert(batch.empty());
-        try
+        auto blob_list_response = client->ListBlobs(options);
+        auto blobs_list = blob_list_response.Blobs;
+        batch.reserve(blobs_list.size());
+
+        for (const auto & blob : blobs_list)
         {
-            auto blob_list_response = client->ListBlobs(options);
-            auto blobs_list = blob_list_response.Blobs;
-            batch.reserve(blobs_list.size());
-
-            for (const auto & blob : blobs_list)
-            {
-                batch.emplace_back(std::make_shared<RelativePathWithMetadata>(
-                    blob.Name,
-                    ObjectMetadata{
-                        .size_bytes = static_cast<uint64_t>(blob.BlobSize),
-                        .last_modified = Poco::Timestamp::fromEpochTime(
-                            std::chrono::duration_cast<std::chrono::seconds>(
-                                static_cast<std::chrono::system_clock::time_point>(blob.Details.LastModified).time_since_epoch()).count()),
-                        .etag = blob.Details.ETag.ToString(),
-                        .tags = {},
-                        .attributes = {},
-                    }));
-            }
-
-            if (!blob_list_response.NextPageToken.HasValue() || blob_list_response.NextPageToken.Value().empty())
-                return false;
-
-            options.ContinuationToken = blob_list_response.NextPageToken;
-            return true;
+            batch.emplace_back(std::make_shared<RelativePathWithMetadata>(
+                blob.Name,
+                ObjectMetadata{
+                    .size_bytes = static_cast<uint64_t>(blob.BlobSize),
+                    .last_modified = Poco::Timestamp::fromEpochTime(
+                        std::chrono::duration_cast<std::chrono::seconds>(
+                            static_cast<std::chrono::system_clock::time_point>(blob.Details.LastModified).time_since_epoch()).count()),
+                    .etag = blob.Details.ETag.ToString(),
+                    .tags = {},
+                    .attributes = {},
+                }));
         }
-        catch (const Azure::Storage::StorageException & e)
-        {
-            throw Exception(
-                ErrorCodes::AZURE_BLOB_STORAGE_ERROR,
-                "Failed to list objects in container '{}' with prefix '{}' on disk '{}': {} ({})",
-                container, options.Prefix.HasValue() ? options.Prefix.Value() : "", disk_name,
-                e.Message, e.ErrorCode);
-        }
+
+        if (!blob_list_response.NextPageToken.HasValue() || blob_list_response.NextPageToken.Value().empty())
+            return false;
+
+        options.ContinuationToken = blob_list_response.NextPageToken;
+        return true;
     }
 
     std::shared_ptr<const AzureBlobStorage::ContainerClient> client;
     Azure::Storage::Blobs::ListBlobsOptions options;
-    const std::string container;
-    const std::string disk_name;
 };
 
 }
@@ -181,10 +164,7 @@ bool AzureObjectStorage::exists(const StoredObject & object) const
     {
         if (e.StatusCode == Azure::Core::Http::HttpStatusCode::NotFound)
             return false;
-        throw Exception(
-            ErrorCodes::AZURE_BLOB_STORAGE_ERROR,
-            "Failed to check existence of object '{}' in container '{}' on disk '{}': {} ({})",
-            object.remote_path, object_namespace, name, e.Message, e.ErrorCode);
+        throw;
     }
 }
 
@@ -198,7 +178,7 @@ ObjectStorageIteratorPtr AzureObjectStorage::iterate(
     auto settings_ptr = settings.get();
     auto client_ptr = client.get();
 
-    return std::make_shared<AzureIteratorAsync>(path_prefix, client_ptr, max_keys ? max_keys : settings_ptr->list_object_keys_size, object_namespace, name);
+    return std::make_shared<AzureIteratorAsync>(path_prefix, client_ptr, max_keys ? max_keys : settings_ptr->list_object_keys_size);
 }
 
 void AzureObjectStorage::listObjects(const std::string & path, RelativePathsWithMetadata & children, size_t max_keys) const
@@ -212,41 +192,31 @@ void AzureObjectStorage::listObjects(const std::string & path, RelativePathsWith
     else
         options.PageSizeHint = settings.get()->list_object_keys_size;
 
-    try
+    for (auto blob_list_response = client_ptr->ListBlobs(options); blob_list_response.HasPage(); blob_list_response.MoveToNextPage())
     {
-        for (auto blob_list_response = client_ptr->ListBlobs(options); blob_list_response.HasPage(); blob_list_response.MoveToNextPage())
+        ProfileEvents::increment(ProfileEvents::AzureListObjects);
+        if (client_ptr->IsClientForDisk())
+            ProfileEvents::increment(ProfileEvents::DiskAzureListObjects);
+
+        const auto & blobs_list = blob_list_response.Blobs;
+
+        for (const auto & blob : blobs_list)
         {
-            ProfileEvents::increment(ProfileEvents::AzureListObjects);
-            if (client_ptr->IsClientForDisk())
-                ProfileEvents::increment(ProfileEvents::DiskAzureListObjects);
-
-            const auto & blobs_list = blob_list_response.Blobs;
-
-            for (const auto & blob : blobs_list)
-            {
-                children.emplace_back(std::make_shared<RelativePathWithMetadata>(
-                    blob.Name,
-                    ObjectMetadata{
-                        .size_bytes = static_cast<uint64_t>(blob.BlobSize),
-                        .last_modified = Poco::Timestamp::fromEpochTime(
-                            std::chrono::duration_cast<std::chrono::seconds>(
-                                static_cast<std::chrono::system_clock::time_point>(blob.Details.LastModified).time_since_epoch()).count()),
-                        .etag = blob.Details.ETag.ToString(),
-                        .tags = {},
-                        .attributes = {},
-                    }));
-            }
-
-            if (max_keys && children.size() >= max_keys)
-                break;
+            children.emplace_back(std::make_shared<RelativePathWithMetadata>(
+                blob.Name,
+                ObjectMetadata{
+                    .size_bytes = static_cast<uint64_t>(blob.BlobSize),
+                    .last_modified = Poco::Timestamp::fromEpochTime(
+                        std::chrono::duration_cast<std::chrono::seconds>(
+                            static_cast<std::chrono::system_clock::time_point>(blob.Details.LastModified).time_since_epoch()).count()),
+                    .etag = blob.Details.ETag.ToString(),
+                    .tags = {},
+                    .attributes = {},
+                }));
         }
-    }
-    catch (const Azure::Storage::StorageException & e)
-    {
-        throw Exception(
-            ErrorCodes::AZURE_BLOB_STORAGE_ERROR,
-            "Failed to list objects in container '{}' with prefix '{}' on disk '{}': {} ({})",
-            object_namespace, path, name, e.Message, e.ErrorCode);
+
+        if (max_keys && children.size() >= max_keys)
+            break;
     }
 }
 

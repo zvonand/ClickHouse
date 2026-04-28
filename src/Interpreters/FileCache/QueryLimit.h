@@ -46,7 +46,7 @@ public:
             size_t size,
             const CachePriorityGuard::WriteLock &);
 
-        void tryRemove(
+        void remove(
             const Key & key,
             size_t offset,
             const CachePriorityGuard::WriteLock &);

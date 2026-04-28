@@ -85,18 +85,17 @@ void FileCacheQueryLimit::QueryContext::add(
     }
 }
 
-void FileCacheQueryLimit::QueryContext::tryRemove(
+void FileCacheQueryLimit::QueryContext::remove(
     const Key & key,
     size_t offset,
     const CachePriorityGuard::WriteLock & lock)
 {
     auto record = records.find({key, offset});
     if (record == records.end())
-        return;
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "There is no {}:{} in query context", key, offset);
 
-    if (record->second->isValid(lock))
-        record->second->remove(lock);
-    records.erase(record);
+    record->second->remove(lock);
+    records.erase({key, offset});
 }
 
 IFileCachePriority::IteratorPtr FileCacheQueryLimit::QueryContext::tryGet(

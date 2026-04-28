@@ -3286,7 +3286,8 @@ public:
                 auto constant = (*left.column)[0];
                 if (accurateEquals(constant, Field(0)))
                 {
-                    /// `0 / x` is 0 for any `x` != 0, but undefined (NaN/Inf) at `x` = 0.
+                    /// `0 / x` is 0 for any `x` != 0, but undefined at `x` = 0
+                    /// (`NaN`/`Inf` for `divide`, division-by-zero exception for `intDiv`).
                     /// The function is constant (and therefore monotonic) only when the range
                     /// strictly excludes 0. Otherwise the chain is non-monotonic and the
                     /// `MergeTreeSetIndex` binary search invariant (begin <= end) can be violated.

@@ -182,7 +182,7 @@ private:
 
     /// Background refresh
     BackgroundSchedulePoolTaskHolder refresh_task;
-    const std::chrono::seconds refresh_interval_sec{0};
+    size_t refresh_interval_sec = 0;
     std::atomic_bool refresh_in_progress{false};
 };
 

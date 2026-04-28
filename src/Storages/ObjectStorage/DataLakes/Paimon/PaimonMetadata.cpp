@@ -147,11 +147,6 @@ DataLakeMetadataPtr PaimonMetadata::create(
         object_storage, configuration_ptr, global_context, std::move(persistent_components), table_client);
 }
 
-static std::chrono::seconds computeRefreshInterval(Int64 sec)
-{
-    return sec > 0 ? std::chrono::seconds(sec) : std::chrono::seconds(0);
-}
-
 PaimonMetadata::PaimonMetadata(
     ObjectStoragePtr object_storage_,
     StorageObjectStorageConfigurationPtr /*configuration_*/,
@@ -163,14 +158,15 @@ PaimonMetadata::PaimonMetadata(
     , table_client(std::move(table_client_))
     , object_storage(std::move(object_storage_))
     , log(getLogger("PaimonMetadata"))
-    , refresh_interval_sec(computeRefreshInterval(persistent_components.metadata_refresh_interval_sec))
     , refresh_in_progress(false)
 {
-    /// The settings framework accesses field values through a pointer-to-member
-    /// dereference across an inheritance chain (impl.get()->*t), which MSan cannot
-    /// track correctly, causing a false positive "use-of-uninitialized-value" for
-    /// refresh_interval_sec in the background thread. Unpoison explicitly.
-    __msan_unpoison(&refresh_interval_sec, sizeof(refresh_interval_sec));
+    /// The settings framework reads field values through a pointer-to-member
+    /// dereference across an inheritance chain (impl.get()->*t). MSan cannot
+    /// track initialization through this pattern, tainting all downstream values.
+    /// Unpoison the source value before any computation to break the taint chain.
+    Int64 interval_sec = persistent_components.metadata_refresh_interval_sec;
+    __msan_unpoison(&interval_sec, sizeof(interval_sec));
+    refresh_interval_sec = interval_sec > 0 ? static_cast<size_t>(interval_sec) : 0;
 
     /// Load initial state
     auto initial_state = loadLatestState();
@@ -493,7 +489,7 @@ void PaimonMetadata::commitSnapshot(Int64 snapshot_id)
 
 void PaimonMetadata::scheduleBackgroundRefresh()
 {
-    if (refresh_interval_sec.count() == 0)
+    if (refresh_interval_sec == 0)
         return;
 
     auto & schedule_pool = getContext()->getSchedulePool();
@@ -503,7 +499,7 @@ void PaimonMetadata::scheduleBackgroundRefresh()
         {
             runBackgroundRefresh();
         });
-    refresh_task->scheduleAfter(std::chrono::duration_cast<std::chrono::milliseconds>(refresh_interval_sec).count());
+    refresh_task->scheduleAfter(refresh_interval_sec * 1000);
 }
 
 void PaimonMetadata::runBackgroundRefresh()
@@ -515,7 +511,7 @@ void PaimonMetadata::runBackgroundRefresh()
     bool expected = false;
     if (!refresh_in_progress.compare_exchange_strong(expected, true))
     {
-        refresh_task->scheduleAfter(std::chrono::duration_cast<std::chrono::milliseconds>(refresh_interval_sec).count());
+        refresh_task->scheduleAfter(refresh_interval_sec * 1000);
         return;
     }
 
@@ -529,7 +525,7 @@ void PaimonMetadata::runBackgroundRefresh()
     }
 
     refresh_in_progress.store(false);
-    refresh_task->scheduleAfter(std::chrono::duration_cast<std::chrono::milliseconds>(refresh_interval_sec).count());
+    refresh_task->scheduleAfter(refresh_interval_sec * 1000);
 }
 
 PaimonTableStatePtr PaimonMetadata::loadStateForSnapshot(Int64 snapshot_id) const

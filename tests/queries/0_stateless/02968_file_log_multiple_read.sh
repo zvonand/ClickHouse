@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# Tags: no-parallel
+# Tag no-parallel: this test exercises the FileLog -> MV streaming path which depends on
+# `BackgroundSchedulePool` task scheduling latency. Under heavy parallel load (e.g. 50x in
+# the flaky check on amd_asan_ubsan), pool contention can push file-detection latency past
+# any reasonable timeout. Sequential execution gives consistent ~10s runtime. This matches
+# the precedent set by `02026_storage_filelog_largefile.sh` and `04031_filelog_drop_mv_no_exception.sh`.
 
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
@@ -52,13 +58,12 @@ function count()
 function wait_for_row_count()
 {
     local threshold="$1"
-    # `FileLog` polls the directory using exponential backoff. The default
-    # `poll_directory_watch_events_backoff_max` is 32s, which combined with
-    # `BackgroundSchedulePool` contention under sanitizer / heavy CI load can
-    # push file-detection latency well beyond a tight 30s test timeout.
-    # The table above caps `poll_directory_watch_events_backoff_max` at 1s so
-    # worst-case detection is bounded at ~1s + scheduling delay; the 120s
-    # timeout below is a generous safety net (matching the 02889 pattern).
+    # `FileLog` polls the directory using exponential backoff. With the
+    # `poll_directory_watch_events_backoff_max = 1000` setting on the table above
+    # the worst-case file-detection latency is bounded at ~1s + scheduling delay.
+    # The `no-parallel` tag avoids `BackgroundSchedulePool` contention from
+    # concurrent test instances, so this 120s timeout is a generous safety net
+    # (matching the timeout in the sibling `02889_file_log_save_errors` test).
     local timeout=120
     local start=$EPOCHSECONDS
     while [[ $(count) -lt threshold ]]; do

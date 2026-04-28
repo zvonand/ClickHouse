@@ -10,6 +10,8 @@
 #include <Parsers/Kusto/Utilities.h>
 #include <Parsers/ParserTablesInSelectQuery.h>
 
+#include <Poco/String.h>
+
 #include <fmt/format.h>
 
 namespace DB
@@ -25,8 +27,9 @@ bool ParserKQLJoin::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
         return false;
 
     /// Parse optional kind=<type>
+    /// KQL keywords are case-insensitive, so normalize before comparison.
     String join_kind = "innerunique"; /// default
-    String token(pos->begin, pos->end);
+    const String token = Poco::toLower(String(pos->begin, pos->end));
     if (token == "kind")
     {
         ++pos;
@@ -35,7 +38,7 @@ bool ParserKQLJoin::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
         ++pos;
         if (!isValidKQLPos(pos))
             return false;
-        join_kind = String(pos->begin, pos->end);
+        join_kind = Poco::toLower(String(pos->begin, pos->end));
         ++pos;
     }
 
@@ -96,7 +99,7 @@ bool ParserKQLJoin::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     /// Parse "on" keyword and conditions
     if (!isValidKQLPos(pos))
         return false;
-    String on_token(pos->begin, pos->end);
+    const String on_token = Poco::toLower(String(pos->begin, pos->end));
     if (on_token != "on")
         return false;
     ++pos;

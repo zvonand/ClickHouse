@@ -29,6 +29,8 @@
 #include <Parsers/ParserSelectWithUnionQuery.h>
 #include <Parsers/ParserTablesInSelectQuery.h>
 
+#include <Poco/String.h>
+
 #include <fmt/format.h>
 
 namespace DB
@@ -390,7 +392,8 @@ static bool preprocessUnionJoin(IParser::Pos & pos, ASTPtr & node, Expected & ex
             ++next;
             if (isValidKQLPos(next))
             {
-                String token(next->begin, next->end);
+                /// KQL operators are case-insensitive, so match `UNION`/`Join` etc.
+                const String token = Poco::toLower(String(next->begin, next->end));
                 if (token == "union" || token == "join")
                 {
                     found = true;
@@ -418,13 +421,14 @@ static bool preprocessUnionJoin(IParser::Pos & pos, ASTPtr & node, Expected & ex
     ++scan_pos; /// skip |
     ++scan_pos; /// skip union/join keyword
 
-    /// For join: parse kind=X
+    /// For join: parse kind=X. KQL keywords are case-insensitive.
     String join_kind;
-    if (op_type == "join" && isValidKQLPos(scan_pos) && String(scan_pos->begin, scan_pos->end) == "kind")
+    if (op_type == "join" && isValidKQLPos(scan_pos)
+        && Poco::toLower(String(scan_pos->begin, scan_pos->end)) == "kind")
     {
         ++scan_pos; /// skip kind
         ++scan_pos; /// skip =
-        join_kind = String(scan_pos->begin, scan_pos->end);
+        join_kind = Poco::toLower(String(scan_pos->begin, scan_pos->end));
         ++scan_pos; /// skip kind value
     }
 
@@ -452,9 +456,10 @@ static bool preprocessUnionJoin(IParser::Pos & pos, ASTPtr & node, Expected & ex
     String right_query(right_start->begin, right_end_pos->end);
     ++scan_pos; /// skip closing bracket
 
-    /// For join: parse "on" clause
+    /// For join: parse "on" clause. KQL keywords are case-insensitive.
     String join_on;
-    if (op_type == "join" && isValidKQLPos(scan_pos) && String(scan_pos->begin, scan_pos->end) == "on")
+    if (op_type == "join" && isValidKQLPos(scan_pos)
+        && Poco::toLower(String(scan_pos->begin, scan_pos->end)) == "on")
     {
         ++scan_pos;
         while (isValidKQLPos(scan_pos) && scan_pos->type != TokenType::PipeMark && scan_pos->type != TokenType::Semicolon)

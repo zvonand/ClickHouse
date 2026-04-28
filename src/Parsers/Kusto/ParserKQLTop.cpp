@@ -33,7 +33,8 @@ bool ParserKQLTop::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     if (!isValidKQLPos(pos))
         return false;
 
-    String by_token(pos->begin, pos->end);
+    /// KQL keywords are case-insensitive, so accept `BY`/`By`/etc.
+    const String by_token = Poco::toLower(String(pos->begin, pos->end));
     if (by_token != "by")
         return false;
     ++pos;

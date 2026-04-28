@@ -7,9 +7,9 @@ from praktika.result import Result
 
 OK_SIGN = "[ OK "
 FAIL_SIGN = "[ FAIL "
-TIMEOUT_SIGN = "[ Timeout! "
 UNKNOWN_SIGN = "[ UNKNOWN "
 SKIPPED_SIGN = "[ SKIPPED "
+NOT_FAILED_SIGN = "[ NOT_FAILED "
 HUNG_SIGN = "Found hung queries in processlist"
 SERVER_DIED_SIGN = "Server died, terminating all processes"
 SERVER_DIED_SIGN2 = "Server does not respond to health check"
@@ -27,7 +27,7 @@ RETRIES_SIGN = "Some tests were restarted"
 # can contain letters, digits, underscores, hyphens, and dots.
 TEST_RESULT_PATTERN = re.compile(
     r"^.{0,32}?"
-    r"([\w\-\.]+):\s+(\[ (?:OK|FAIL|SKIPPED|UNKNOWN|Timeout!) \])\s+([\d.]+) sec\."
+    r"([\w\-\.]+):\s+(\[ (?:OK|FAIL|SKIPPED|UNKNOWN|NOT_FAILED) \])\s+([\d.]+) sec\."
 )
 
 
@@ -97,15 +97,17 @@ class FTResultsProcessor:
                         continue
 
                     total += 1
-                    if TIMEOUT_SIGN in status_marker:
-                        failed += 1
-                        test_results.append((test_name, "Timeout", test_time, []))
-                    elif FAIL_SIGN in status_marker:
+                    if FAIL_SIGN in status_marker:
                         failed += 1
                         test_results.append((test_name, "FAIL", test_time, []))
                     elif UNKNOWN_SIGN in status_marker:
                         unknown += 1
                         test_results.append((test_name, "FAIL", test_time, []))
+                    elif NOT_FAILED_SIGN in status_marker:
+                        # Test was on a blacklist (expected to fail) but passed -
+                        # the blacklist needs updating. Surface as a failure.
+                        failed += 1
+                        test_results.append((test_name, "NOT_FAILED", test_time, []))
                     elif SKIPPED_SIGN in status_marker:
                         skipped += 1
                         test_results.append((test_name, "SKIPPED", test_time, []))
@@ -115,7 +117,7 @@ class FTResultsProcessor:
                     test_end = False
                 elif (
                     len(test_results) > 0
-                    and test_results[-1][1] in ("FAIL", "SKIPPED")
+                    and test_results[-1][1] in ("FAIL", "SKIPPED", "NOT_FAILED")
                     and not test_end
                 ):
                     test_results[-1][3].append(original_line)

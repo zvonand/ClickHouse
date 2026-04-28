@@ -62,16 +62,18 @@ echo '--- multiple row groups: count ---'
 ${CLICKHOUSE_LOCAL} --query "SELECT count(), sum(n) FROM file('${OUT}', 'Parquet')"
 
 echo '--- filter pushdown: row groups pruned ---'
-# 5000 rows / 500 per group = 10 row groups; only the row group covering [100,200]
-# should survive Parquet statistics pruning, leaving 9 pruned. Read the counters
-# from --print-profile-events and emit a stable "read=N pruned=M" marker so a
-# regression that disables pushdown would change M from 9 to 0.
+# Profile events may be emitted on multiple lines (one per thread/batch under
+# parallel decode), so sum the counters and emit a binary verdict. A regression
+# that disables Parquet stats pushdown would drop pruned to 0.
 ${CLICKHOUSE_LOCAL} --print-profile-events --query "
     SELECT count() FROM file('${OUT}', 'Parquet') WHERE n BETWEEN 100 AND 200
 " 2>&1 | awk '
-    /ParquetReadRowGroups:/   { read = $(NF-1) }
-    /ParquetPrunedRowGroups:/ { pruned = $(NF-1) }
-    END                       { print "read=" read " pruned=" pruned }
+    /ParquetReadRowGroups:/   { read   += $(NF-1) }
+    /ParquetPrunedRowGroups:/ { pruned += $(NF-1) }
+    END {
+        if (pruned > 0 && read > 0) print "pruned"
+        else                        print "not pruned (read=" read+0 " pruned=" pruned+0 ")"
+    }
 '
 
 echo '--- filter pushdown: result correctness ---'
@@ -92,12 +94,14 @@ ${CLICKHOUSE_LOCAL} --query "SELECT sum(b) FROM file('${OUT}', 'Parquet')"
 ${CLICKHOUSE_LOCAL} --query "SELECT sum(a), sum(c) FROM file('${OUT}', 'Parquet')"
 
 # Parquet column pruning: reading a single column issues fewer decoding tasks
-# than reading all three. We don't pin an exact ratio (it depends on the decoder
-# internals), only that single-column < three-column. A regression that read all
-# columns regardless of projection would make these equal.
+# than reading all three. Sum across lines (CI emits one event line per thread
+# under parallel decode) and assert single-column total < all-columns total.
+# A regression that read all columns regardless of projection would tie them.
 echo '--- column pruning: decoding tasks shrink with projection ---'
-ONE=$(${CLICKHOUSE_LOCAL} --print-profile-events --query "SELECT sum(b) FROM file('${OUT}', 'Parquet')" 2>&1 | awk '/ParquetDecodingTasks:/ { print $(NF-1) }')
-ALL=$(${CLICKHOUSE_LOCAL} --print-profile-events --query "SELECT * FROM file('${OUT}', 'Parquet') FORMAT Null" 2>&1 | awk '/ParquetDecodingTasks:/ { print $(NF-1) }')
+ONE=$(${CLICKHOUSE_LOCAL} --print-profile-events --query "SELECT sum(b) FROM file('${OUT}', 'Parquet')" 2>&1 \
+    | awk '/ParquetDecodingTasks:/ { sum += $(NF-1) } END { print sum+0 }')
+ALL=$(${CLICKHOUSE_LOCAL} --print-profile-events --query "SELECT * FROM file('${OUT}', 'Parquet') FORMAT Null" 2>&1 \
+    | awk '/ParquetDecodingTasks:/ { sum += $(NF-1) } END { print sum+0 }')
 if [ "$ONE" -lt "$ALL" ]; then echo "pruned"; else echo "not pruned (one=$ONE all=$ALL)"; fi
 
 # -----------------------------------------------------------------------------

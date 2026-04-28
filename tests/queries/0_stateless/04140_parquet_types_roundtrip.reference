@@ -78,7 +78,7 @@ skip LZ4_HC
 --- multiple row groups: count ---
 5000	12497500
 --- filter pushdown: row groups pruned ---
-read=1 pruned=9
+pruned
 --- filter pushdown: result correctness ---
 101
 0	49

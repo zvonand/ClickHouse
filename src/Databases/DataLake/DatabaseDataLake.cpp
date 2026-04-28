@@ -820,6 +820,13 @@ void DatabaseDataLake::createTable(
     while (path.ends_with('/'))
         path = path.substr(0, path.size() - 1);
 
+    if (path.empty())
+        throw Exception(
+            ErrorCodes::BAD_ARGUMENTS,
+            "`storage_endpoint` ({}) does not contain a bucket/container path; "
+            "CREATE TABLE in DataLakeCatalog requires `storage_endpoint` to include a non-empty bucket or container path.",
+            storage_endpoint);
+
     const String location = fmt::format("{}://{}/{}/{}", location_scheme, path, namespace_name, table_name);
 
     auto [metadata_content, metadata_str] = Iceberg::createEmptyMetadataFile(

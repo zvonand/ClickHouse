@@ -239,6 +239,7 @@ void PaimonStreamState::removeProcessingLock()
 {
     auto processing_lock_path = fs_keeper_path / PROCESSING_LOCK_NODE;
     keeper->tryRemove(processing_lock_path, -1);
+    LOG_DEBUG(log, "Released processing lock at {}", processing_lock_path.string());
 }
 
 }

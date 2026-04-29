@@ -96,7 +96,8 @@ public:
     std::optional<Int64> getCommittedSnapshotId() const;
 
     /// Commit snapshot after successful processing (for incremental read)
-    /// This should be called after data has been successfully written to destination
+    /// Note: in normal incremental mode, committed_snapshot is already advanced
+    /// inside iterate(). This method exists for manual overrides only.
     void commitSnapshot(Int64 snapshot_id);
 
 private:

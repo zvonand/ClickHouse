@@ -189,6 +189,7 @@ Stop the MV before dropping it to prevent background refresh from blocking DDL o
 - Incremental read requires Keeper (ZooKeeper) to be configured.
 - Incremental read requires `paimon_keeper_path` to be set and unique per table.
 - `paimon_replica_name` must be unique per replica within the same Keeper path.
+- Incremental read uses at-most-once delivery: the committed snapshot is advanced when data files are collected, before the data is actually consumed. If the query fails after file collection, the skipped snapshots will not be re-read on retry.
 - The table engine is read-only; data modification is not supported.
 - Incremental read does not handle historical data deletions from the Paimon source. If upstream Paimon data is deleted or updated, the corresponding rows already written to a ClickHouse MergeTree destination table will not be automatically removed. You must manually issue `ALTER TABLE ... DELETE` on the MergeTree table to clean up stale data.
 

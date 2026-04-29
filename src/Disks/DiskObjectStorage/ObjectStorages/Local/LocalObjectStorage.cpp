@@ -71,6 +71,11 @@ namespace
 {
 
 /// Wrapper around a read buffer that adds blob storage logging in the destructor.
+///
+/// Local reads (and HDFS) have no discrete "API call" boundary like S3 `GetObject` or
+/// Azure `Download`, so we aggregate `elapsed_microseconds` and `bytes_read` across all
+/// `nextImpl`/`readBigAt` calls and emit a single `Read` event per buffer lifetime.
+/// S3 and Azure log each request/attempt separately as time-to-first-byte instead.
 class ReadBufferFromFileWithLogging final : public ReadBufferFromFileDecorator
 {
 public:

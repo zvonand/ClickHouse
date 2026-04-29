@@ -1,7 +1,7 @@
 set (DEFAULT_LIBS "-nodefaultlibs")
 
-# Builtins are built as a regular cmake target in contrib/compiler-rt-cmake/
-# and linked via global-libs. No execute_process needed.
+# Wire compiler-rt runtimes (builtins/sanitizers/XRay) into the link flags.
+include (cmake/compiler_rt_link.cmake)
 
 set (DEFAULT_LIBS "${DEFAULT_LIBS} -lc -lm -lrt -lpthread")
 

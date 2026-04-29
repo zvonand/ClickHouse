@@ -3,57 +3,8 @@
 
 set (DEFAULT_LIBS "-nodefaultlibs")
 
-# All compiler-rt runtimes (builtins, sanitizers, XRay) are built as regular
-# cmake targets in contrib/compiler-rt-cmake/. Their .a files are linked here
-# with --whole-archive so compiler-generated calls always resolve.
-#
-# We pass the .a paths via CMAKE_EXE_LINKER_FLAGS rather than via cmake target
-# names because $<LINK_LIBRARY:WHOLE_ARCHIVE,...> doesn't survive the
-# $<TARGET_PROPERTY:global-libs,INTERFACE_LINK_LIBRARIES> indirection used in
-# global-group (see CMakeLists.txt around line 437). The build-order
-# dependency on the compiler-rt targets is established in
-# contrib/compiler-rt-cmake/CMakeLists.txt by adding clang_rt_builtins to
-# global-libs.
-set (COMPILER_RT_DIR "${CMAKE_BINARY_DIR}/contrib/compiler-rt-cmake")
-set (BUILTINS_LIBRARY "${COMPILER_RT_DIR}/libclang_rt_builtins.a")
-
-set (SANITIZER_RUNTIMES "")
-if (SANITIZE STREQUAL "address" OR SANITIZE STREQUAL "address,undefined")
-    # When ASan and UBSan are combined, the ASan runtime covers UBSan too.
-    # ubsan_standalone must NOT be added here — it shares sanitizer_common
-    # symbols with asan and causes duplicate symbol errors.
-    set (SANITIZER_RUNTIMES
-        "${COMPILER_RT_DIR}/libclang_rt_asan_static.a"
-        "${COMPILER_RT_DIR}/libclang_rt_asan.a"
-        "${COMPILER_RT_DIR}/libclang_rt_asan_cxx.a"
-    )
-elseif (SANITIZE STREQUAL "memory")
-    set (SANITIZER_RUNTIMES
-        "${COMPILER_RT_DIR}/libclang_rt_msan.a"
-        "${COMPILER_RT_DIR}/libclang_rt_msan_cxx.a"
-    )
-elseif (SANITIZE STREQUAL "thread")
-    set (SANITIZER_RUNTIMES
-        "${COMPILER_RT_DIR}/libclang_rt_tsan.a"
-        "${COMPILER_RT_DIR}/libclang_rt_tsan_cxx.a"
-    )
-elseif (SANITIZE STREQUAL "undefined")
-    set (SANITIZER_RUNTIMES
-        "${COMPILER_RT_DIR}/libclang_rt_ubsan_standalone.a"
-        "${COMPILER_RT_DIR}/libclang_rt_ubsan_standalone_cxx.a"
-    )
-endif()
-if (SANITIZE)
-    # Tell clang not to inject its own (host-system) sanitizer runtime — we provide ours.
-    list (APPEND SANITIZER_RUNTIMES "-fno-sanitize-link-runtime")
-endif()
-if (ENABLE_XRAY)
-    list (APPEND SANITIZER_RUNTIMES
-        "-fno-xray-link-deps"
-        "${COMPILER_RT_DIR}/libclang_rt_xray.a"
-    )
-endif()
-string (REPLACE ";" " " SANITIZER_RUNTIMES "${SANITIZER_RUNTIMES}")
+# Wire compiler-rt runtimes (builtins/sanitizers/XRay) into the link flags.
+include (cmake/compiler_rt_link.cmake)
 
 option (ENABLE_LLVM_LIBC_MATH "Use math from llvm-libc instead of glibc" ON)
 if (NOT (ARCH_AMD64 OR ARCH_AARCH64))
@@ -89,18 +40,7 @@ else ()
 endif ()
 
 message(STATUS "Default libraries: ${DEFAULT_LIBS}")
-message(STATUS "Builtins library: ${BUILTINS_LIBRARY}")
-if (SANITIZER_RUNTIMES)
-    message(STATUS "Sanitizer/XRay runtimes: ${SANITIZER_RUNTIMES}")
-endif()
 
-# Link all compiler-rt runtimes with --whole-archive so the linker keeps every
-# object — compiler-generated calls (builtins, sanitizer interceptors, XRay
-# trampolines) may not be referenced by any object file directly.
-# global-libs already adds the cmake targets for build-order dependency.
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--whole-archive ${BUILTINS_LIBRARY} ${SANITIZER_RUNTIMES} -Wl,--no-whole-archive")
-
-# Other libraries go last
 set(CMAKE_CXX_STANDARD_LIBRARIES ${DEFAULT_LIBS})
 set(CMAKE_C_STANDARD_LIBRARIES ${DEFAULT_LIBS})
 

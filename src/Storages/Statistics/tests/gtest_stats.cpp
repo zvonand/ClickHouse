@@ -338,8 +338,8 @@ TEST(Statistics, NonNullRowCountSemantics)
         stats->build(std::move(col));
         ASSERT_EQ(stats->getNumRows(), 100u);
         ASSERT_EQ(stats->getNonNullRowCount(), 50u);
-        EXPECT_NEAR(*stats->estimateGreater(Field(Int32(0))),  50.0, 1.0);
-        EXPECT_NEAR(*stats->estimateGreater(Field(Int32(50))),  0.0, 1.0);
+        EXPECT_NEAR(*stats->estimateGreater(Field(Int32(0))), 50.0, 1.0);
+        EXPECT_NEAR(*stats->estimateGreater(Field(Int32(50))), 0.0, 1.0);
         EXPECT_NEAR(*stats->estimateGreater(Field(Int32(25))), 25.0, 2.0);
     }
 

@@ -56,10 +56,7 @@ public:
             if constexpr (std::is_same_v<T, U>)
             {
                 if constexpr (std::is_floating_point_v<T>)
-                {
-                    static constexpr int nan_direction_hint = 1;
-                    return FloatCompareHelper<T>::equals(l, r, nan_direction_hint);
-                }
+                    return accurate::equalsOp(l, r);
                 else
                     return l == r;
             }

@@ -4619,18 +4619,11 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
              || system_query->type == Type::DROP_CATALOG_REPLICA)
             && fuzz_rand() % 5 == 0)
         {
-            const uint32_t choice = fuzz_rand() % 3;
+            const uint32_t choice = fuzz_rand() % 2;
             if (choice == 0)
                 system_query->is_drop_whole_replica = !system_query->is_drop_whole_replica;
-            else if (choice == 1)
-                system_query->with_tables = !system_query->with_tables;
             else
-            {
-                if (system_query->shard.empty())
-                    system_query->shard = "shard_" + std::to_string(fuzz_rand() % 4);
-                else
-                    system_query->shard.clear();
-            }
+                system_query->with_tables = !system_query->with_tables;
         }
         fuzz(system_query->children);
     }
@@ -4642,13 +4635,46 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             static const TTLMode all_modes[] = {TTLMode::DELETE, TTLMode::MOVE, TTLMode::GROUP_BY, TTLMode::RECOMPRESS};
             ttl_elem->mode = all_modes[fuzz_rand() % std::size(all_modes)];
 
-            /// MOVE requires a destination; toggle between DISK and VOLUME.
+            /// Clear all mode-specific fields so no stale data from the old mode remains.
+            ttl_elem->if_exists = false;
+            ttl_elem->group_by_key.clear();
+            ttl_elem->group_by_assignments.clear();
+            ttl_elem->recompression_codec.reset();
+
             if (ttl_elem->mode == TTLMode::MOVE)
+            {
                 ttl_elem->destination_type = (fuzz_rand() % 2 == 0) ? DataDestinationType::DISK : DataDestinationType::VOLUME;
+            }
+            else if (ttl_elem->mode == TTLMode::RECOMPRESS)
+            {
+                ttl_elem->recompression_codec = makeASTFunction("CODEC", makeASTFunction("LZ4"));
+            }
         }
-        /// Toggle IF EXISTS on MOVE rules.
-        if (ttl_elem->mode == TTLMode::MOVE && fuzz_rand() % 10 == 0)
-            ttl_elem->if_exists = !ttl_elem->if_exists;
+        if (ttl_elem->mode == TTLMode::MOVE)
+        {
+            if (fuzz_rand() % 10 == 0)
+                ttl_elem->destination_type = (fuzz_rand() % 2 == 0) ? DataDestinationType::DISK : DataDestinationType::VOLUME;
+            /// Toggle IF EXISTS on MOVE rules.
+            if (fuzz_rand() % 10 == 0)
+                ttl_elem->if_exists = !ttl_elem->if_exists;
+        }
+        else if (ttl_elem->mode == TTLMode::GROUP_BY)
+        {
+            if (ttl_elem->group_by_key.empty())
+            {
+                /// GROUP_BY requires at least one key; seed with the TTL expression.
+                ttl_elem->group_by_key.push_back(ttl_elem->ttl()->clone());
+            }
+            fuzz(ttl_elem->group_by_key);
+            fuzz(ttl_elem->group_by_assignments);
+        }
+        else if (ttl_elem->mode == TTLMode::RECOMPRESS && fuzz_rand() % 10 == 0)
+        {
+            /// RECOMPRESS requires a codec; synthesize CODEC(LZ4) and immediately randomize it.
+            ttl_elem->recompression_codec.reset();
+            ttl_elem->recompression_codec = makeASTFunction("CODEC", makeASTFunction("LZ4"));
+            fuzzCodecFunction(*ttl_elem->recompression_codec->as<ASTFunction>());
+        }
         fuzz(ttl_elem->children);
     }
     else if (auto * stats_decl = typeid_cast<ASTStatisticsDeclaration *>(ast.get()))

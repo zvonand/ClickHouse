@@ -30,6 +30,15 @@ if (NOT IS_DIRECTORY "${BUILTINS_SOURCE_DIR}")
     return()
 endif()
 
+# Only Linux and FreeBSD wire our in-tree compiler-rt into the link.
+# SunOS uses -lgcc_s (see cmake/sunos/default_libs.cmake), Darwin relies on
+# Apple's bundled compiler-rt. Building our targets unconditionally would
+# create unused archives on those platforms — and linking them via global-libs
+# would risk duplicate-runtime conflicts.
+if (NOT (OS_LINUX OR OS_FREEBSD))
+    return()
+endif()
+
 #
 # Reset inherited compiler flags so the compiler-rt sources get a clean,
 # Release-style baseline. The runtime cannot inherit:

@@ -155,6 +155,15 @@ elseif (ARCH_LOONGARCH64)
         ${BUILTINS_GENERIC_TF_SOURCES}
         loongarch/fp_mode.c
     )
+elseif (ARCH_E2K)
+    # MCST Elbrus 2000 — no architecture-specific builtins in upstream
+    # compiler-rt, so we use the generic set (this matches the previous
+    # external-cmake build, which used GENERIC_SOURCES + GENERIC_TF_SOURCES
+    # via the e2k-linux-gnu target triple).
+    set(BUILTINS_ARCH_SOURCES
+        ${BUILTINS_GENERIC_SOURCES}
+        ${BUILTINS_GENERIC_TF_SOURCES}
+    )
 else()
     message(FATAL_ERROR "Unsupported architecture for compiler-rt builtins")
 endif()
@@ -506,13 +515,20 @@ if (SANITIZE STREQUAL "thread")
         list(APPEND _tsan_combined_full "${UBSAN_DIR}/${s}")
     endforeach()
 
-    add_library(clang_rt_tsan STATIC ${_tsan_combined_full})
-    target_include_directories(clang_rt_tsan PRIVATE ${SANITIZER_INCLUDE_DIRS})
     # TSan-specific flag from TSAN_RTL_CFLAGS in
     # contrib/llvm-project/compiler-rt/lib/tsan/rtl/CMakeLists.txt:
     #   * -msse4.2 — gated by COMPILER_RT_HAS_MSSE4_2_FLAG; tsan_md5 / hash
-    #                routines use SSE 4.2 intrinsics directly.
-    target_compile_options(clang_rt_tsan PRIVATE ${SANITIZER_COMMON_FLAGS} -msse4.2)
+    #                routines use SSE 4.2 intrinsics directly. Only meaningful
+    #                on x86_64 — the flag is rejected by the compiler on other
+    #                architectures, so gate it explicitly.
+    set(_tsan_extra_flags "")
+    if (ARCH_AMD64)
+        list(APPEND _tsan_extra_flags -msse4.2)
+    endif()
+
+    add_library(clang_rt_tsan STATIC ${_tsan_combined_full})
+    target_include_directories(clang_rt_tsan PRIVATE ${SANITIZER_INCLUDE_DIRS})
+    target_compile_options(clang_rt_tsan PRIVATE ${SANITIZER_COMMON_FLAGS} ${_tsan_extra_flags})
     target_compile_definitions(clang_rt_tsan PRIVATE ${SANITIZER_COMMON_DEFS})
     set_target_properties(clang_rt_tsan PROPERTIES
         ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
@@ -520,7 +536,7 @@ if (SANITIZE STREQUAL "thread")
 
     add_library(clang_rt_tsan_cxx STATIC "${TSAN_DIR}/${TSAN_CXX_SOURCES}")
     target_include_directories(clang_rt_tsan_cxx PRIVATE ${SANITIZER_INCLUDE_DIRS})
-    target_compile_options(clang_rt_tsan_cxx PRIVATE ${SANITIZER_COMMON_FLAGS} -msse4.2)
+    target_compile_options(clang_rt_tsan_cxx PRIVATE ${SANITIZER_COMMON_FLAGS} ${_tsan_extra_flags})
     set_target_properties(clang_rt_tsan_cxx PROPERTIES
         ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     _register_compiler_rt_target(clang_rt_tsan_cxx)

@@ -1058,6 +1058,8 @@ KeyMetadata::iterator FileCache::addFileSegment(
 bool FileCache::tryIncreasePriority(FileSegment & file_segment)
 {
     std::shared_lock lock(dynamic_resize_lock, std::try_to_lock);
+    /// Skip priority increase if cache resize is currently in progress.
+    /// We cannot do queue moves during dynamic resize.
     if (!lock.owns_lock())
         return false;
     return main_priority->tryIncreasePriority(
@@ -1078,6 +1080,8 @@ bool FileCache::tryReserve(
 
     assertInitialized();
 
+    /// Skip space reservation if dynamic cache resize is currently in progress.
+    /// We cannot do both at the same time.
     std::shared_lock resize_shared_lock(dynamic_resize_lock, std::try_to_lock);
     if (!resize_shared_lock.owns_lock())
     {

@@ -6,7 +6,7 @@ import os
 cluster = ClickHouseCluster(__file__)
 instance = cluster.add_instance(
     "instance",
-    main_configs=["configs/kafka.xml", "configs/named_collection.xml"],
+    main_configs=["configs/kafka.xml", "configs/named_collection.xml", "configs/placement.xml"],
     user_configs=["configs/users.xml"],
     with_kafka=True,
     with_minio=True,  # needed for resolver image only
@@ -16,7 +16,6 @@ instance = cluster.add_instance(
     },
     clickhouse_path_dir="clickhouse_path",
 )
-
 
 # Runs custom python-based S3 endpoint.
 def run_endpoint(cluster):
@@ -54,6 +53,81 @@ def run_endpoint(cluster):
         else:
             break
     logging.info("S3 endpoint started")
+
+
+def produce_test_messages(kafka_cluster, topic_name):
+    k.kafka_produce(
+        kafka_cluster,
+        topic_name,
+        [
+            '{"t": 123, "e": {"x": "woof"} }',
+            '{"t": 123, "e": {"x": "woof"} }',
+            '{"t": 124, "e": {"x": "test"} }',
+        ],
+    )
+
+
+def create_kafka_mv(create_query_generator, kafka_table, topic_name, autodetect_facility):
+    instance.query(
+        f"""
+        CREATE TABLE test.persistent_{kafka_table} (
+            time UInt64,
+            some_string String
+        )
+        ENGINE = MergeTree()
+        ORDER BY time;
+
+        {create_query_generator(
+            kafka_table,
+            "t UInt64, `e.x` String",
+            brokers='kafka1:19092',
+            topic_list=topic_name,
+            consumer_group=topic_name,
+            format='JSONEachRow',
+            settings={
+                'kafka_autodetect_client_rack': autodetect_facility,
+                'input_format_import_nested_json': 1,
+            },
+        )};
+
+        CREATE MATERIALIZED VIEW test.persistent_{kafka_table}_mv TO test.persistent_{kafka_table} AS
+        SELECT
+            `t` AS `time`,
+            `e.x` AS `some_string`
+        FROM test.{kafka_table};
+    """
+    )
+
+
+def wait_for_messages(kafka_table):
+    instance.query_with_retry(
+        f"SELECT count() FROM test.persistent_{kafka_table}",
+        retry_count=30,
+        sleep_time=1,
+        check_callback=lambda x: int(x) >= 3,
+    )
+
+
+def assert_expected_messages(kafka_table):
+    result = instance.query(
+        f"SELECT * FROM test.persistent_{kafka_table} ORDER BY time"
+    )
+
+    expected = """\
+123	woof
+123	woof
+124	test
+"""
+    assert TSV(result) == TSV(expected)
+
+
+def drop_kafka_mv(kafka_table):
+    instance.query(
+        f"""
+        DROP TABLE test.persistent_{kafka_table};
+        DROP TABLE test.persistent_{kafka_table}_mv;
+    """
+    )
 
 
 # Fixtures
@@ -111,54 +185,61 @@ def test_kafka_zone_awareness(kafka_cluster, create_query_generator):
     topname = "zone_awareness"
     instance.rotate_logs()
 
-    # Check that matview does respect Kafka SETTINGS
-    k.kafka_produce(
-        kafka_cluster,
-        topname,
-        [
-            '{"t": 123, "e": {"x": "woof"} }',
-            '{"t": 123, "e": {"x": "woof"} }',
-            '{"t": 124, "e": {"x": "test"} }',
-        ],
-    )
-
-    instance.query(
-        f"""
-        CREATE TABLE test.persistent_{kafka_table} (
-            time UInt64,
-            some_string String
-        )
-        ENGINE = MergeTree()
-        ORDER BY time;
-
-        {create_query_generator(kafka_table, "t UInt64, `e.x` String", brokers='kafka1:19092', topic_list=topname, consumer_group=topname, format='JSONEachRow', settings={'kafka_autodetect_client_rack':'AWS_ZONE_ID', 'input_format_import_nested_json':1})};
-
-        CREATE MATERIALIZED VIEW test.persistent_{kafka_table}_mv TO test.persistent_{kafka_table} AS
-        SELECT
-            `t` AS `time`,
-            `e.x` AS `some_string`
-        FROM test.{kafka_table};
-    """
-    )
-
-    while int(instance.query(f"SELECT count() FROM test.persistent_{kafka_table}")) < 3:
-        time.sleep(1)
-
-    result = instance.query(
-        f"SELECT * FROM test.persistent_{kafka_table} ORDER BY time"
-    )
-
-    instance.query(
-        f"""
-        DROP TABLE test.persistent_{kafka_table};
-        DROP TABLE test.persistent_{kafka_table}_mv;
-    """
-    )
-
-    expected = """\
-123	woof
-123	woof
-124	test
-"""
-    assert TSV(result) == TSV(expected)
+    produce_test_messages(kafka_cluster, topname)
+    create_kafka_mv(create_query_generator, kafka_table, topname, "AWS_ZONE_ID")
+    wait_for_messages(kafka_table)
+    assert_expected_messages(kafka_table)
+    drop_kafka_mv(kafka_table)
     assert instance.contains_in_log("client.rack set to euc1-az2")
+
+
+@pytest.mark.parametrize(
+    ("autodetect_facility", "expected_rack", "topic_name"),
+    [
+        ("AUTO", "euc1-az2", "zone_awareness_auto"),
+        ("CLICKHOUSE", "clickhouse-test-az", "zone_awareness_clickhouse"),
+    ],
+)
+@pytest.mark.parametrize(
+    "create_query_generator",
+    [
+        (k.generate_old_create_table_query),
+        (k.generate_new_create_table_query),
+    ],
+)
+def test_kafka_zone_awareness_additional_providers(
+    kafka_cluster, create_query_generator, autodetect_facility, expected_rack, topic_name
+):
+    suffix = k.random_string(6)
+    kafka_table = f"kafka_{suffix}"
+    instance.rotate_logs()
+
+    produce_test_messages(kafka_cluster, topic_name)
+    create_kafka_mv(create_query_generator, kafka_table, topic_name, autodetect_facility)
+    wait_for_messages(kafka_table)
+    assert_expected_messages(kafka_table)
+    drop_kafka_mv(kafka_table)
+
+    assert instance.contains_in_log(f"client.rack set to {expected_rack}")
+
+
+@pytest.mark.parametrize(
+    "create_query_generator",
+    [
+        (k.generate_old_create_table_query),
+        (k.generate_new_create_table_query),
+    ],
+)
+def test_kafka_zone_awareness_unknown_facility_logs_error(kafka_cluster, create_query_generator):
+    suffix = k.random_string(6)
+    kafka_table = f"kafka_{suffix}"
+    topname = f"zone_awareness_unknown_{suffix}"
+    instance.rotate_logs()
+
+    produce_test_messages(kafka_cluster, topname)
+    create_kafka_mv(create_query_generator, kafka_table, topname, "UNKNOWN_ZONE")
+    wait_for_messages(kafka_table)
+    assert_expected_messages(kafka_table)
+    assert instance.wait_for_log_line("Unknown kafka_autodetect_client_rack facility.")
+    assert instance.grep_in_log(f"{kafka_table}.*client.rack set to").strip() == ""
+    drop_kafka_mv(kafka_table)

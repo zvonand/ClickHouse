@@ -1,4 +1,4 @@
-from bottle import request, route, run, response, HTTPError
+from bottle import route, run
 
 ### AWS zone API mock
 
@@ -10,8 +10,17 @@ def api_token():
 
 @route("/latest/meta-data/placement/availability-zone-id")
 def placement_availability_zone_id():
-    # raise HTTPError(403, "Permission Denied")
     return "euc1-az2"
+
+
+@route("/latest/meta-data/placement/availability-zone")
+def placement_availability_zone():
+    return "eu-central-1a"
+
+
+@route("/computeMetadata/v1/instance/zone")
+def gcp_zone():
+    return "projects/123456789/zones/europe-central2-a"
 
 
 @route("/ping")

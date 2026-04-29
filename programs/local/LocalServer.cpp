@@ -1180,8 +1180,12 @@ void LocalServer::processConfig()
     /// Default `clickhouse-local` invocations have no system log sections in the config, and skipping
     /// initialization avoids a TSan-visible race between background pool task logging and `Context`
     /// teardown that would otherwise be triggered for short-lived processes.
+    /// Also skip in `--only-system-tables` mode, which is intended for reading existing persisted
+    /// system tables; spinning up the loggers there is unnecessary and can race with shutdown.
     /// This must happen after the system database is attached.
-    if (!getClientConfiguration().has("no-system-tables") && hasAnySystemLogConfigured(config()))
+    if (!getClientConfiguration().has("no-system-tables")
+        && !getClientConfiguration().has("only-system-tables")
+        && hasAnySystemLogConfigured(config()))
         global_context->initializeSystemLogs();
 
     std::string default_database = getClientConfiguration().getString("database", server_default_database);

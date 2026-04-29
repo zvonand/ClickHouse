@@ -323,7 +323,7 @@ SET apply_prewhere_after_final = 0;
 DROP TABLE tab_nested_and_pw;
 
 SELECT '';
-SELECT '= row policy on non-SK column + PREWHERE on SK column: only row policy should be deferred =';
+SELECT '= row policy on non-SK column + PREWHERE on SK column: both must be deferred =';
 
 DROP TABLE IF EXISTS tab_sk_prewhere;
 DROP ROW POLICY IF EXISTS pol_sk_pw ON tab_sk_prewhere;
@@ -334,21 +334,79 @@ ENGINE = ReplacingMergeTree(version) ORDER BY x;
 INSERT INTO tab_sk_prewhere VALUES (1, 'aaa', 0, 1), (2, 'bbb', 0, 1), (3, 'ccc', 1, 1);
 INSERT INTO tab_sk_prewhere VALUES (1, 'ddd', 1, 2), (2, 'eee', 0, 2);
 
--- row policy on deleted (non-SK) must be deferred
--- PREWHERE on x (SK column) should NOT be deferred
 CREATE ROW POLICY pol_sk_pw ON tab_sk_prewhere USING deleted = 0 TO ALL;
 
 SET apply_row_policy_after_final = 1;
 
 SELECT '--- data correctness: PREWHERE x = 2 with row policy deleted = 0';
--- PREWHERE x=2 keeps only x=2 rows (applied before FINAL, safe because SK-only)
--- FINAL on x=2: (2,'bbb',0,1) vs (2,'eee',0,2) -> winner (2,'eee',0,2)
--- Row policy deleted=0: (2,'eee',0,2) passes
+-- After FINAL: (1,'ddd',1,2), (2,'eee',0,2), (3,'ccc',1,1)
+-- Row policy deleted=0: (2,'eee',0,2)
+-- PREWHERE x=2:        (2,'eee',0,2)
 SELECT * FROM tab_sk_prewhere FINAL PREWHERE x = 2 ORDER BY x;
 
-SELECT '--- EXPLAIN: only row policy deferred, not prewhere';
+SELECT '--- EXPLAIN: both row policy and PREWHERE deferred';
 SELECT explain FROM (EXPLAIN actions=1 SELECT * FROM tab_sk_prewhere FINAL PREWHERE x = 2 ORDER BY x) WHERE explain LIKE '%Deferred%' SETTINGS enable_analyzer=1;
 
 DROP ROW POLICY pol_sk_pw ON tab_sk_prewhere;
 SET apply_row_policy_after_final = 0;
 DROP TABLE tab_sk_prewhere;
+
+SELECT '';
+SELECT '= non-deterministic row policy that structurally only uses SK columns must remain deferred =';
+
+DROP TABLE IF EXISTS tab_nondet_policy;
+DROP ROW POLICY IF EXISTS pol_nondet ON tab_nondet_policy;
+
+CREATE TABLE tab_nondet_policy (x UInt32, y String, version UInt32)
+ENGINE = ReplacingMergeTree(version) ORDER BY x;
+
+INSERT INTO tab_nondet_policy VALUES (1, 'aaa', 1), (2, 'bbb', 1);
+
+-- Predicate references only sorting-key column `x` but contains `rand`.
+-- Two evaluations on the same row can disagree, so the optimization must NOT fire.
+CREATE ROW POLICY pol_nondet ON tab_nondet_policy USING (rand() % (x + 1)) = 0 TO ALL;
+
+SET apply_row_policy_after_final = 1;
+
+SELECT '--- non-deterministic row policy stays deferred (count of "Deferred row level filter" lines)';
+SELECT count()
+FROM (EXPLAIN actions = 1 SELECT * FROM tab_nondet_policy FINAL ORDER BY x)
+WHERE explain LIKE '%Deferred row level filter%'
+SETTINGS enable_analyzer = 1;
+
+DROP ROW POLICY pol_nondet ON tab_nondet_policy;
+SET apply_row_policy_after_final = 0;
+DROP TABLE tab_nondet_policy;
+
+SELECT '';
+SELECT '= row policy over SK column without PREWHERE: row policy itself should not be deferred =';
+
+DROP TABLE IF EXISTS tab_sk_no_pw;
+DROP ROW POLICY IF EXISTS pol_sk_no_pw ON tab_sk_no_pw;
+
+CREATE TABLE tab_sk_no_pw (x UInt32, y String, version UInt32)
+ENGINE = ReplacingMergeTree(version) ORDER BY x;
+
+INSERT INTO tab_sk_no_pw VALUES (1, 'aaa', 1), (2, 'bbb', 1), (3, 'ccc', 1);
+INSERT INTO tab_sk_no_pw VALUES (1, 'ddd', 2), (2, 'eee', 2);
+
+-- Row policy depends only on SK column `x` and is deterministic, so it is safe
+-- to apply before FINAL even when there is no PREWHERE in the query.
+CREATE ROW POLICY pol_sk_no_pw ON tab_sk_no_pw USING x > 1 TO ALL;
+
+SET apply_row_policy_after_final = 1;
+
+SELECT '--- data correctness';
+-- FINAL groups: (1, 'ddd', 2), (2, 'eee', 2), (3, 'ccc', 1)
+-- row policy x > 1 keeps:    (2, 'eee', 2), (3, 'ccc', 1)
+SELECT * FROM tab_sk_no_pw FINAL ORDER BY x;
+
+SELECT '--- no Deferred filters expected (count of any "Deferred" lines)';
+SELECT count()
+FROM (EXPLAIN actions = 1 SELECT * FROM tab_sk_no_pw FINAL ORDER BY x)
+WHERE explain LIKE '%Deferred%'
+SETTINGS enable_analyzer = 1;
+
+DROP ROW POLICY pol_sk_no_pw ON tab_sk_no_pw;
+SET apply_row_policy_after_final = 0;
+DROP TABLE tab_sk_no_pw;

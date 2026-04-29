@@ -376,6 +376,18 @@ void optimizeTreeSecondPass(
         stack.pop_back();
     }
 
+    /// If some projection was used query plan was rewritten using Union for cases where
+    /// not every part has this projection. In this case read-in-order optimization can still be valuable.
+    traverseQueryPlan(stack, root,
+        [&](auto & frame_node)
+        {
+            if (optimization_settings.read_in_order)
+                optimizeReadInOrder(frame_node, nodes, optimization_settings);
+
+            if (optimization_settings.distinct_in_order)
+                optimizeDistinctInOrder(frame_node, nodes, optimization_settings);
+        });
+
     /// Find ReadFromLocalParallelReplicaStep and replace with optimized local plan.
     /// Place it after projection optimization to avoid executing projection optimization twice in the local plan,
     /// Which would cause an exception when force_use_projection is enabled.

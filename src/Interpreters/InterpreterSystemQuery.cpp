@@ -342,7 +342,16 @@ BlockIO InterpreterSystemQuery::execute()
     }
     else if (query.table)
     {
-        table_id = getContext()->resolveStorageID(StorageID(query.getDatabase(), query.getTable()), Context::ResolveOrdinary);
+        StorageID id_in_query(query.getDatabase(), query.getTable());
+        /// `IF EXISTS` (currently parsed for `SYSTEM SYNC REPLICA`) must suppress
+        /// `UNKNOWN_DATABASE` in addition to `UNKNOWN_TABLE`. Plain `resolveStorageID`
+        /// throws on a missing database before the per-handler `if_exists` check is
+        /// reached, so use `tryResolveStorageID` here when `if_exists` is set.
+        /// The handler still validates table existence via the catalog.
+        if (query.if_exists)
+            table_id = getContext()->tryResolveStorageID(id_in_query, Context::ResolveOrdinary);
+        else
+            table_id = getContext()->resolveStorageID(id_in_query, Context::ResolveOrdinary);
     }
 
 

@@ -25,7 +25,7 @@ public:
     void describePipeline(FormatSettings & settings) const override;
 
     size_t getMaxThreads() const { return max_threads; }
-    bool isSqlUnion() const { return is_sql_union; }
+    bool isSQLUnion() const { return is_sql_union; }
 
     void serialize(Serialization & ctx) const override;
     bool isSerializable() const override { return true; }

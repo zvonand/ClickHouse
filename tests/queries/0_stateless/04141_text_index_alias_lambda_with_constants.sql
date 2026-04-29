@@ -1,0 +1,59 @@
+-- Regression test: text index on an ALIAS column whose expression contains a
+-- lambda with captured constants must be usable in queries.
+--
+-- The lambda body materializes captured constants as a constant `ColumnFunction`
+-- (e.g. `arrayMap((k, v) -> concat(k, '=', v), ...)` captures `'='`). The new
+-- analyzer's column name for that constant carries an `_String` suffix and the
+-- whole lambda is rendered as `k String, v String -> ...`, while the index
+-- `sample_block` (built via the old analyzer) uses the AST form
+-- `lambda(tuple(k, v), ...)` with bare literals. Without the fix
+-- `header.has(...)` failed and the index was not used.
+
+DROP TABLE IF EXISTS user_favorites;
+
+CREATE TABLE user_favorites
+(
+    user_id UInt64,
+    colors String,
+    color_map Map(String, String),
+    colors_text Array(String) ALIAS splitByChar(',', colors),
+    colors_kv Array(String) ALIAS arrayMap((k, v) -> concat(k, '=', v), mapKeys(color_map), mapValues(color_map)),
+    INDEX idx_colors_text colors_text TYPE text(tokenizer = 'array') GRANULARITY 100000000,
+    INDEX idx_colors_kv_text colors_kv TYPE text(tokenizer = 'array') GRANULARITY 100000000
+)
+ENGINE = MergeTree
+ORDER BY user_id;
+
+INSERT INTO user_favorites VALUES (1, 'favorite=red,second=blue', {'favorite': 'red', 'second': 'blue'});
+INSERT INTO user_favorites VALUES (2, 'favorite=green,favorite=blue', {'favorite': 'green', 'second': 'blue'});
+
+-- The simple alias works (no lambda, no constants captured).
+SELECT 'splitByChar', user_id FROM user_favorites WHERE has(colors_text, 'favorite=red')
+SETTINGS force_data_skipping_indices = 'idx_colors_text';
+
+-- The arrayMap alias used to be broken because of the captured `'='` constant.
+SELECT 'arrayMap', user_id FROM user_favorites WHERE has(colors_kv, 'favorite=red')
+SETTINGS force_data_skipping_indices = 'idx_colors_kv_text';
+
+DROP TABLE user_favorites;
+
+-- Minimal reproducer: a lambda body that captures a constant breaks index matching
+-- whenever the lambda is folded into a constant `ColumnFunction`.
+DROP TABLE IF EXISTS t_arr;
+
+CREATE TABLE t_arr
+(
+    id UInt64,
+    arr Array(String),
+    arr_prefixed Array(String) ALIAS arrayMap(s -> concat('-', s), arr),
+    INDEX idx_prefixed arr_prefixed TYPE text(tokenizer = 'array') GRANULARITY 100000000
+)
+ENGINE = MergeTree
+ORDER BY id;
+
+INSERT INTO t_arr VALUES (1, ['hello', 'world']);
+
+SELECT 'concat-prefix', id FROM t_arr WHERE has(arr_prefixed, '-hello')
+SETTINGS force_data_skipping_indices = 'idx_prefixed';
+
+DROP TABLE t_arr;

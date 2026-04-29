@@ -2519,7 +2519,8 @@ async function loadTables(server_address, user, password, database, container) {
                 query_area.value = value;
                 query_area.dispatchEvent(new Event('input'));
             }
-            document.body.scrollTo(0, 0);
+            /// #main is the scroll container (overflow: auto), so scroll it to bring the query area into view.
+            document.getElementById('main').scrollTo(0, 0);
             e.stopPropagation();
         }
 

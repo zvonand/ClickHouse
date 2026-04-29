@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <fmt/format.h>
+
 #include <Common/tests/gtest_global_context.h>
 #include <Common/tests/gtest_global_register.h>
 
@@ -69,6 +71,8 @@ TEST(Statistics, TDigestLessThan)
 
 TEST(Statistics, Estimator)
 {
+    /// MinMax::estimateLess fallback uses toFloat64 for type mismatches; register functions so it works.
+    tryRegisterFunctions();
     DataTypePtr data_type = std::make_shared<DataTypeInt32>();
     /// column a, distribution 1,2...,10000
     /// column b, distribution 500,600,500,600...
@@ -210,209 +214,188 @@ ColumnStatisticsPtr createTestStats(
 
     return MergeTreeStatisticsFactory::instance().get(desc);
 }
-}
 
-TEST(Statistics, UniqBuildNullableStringIgnoresNulls)
-{
-    tryRegisterAggregateFunctions();
-
-    auto data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeString>());
-
-    MutableColumnPtr col = data_type->createColumn();
-    auto * nullable_col = assert_cast<ColumnNullable *>(col.get());
-
-    nullable_col->insert(Field(String("alpha")));
-    nullable_col->insertDefault();
-    nullable_col->insert(Field(String("beta")));
-    nullable_col->insert(Field(String("alpha")));
-    nullable_col->insertDefault();
-
-    auto stats = createTestStats({StatisticsType::Uniq}, data_type);
-
-    ASSERT_NO_THROW(stats->build(std::move(col)));
-    EXPECT_EQ(stats->getNumRows(), 5u);
-    EXPECT_EQ(stats->estimateCardinality(), 2u);
-
-    String serialized;
-    WriteBufferFromString write_buf(serialized);
-    stats->serialize(write_buf);
-    write_buf.finalize();
-
-    ReadBufferFromString read_buf(serialized);
-    auto deserialized = ColumnStatistics::deserialize(read_buf, data_type);
-    EXPECT_EQ(deserialized->getNumRows(), 5u);
-    EXPECT_EQ(deserialized->estimateCardinality(), 2u);
-}
-
-TEST(Statistics, DeserializeNonNullableUniqAsNullable)
-{
-    tryRegisterAggregateFunctions();
-
-    auto non_nullable_type = std::make_shared<DataTypeString>();
-
-    MutableColumnPtr col = non_nullable_type->createColumn();
-    col->insert(Field(String("alpha")));
-    col->insert(Field(String("beta")));
-    col->insert(Field(String("alpha")));
-
-    auto stats = createTestStats({StatisticsType::Uniq}, non_nullable_type);
-    stats->build(std::move(col));
-
-    String serialized;
-    WriteBufferFromString write_buf(serialized);
-    stats->serialize(write_buf);
-    write_buf.finalize();
-
-    auto nullable_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeString>());
-    ReadBufferFromString read_buf(serialized);
-    auto deserialized = ColumnStatistics::deserialize(read_buf, nullable_type);
-
-    EXPECT_EQ(deserialized->getNumRows(), 3u);
-    EXPECT_EQ(deserialized->estimateCardinality(), 2u);
-}
-
-TEST(Statistics, DeserializeNullableUniqAsNonNullable)
-{
-    tryRegisterAggregateFunctions();
-
-    auto nullable_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeString>());
-
-    MutableColumnPtr col = nullable_type->createColumn();
-    auto * nullable_col = assert_cast<ColumnNullable *>(col.get());
-    nullable_col->insert(Field(String("alpha")));
-    nullable_col->insertDefault();
-    nullable_col->insert(Field(String("beta")));
-    nullable_col->insert(Field(String("alpha")));
-    nullable_col->insertDefault();
-
-    auto stats = createTestStats({StatisticsType::Uniq}, nullable_type);
-    stats->build(std::move(col));
-
-    String serialized;
-    WriteBufferFromString write_buf(serialized);
-    stats->serialize(write_buf);
-    write_buf.finalize();
-
-    auto non_nullable_type = std::make_shared<DataTypeString>();
-    ReadBufferFromString read_buf(serialized);
-    auto deserialized = ColumnStatistics::deserialize(read_buf, non_nullable_type);
-
-    EXPECT_EQ(deserialized->getNumRows(), 5u);
-    EXPECT_EQ(deserialized->estimateCardinality(), 2u);
-}
-
-TEST(Statistics, EstimateGreaterUsesNonNullRows)
-{
-    /// Test that estimateGreater uses getNonNullRowCount() instead of rows.
-    /// With NullCount stats, estimateGreater(val) = getNonNullRowCount() - estimateLess(val).
-    /// For a column with 100 rows (50 NULL + 50 values 1..50), estimateGreater(0) ≈ 50.
-    auto nullable_data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>());
-
-    MutableColumnPtr col = nullable_data_type->createColumn();
-    auto * nullable_col = assert_cast<ColumnNullable *>(col.get());
-
-    for (Int32 i = 0; i < 50; ++i)
-    {
-        nullable_col->insertDefault(); /// NULL
-        nullable_col->insert(i + 1);
-    }
-
-    auto stats = createTestStats({StatisticsType::NullCount, StatisticsType::MinMax}, nullable_data_type);
-    stats->build(std::move(col));
-
-    ASSERT_EQ(stats->getNumRows(), 100u);
-    ASSERT_EQ(stats->getNonNullRowCount(), 50u);
-
-    /// estimateGreater(0) should be approximately 50 (all non-NULL values are > 0)
-    /// because estimateGreater = getNonNullRowCount() - estimateLess(0) ≈ 50 - 0 = 50
-    auto estimate = stats->estimateGreater(Field(Int32(0)));
-    ASSERT_TRUE(estimate.has_value());
-    EXPECT_NEAR(*estimate, 50.0, 1.0);
-
-    /// estimateGreater(50) should be approximately 0 (no non-NULL values > 50)
-    auto estimate2 = stats->estimateGreater(Field(Int32(50)));
-    ASSERT_TRUE(estimate2.has_value());
-    EXPECT_NEAR(*estimate2, 0.0, 1.0);
-
-    /// estimateGreater(25) should be approximately 25 (values 26..50)
-    auto estimate3 = stats->estimateGreater(Field(Int32(25)));
-    ASSERT_TRUE(estimate3.has_value());
-    EXPECT_NEAR(*estimate3, 25.0, 2.0);
-}
-
-TEST(Statistics, MinMaxBuildLowCardinalityNullable)
-{
-    /// Regression test: StatisticsMinMax::build must subtract NULL rows for
-    /// LowCardinality(Nullable(...)) columns, just like it does for ColumnNullable.
-    auto data_type = std::make_shared<DataTypeLowCardinality>(
-        std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>()));
-
-    MutableColumnPtr col = data_type->createColumn();
-
-    for (Int32 i = 0; i < 100; ++i)
-    {
-        if (i % 10 == 0)
-            col->insert(Field()); /// NULL
-        else
-            col->insert(i);
-    }
-
-    auto stats = createTestStats({StatisticsType::NullCount, StatisticsType::MinMax}, data_type);
-    stats->build(std::move(col));
-
-    ASSERT_EQ(stats->getNumRows(), 100u);
-    ASSERT_EQ(stats->getNonNullRowCount(), 90u);
-
-    /// estimateLess(0) ≈ 0 (no non-NULL values < 0)
-    auto est_less_0 = stats->estimateLess(Field(Int32(0)));
-    ASSERT_TRUE(est_less_0.has_value());
-    EXPECT_NEAR(*est_less_0, 0.0, 1.0);
-
-    /// estimateLess(100) ≈ 90 (all 90 non-NULL values are < 100)
-    auto est_less_100 = stats->estimateLess(Field(Int32(100)));
-    ASSERT_TRUE(est_less_100.has_value());
-    EXPECT_NEAR(*est_less_100, 90.0, 1.0);
-
-    /// estimateGreater(0) ≈ 90 (all non-NULL values are > 0)
-    auto est_greater_0 = stats->estimateGreater(Field(Int32(0)));
-    ASSERT_TRUE(est_greater_0.has_value());
-    EXPECT_NEAR(*est_greater_0, 90.0, 1.0);
-}
-
-TEST(Statistics, EstimateRangeInfiniteWithoutNullUsesNonNullRows)
+/// Build a Nullable(Int32) column with `total` rows where every `null_every`-th row is NULL,
+/// then emit value `i` for the rest. Returns built ColumnStatistics with the requested types.
+ColumnStatisticsPtr buildNullableInt32Stats(
+    const std::vector<StatisticsType> & types,
+    size_t total,
+    size_t null_every)
 {
     auto data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>());
-
     MutableColumnPtr col = data_type->createColumn();
     auto * nullable_col = assert_cast<ColumnNullable *>(col.get());
-
-    for (Int32 i = 0; i < 100; ++i)
+    for (size_t i = 0; i < total; ++i)
     {
-        if (i % 10 == 0)
+        if (i % null_every == 0)
             nullable_col->insertDefault();
         else
-            nullable_col->insert(i);
+            nullable_col->insert(static_cast<Int32>(i));
     }
-
-    auto stats = createTestStats({StatisticsType::NullCount}, data_type);
+    auto stats = createTestStats(types, data_type);
     stats->build(std::move(col));
-
-    ASSERT_EQ(stats->getNumRows(), 100u);
-    ASSERT_EQ(stats->getNonNullRowCount(), 90u);
-
-    auto estimate = stats->estimateRange(Range::createWholeUniverseWithoutNull());
-    ASSERT_TRUE(estimate.has_value());
-    EXPECT_DOUBLE_EQ(*estimate, 90.0);
+    return stats;
 }
 
-TEST(Statistics, NullPredicateContradictionAndTautology)
+/// Build an estimator over a single column "x" with the given stats and row count.
+auto makeEstimator(const ColumnStatisticsPtr & stats_x, UInt64 row_count)
 {
-    /// Test that x IS NULL AND x IS NOT NULL estimates to 0 (contradiction)
-    /// and x IS NULL OR x IS NOT NULL estimates to 1 (tautology).
+    ConditionSelectivityEstimatorBuilder builder(getContext().context);
+    builder.addStatistics("x", stats_x);
+    builder.incrementRowCount(row_count);
+    return builder.getEstimator();
+}
 
+/// Estimate the number of rows for a SQL boolean expression over column "x".
+template <class Estimator>
+Float64 estimateRows(Estimator & estimator, const String & expression)
+{
+    ParserExpressionWithOptionalAlias exp_parser(false);
+    ContextPtr context = getContext().context;
+    RPNBuilderTreeContext tree_context(
+        context,
+        Block{{ DataTypeUInt8().createColumnConstWithDefaultValue(1), std::make_shared<DataTypeUInt8>(), "_dummy" }},
+        {});
+    ASTPtr ast = parseQuery(exp_parser, expression, 10000, 10000, 10000);
+    RPNBuilderTreeNode node(ast.get(), tree_context);
+    return static_cast<Float64>(estimator->estimateRelationProfile(nullptr, node).rows);
+}
+
+/// Round-trip a ColumnStatistics through serialize/deserialize using `read_type` for deserialization.
+ColumnStatisticsPtr roundTripStats(const ColumnStatisticsPtr & stats, const DataTypePtr & read_type)
+{
+    String serialized;
+    WriteBufferFromString write_buf(serialized);
+    stats->serialize(write_buf);
+    write_buf.finalize();
+    ReadBufferFromString read_buf(serialized);
+    return ColumnStatistics::deserialize(read_buf, read_type);
+}
+}
+
+TEST(Statistics, UniqRoundTripAcrossNullable)
+{
+    /// Verify Uniq stats survive serialize/deserialize across {non-nullable, nullable}
+    /// type combinations. NULL values are not counted in cardinality.
+    tryRegisterAggregateFunctions();
+
+    auto string_type = std::make_shared<DataTypeString>();
+    auto nullable_string_type = std::make_shared<DataTypeNullable>(string_type);
+
+    auto build_with_two_unique = [](const DataTypePtr & dt, bool include_nulls)
+    {
+        MutableColumnPtr col = dt->createColumn();
+        auto append = [&](const String & v) { col->insert(Field(v)); };
+        append("alpha");
+        if (include_nulls) col->insertDefault();
+        append("beta");
+        append("alpha");
+        if (include_nulls) col->insertDefault();
+        auto stats = createTestStats({StatisticsType::Uniq}, dt);
+        stats->build(std::move(col));
+        return stats;
+    };
+
+    /// Three round-trip combinations sharing identical assertions.
+    struct Case { DataTypePtr write_type; DataTypePtr read_type; bool include_nulls; UInt64 expected_rows; };
+    std::vector<Case> cases{
+        {nullable_string_type, nullable_string_type, true,  5},
+        {string_type,          nullable_string_type, false, 3},
+        {nullable_string_type, string_type,          true,  5},
+    };
+
+    for (const auto & c : cases)
+    {
+        SCOPED_TRACE(fmt::format("write={} read={} rows={}", c.write_type->getName(), c.read_type->getName(), c.expected_rows));
+        auto stats = build_with_two_unique(c.write_type, c.include_nulls);
+        EXPECT_EQ(stats->getNumRows(), c.expected_rows);
+        EXPECT_EQ(stats->estimateCardinality(), 2u);
+        auto deserialized = roundTripStats(stats, c.read_type);
+        EXPECT_EQ(deserialized->getNumRows(), c.expected_rows);
+        EXPECT_EQ(deserialized->estimateCardinality(), 2u);
+    }
+}
+
+TEST(Statistics, NonNullRowCountSemantics)
+{
+    /// Cover the contract that all column-level estimates derive from getNonNullRowCount(),
+    /// not from total rows (which include NULLs). This combines what used to be four
+    /// separate tests (estimateGreater with/without NullCount, LowCardinality(Nullable),
+    /// and infinite range without NULL).
+
+    /// Case 1 — NullCount + MinMax: 100 rows, 50 NULL + 50 non-NULL values 1..50.
+    {
+        SCOPED_TRACE("NullCount + MinMax");
+        auto data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>());
+        MutableColumnPtr col = data_type->createColumn();
+        auto * nullable_col = assert_cast<ColumnNullable *>(col.get());
+        for (Int32 i = 0; i < 50; ++i)
+        {
+            nullable_col->insertDefault();
+            nullable_col->insert(i + 1);
+        }
+        auto stats = createTestStats({StatisticsType::NullCount, StatisticsType::MinMax}, data_type);
+        stats->build(std::move(col));
+        ASSERT_EQ(stats->getNumRows(), 100u);
+        ASSERT_EQ(stats->getNonNullRowCount(), 50u);
+        EXPECT_NEAR(*stats->estimateGreater(Field(Int32(0))),  50.0, 1.0);
+        EXPECT_NEAR(*stats->estimateGreater(Field(Int32(50))),  0.0, 1.0);
+        EXPECT_NEAR(*stats->estimateGreater(Field(Int32(25))), 25.0, 2.0);
+    }
+
+    /// Case 2 — MinMax only (no NullCount): the same data must still report
+    /// non-NULL row count from MinMax::row_count, otherwise estimateGreater
+    /// would treat NULL rows as matching `> val`.
+    {
+        SCOPED_TRACE("MinMax only — fallback to MinMax::row_count");
+        auto stats = buildNullableInt32Stats({StatisticsType::MinMax}, /*total=*/100, /*null_every=*/2);
+        /// Values for non-NULL rows are i where i%2 != 0, so 1,3,...,99 → 50 rows in [1, 99].
+        ASSERT_EQ(stats->getNumRows(), 100u);
+        ASSERT_EQ(stats->getNonNullRowCount(), 50u);
+        EXPECT_NEAR(*stats->estimateGreater(Field(Int32(0))), 50.0, 1.0);
+    }
+
+    /// Case 3 — LowCardinality(Nullable): MinMax::build must subtract NULLs for LC too.
+    {
+        SCOPED_TRACE("LowCardinality(Nullable) MinMax");
+        auto data_type = std::make_shared<DataTypeLowCardinality>(
+            std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>()));
+        MutableColumnPtr col = data_type->createColumn();
+        for (Int32 i = 0; i < 100; ++i)
+        {
+            if (i % 10 == 0)
+                col->insert(Field()); /// NULL
+            else
+                col->insert(i);
+        }
+        auto stats = createTestStats({StatisticsType::NullCount, StatisticsType::MinMax}, data_type);
+        stats->build(std::move(col));
+        ASSERT_EQ(stats->getNumRows(), 100u);
+        ASSERT_EQ(stats->getNonNullRowCount(), 90u);
+        EXPECT_NEAR(*stats->estimateLess(Field(Int32(0))),     0.0, 1.0);
+        EXPECT_NEAR(*stats->estimateLess(Field(Int32(100))),  90.0, 1.0);
+        EXPECT_NEAR(*stats->estimateGreater(Field(Int32(0))), 90.0, 1.0);
+    }
+
+    /// Case 4 — estimateRange over a NULL-excluding infinite range must be non-NULL row count.
+    {
+        SCOPED_TRACE("estimateRange(WholeUniverseWithoutNull)");
+        auto stats = buildNullableInt32Stats({StatisticsType::NullCount}, /*total=*/100, /*null_every=*/10);
+        ASSERT_EQ(stats->getNumRows(), 100u);
+        ASSERT_EQ(stats->getNonNullRowCount(), 90u);
+        auto estimate = stats->estimateRange(Range::createWholeUniverseWithoutNull());
+        ASSERT_TRUE(estimate.has_value());
+        EXPECT_DOUBLE_EQ(*estimate, 90.0);
+    }
+}
+
+TEST(Statistics, NullPredicateEstimates)
+{
+    /// All NULL-predicate selectivity logic shares one estimator setup, so we
+    /// cover contradiction/tautology and range combinations in a single test.
+    /// Column x: 100 rows, 50% NULL, non-NULL values 1, 3, 5, ..., 99.
+    tryRegisterFunctions(); /// MinMax::estimateLess fallback uses toFloat64 for type mismatches.
     auto data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>());
-
-    /// Column x: 50% NULL, 50% non-NULL values 0..49
     MutableColumnPtr x = data_type->createColumn();
     auto * nullable_col = assert_cast<ColumnNullable *>(x.get());
     for (Int32 i = 0; i < 100; ++i)
@@ -423,55 +406,56 @@ TEST(Statistics, NullPredicateContradictionAndTautology)
             nullable_col->insert(i);
     }
 
-    ColumnStatisticsDescription desc;
-    desc.data_type = data_type;
-    desc.types_to_desc.emplace(StatisticsType::NullCount, SingleStatisticsDescription(StatisticsType::NullCount, nullptr, false));
-    ColumnDescription column_desc;
-    column_desc.name = "x";
-    column_desc.type = data_type;
-    column_desc.statistics = desc;
-
-    ColumnStatisticsPtr stats_x = MergeTreeStatisticsFactory::instance().get(column_desc);
+    auto stats_x = createTestStats({StatisticsType::NullCount, StatisticsType::MinMax}, data_type);
     stats_x->build(std::move(x));
 
-    ConditionSelectivityEstimatorBuilder estimator_builder(getContext().context);
-    estimator_builder.addStatistics("x", stats_x);
-    estimator_builder.incrementRowCount(100);
+    auto estimator = makeEstimator(stats_x, /*row_count=*/100);
 
-    auto estimator = estimator_builder.getEstimator();
-
-    auto test_impl = [&](const String & expression, Float64 expected_selectivity, Float64 eps)
+    auto check = [&](const String & expression, Float64 expected_rows, Float64 eps)
     {
-        ParserExpressionWithOptionalAlias exp_parser(false);
-        ContextPtr context = getContext().context;
-        RPNBuilderTreeContext tree_context(context, Block{{ DataTypeUInt8().createColumnConstWithDefaultValue(1), std::make_shared<DataTypeUInt8>(), "_dummy" }}, {});
-        ASTPtr ast = parseQuery(exp_parser, expression, 10000, 10000, 10000);
-        RPNBuilderTreeNode node(ast.get(), tree_context);
-        auto estimate_result = estimator->estimateRelationProfile(nullptr, node);
-        Float64 actual_selectivity = static_cast<Float64>(estimate_result.rows) / 100.0;
-        EXPECT_NEAR(actual_selectivity, expected_selectivity, eps)
-            << "Expression: " << expression << " expected_selectivity=" << expected_selectivity
-            << " actual_selectivity=" << actual_selectivity << " rows=" << estimate_result.rows;
+        Float64 actual = estimateRows(estimator, expression);
+        EXPECT_NEAR(actual, expected_rows, eps)
+            << "Expression: " << expression
+            << " expected=" << expected_rows << " actual=" << actual;
     };
 
-    /// x IS NULL AND x IS NOT NULL → contradiction, selectivity must be 0
-    test_impl("x IS NULL AND x IS NOT NULL", 0.0, 1e-9);
+    /// Contradiction (`x IS NULL AND x IS NOT NULL`) and tautology (`x IS NULL OR x IS NOT NULL`).
+    check("x IS NULL AND x IS NOT NULL",       0.0, 1e-6);
+    check("x IS NOT NULL AND x IS NULL",       0.0, 1e-6); /// commutative
+    check("NOT x IS NULL AND x IS NULL",       0.0, 1e-6); /// NOT (IS NULL) ≡ IS NOT NULL
+    check("x IS NULL OR x IS NOT NULL",      100.0, 1e-6);
+    check("x IS NOT NULL OR x IS NULL",      100.0, 1e-6);
+    check("NOT (x IS NOT NULL) OR x IS NOT NULL", 100.0, 1e-6);
 
-    /// x IS NOT NULL AND x IS NULL → same contradiction (different order)
-    test_impl("x IS NOT NULL AND x IS NULL", 0.0, 1e-9);
+    /// IS NULL combined with a range — NULL is disjoint from any concrete range.
+    check("x IS NULL AND x > 50",              0.0, 1e-6);
+    check("x IS NULL AND x < 50",              0.0, 1e-6);
+    check("x IS NULL AND x BETWEEN 10 AND 20", 0.0, 1e-6);
 
-    /// x IS NULL OR x IS NOT NULL → tautology, selectivity must be 1
-    test_impl("x IS NULL OR x IS NOT NULL", 1.0, 1e-9);
+    /// IS NOT NULL combined with a range — equals the range estimate over non-NULL rows.
+    /// 50 non-NULL values in [1, 99]; estimateLess(50) ≈ 50 * 49 / 98 = 25.
+    check("x IS NOT NULL AND x > 50",         25.0, 2.0);
+    check("x IS NOT NULL AND x < 50",         25.0, 2.0);
 
-    /// x IS NOT NULL OR x IS NULL → same tautology (different order)
-    test_impl("x IS NOT NULL OR x IS NULL", 1.0, 1e-9);
+    /// IS NULL OR range — NULL rows plus range over non-NULL rows.
+    /// Selectivity estimator combines OR via independence approximation
+    /// (1 - (1-p_null)*(1-p_range)) ≈ 1 - 0.5 * 0.75 = 0.625, giving ~62 rows.
+    /// We do not assert an exact value here; just that the estimate sits between
+    /// the range-only count and the row total.
+    {
+        Float64 r = estimateRows(estimator, "x IS NULL OR x > 50");
+        EXPECT_GT(r, 25.0);
+        EXPECT_LE(r, 100.0);
+    }
+    {
+        Float64 r = estimateRows(estimator, "x IS NULL OR x < 50");
+        EXPECT_GT(r, 25.0);
+        EXPECT_LE(r, 100.0);
+    }
 
-    /// Equivalent forms via NOT:
-    /// NOT (x IS NULL) is x IS NOT NULL, so NOT (x IS NULL) AND x IS NULL → contradiction
-    test_impl("NOT x IS NULL AND x IS NULL", 0.0, 1e-9);
-
-    /// NOT (x IS NOT NULL) is x IS NULL, so NOT (x IS NOT NULL) OR x IS NOT NULL → tautology
-    test_impl("NOT (x IS NOT NULL) OR x IS NOT NULL", 1.0, 1e-9);
+    /// Plain range — must not include NULL rows.
+    check("x > 50",                           25.0, 2.0);
+    check("x < 50",                           25.0, 2.0);
 }
 
 

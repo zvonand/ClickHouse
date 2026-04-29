@@ -281,10 +281,18 @@ UInt64 ColumnStatistics::getNullCount() const
 
 UInt64 ColumnStatistics::getNonNullRowCount() const
 {
-    if (!stats.contains(StatisticsType::NullCount))
-        return rows;
-    UInt64 null_count = getNullCount();
-    return null_count <= rows ? rows - null_count : 0;
+    if (auto it = stats.find(StatisticsType::NullCount); it != stats.end())
+    {
+        UInt64 null_count = assert_cast<const StatisticsNullCount &>(*it->second).getNullCount();
+        return null_count <= rows ? rows - null_count : 0;
+    }
+    /// MinMax::row_count counts only non-NULL rows (it skips NULLs in build()), so it is
+    /// a safe fallback when NullCount is absent. Without this fallback, callers like
+    /// estimateGreater would mix non-NULL `estimateLess` with the total `rows` (which
+    /// includes NULLs) and over-estimate `> val` selectivity by counting NULL rows.
+    if (auto it = stats.find(StatisticsType::MinMax); it != stats.end())
+        return assert_cast<const StatisticsMinMax &>(*it->second).getRowCount();
+    return rows;
 }
 
 Float64 ColumnStatistics::estimateIsNull() const

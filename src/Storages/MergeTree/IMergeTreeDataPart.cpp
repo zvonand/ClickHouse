@@ -1050,19 +1050,13 @@ static const ColumnDescription * getColumnForStatisticsFile(const String & filen
     size_t num_chars_to_truncate = STATS_FILE_PREFIX.size() + STATS_FILE_SUFFIX.size();
     String column_name = unescapeForFileName(filename.substr(STATS_FILE_PREFIX.size(), filename.size() - num_chars_to_truncate));
 
+    /// `<col>.null` subcolumn may appear in required_columns when
+    /// optimize_functions_to_subcolumns=1, keep stats for the parent column in that case.
     if (!required_columns.empty()
         && !required_columns.contains(column_name)
         && !required_columns.contains(column_name + ".null"))
     {
-        /// When optimize_functions_to_subcolumns=1, required_columns may contain
-        /// subcolumn names like "col.null" instead of the physical column name "col".
-        /// Check if any required column references this column as a parent.
-        String prefix = column_name + ".";
-        bool has_subcolumn_ref = std::any_of(
-            required_columns.begin(), required_columns.end(),
-            [&prefix](const String & req_col) { return req_col.starts_with(prefix); });
-        if (!has_subcolumn_ref)
-            return nullptr;
+        return nullptr;
     }
 
     return all_columns.tryGet(column_name);

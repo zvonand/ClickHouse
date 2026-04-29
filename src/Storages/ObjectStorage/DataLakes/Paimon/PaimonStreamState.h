@@ -95,6 +95,11 @@ private:
     const String replica_name;
     const std::filesystem::path fs_keeper_path;
     LoggerPtr log;
+    /// Unique identifier for this server instance, used for ownership
+    /// checks when reclaiming stale is_active ephemeral nodes.
+    /// Generated from ServerUUID so it survives server restarts
+    /// but differs across distinct servers.
+    const String active_node_identifier;
 
     std::atomic<bool> is_active{false};
     zkutil::EphemeralNodeHolderPtr replica_is_active_node;

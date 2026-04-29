@@ -1,3 +1,5 @@
 splitByChar	1
 arrayMap	1
 concat-prefix	1
+bloom_filter arrayMap	1
+bloom_filter concat-prefix	1

@@ -57,3 +57,44 @@ SELECT 'concat-prefix', id FROM t_arr WHERE has(arr_prefixed, '-hello')
 SETTINGS force_data_skipping_indices = 'idx_prefixed';
 
 DROP TABLE t_arr;
+
+-- Same column-name-matching path is taken by `bloom_filter`-family indices, so
+-- guard them too: with the same captured-constant lambda an `ALIAS` column
+-- bound to a `bloom_filter` index must still be selectable.
+DROP TABLE IF EXISTS t_bf;
+
+CREATE TABLE t_bf
+(
+    user_id UInt64,
+    color_map Map(String, String),
+    colors_kv Array(String) ALIAS arrayMap((k, v) -> concat(k, '=', v), mapKeys(color_map), mapValues(color_map)),
+    INDEX idx_kv_bf colors_kv TYPE bloom_filter GRANULARITY 100000000
+)
+ENGINE = MergeTree
+ORDER BY user_id;
+
+INSERT INTO t_bf VALUES (1, {'favorite': 'red', 'second': 'blue'});
+
+SELECT 'bloom_filter arrayMap', user_id FROM t_bf WHERE has(colors_kv, 'favorite=red')
+SETTINGS force_data_skipping_indices = 'idx_kv_bf';
+
+DROP TABLE t_bf;
+
+DROP TABLE IF EXISTS t_bf_arr;
+
+CREATE TABLE t_bf_arr
+(
+    id UInt64,
+    arr Array(String),
+    arr_prefixed Array(String) ALIAS arrayMap(s -> concat('-', s), arr),
+    INDEX idx_prefixed_bf arr_prefixed TYPE bloom_filter GRANULARITY 100000000
+)
+ENGINE = MergeTree
+ORDER BY id;
+
+INSERT INTO t_bf_arr VALUES (1, ['hello', 'world']);
+
+SELECT 'bloom_filter concat-prefix', id FROM t_bf_arr WHERE has(arr_prefixed, '-hello')
+SETTINGS force_data_skipping_indices = 'idx_prefixed_bf';
+
+DROP TABLE t_bf_arr;

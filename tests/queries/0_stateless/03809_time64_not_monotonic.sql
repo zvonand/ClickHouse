@@ -1,3 +1,4 @@
+-- Tags: long
 -- Regression test for non-monotonic Time64 conversion in MergeTreeSetIndex.
 -- Converting from DateTime to Time64 extracts time-of-day component, which is not monotonic.
 

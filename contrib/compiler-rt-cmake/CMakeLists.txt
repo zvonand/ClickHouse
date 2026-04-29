@@ -30,6 +30,34 @@ if (NOT IS_DIRECTORY "${BUILTINS_SOURCE_DIR}")
     return()
 endif()
 
+#
+# Reset inherited compiler flags so the compiler-rt sources get a clean,
+# Release-style baseline. The runtime cannot inherit:
+#   * -fsanitize=...        — runtime would be instrumented by the sanitizer it implements
+#   * -fxray-instrument...  — runtime would be instrumented by xray
+#   * -flto / -fwhole-program-vtables — runtime is built standalone, can't be LTO'd
+#   * -fprofile-instr-generate / -fcoverage-mapping — coverage instrumentation
+#   * project-specific warning, hardening, debug-info flags — irrelevant here
+#
+# The previous external-cmake build (cmake/build_clang_builtin.cmake) avoided
+# this entirely by spawning a separate cmake invocation with only the toolchain
+# file and CMAKE_BUILD_TYPE=Release. Now that we build in-process, we have to
+# strip those flags explicitly. We keep only the toolchain bits added by
+# cmake/linux/toolchain-*.cmake (--gcc-toolchain, --no-default-config); the
+# --target= flag is applied automatically by cmake from CMAKE_<LANG>_COMPILER_TARGET.
+set(_compiler_rt_keep_re "(--gcc-toolchain=[^ ]+|--no-default-config)")
+foreach (lang C CXX ASM)
+    string(REGEX MATCHALL "${_compiler_rt_keep_re}" _kept "${CMAKE_${lang}_FLAGS}")
+    string(JOIN " " CMAKE_${lang}_FLAGS ${_kept})
+    foreach (cfg DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+        set(CMAKE_${lang}_FLAGS_${cfg} "")
+    endforeach()
+endforeach()
+
+# Use Release-style optimisation everywhere. The original external-cmake build
+# passed -DCMAKE_BUILD_TYPE=Release, so this matches that behaviour.
+add_compile_options(-O3 -DNDEBUG)
+
 include(sources/builtins.cmake)
 
 #
@@ -144,10 +172,14 @@ foreach (src ${BUILTINS_ARCH_SOURCES})
     endif()
 endforeach()
 
-# __bf16 (BFloat16) is supported by clang 15+ on every architecture we target
-# (x86_64, aarch64, ppc64le, riscv64, s390x, loongarch64). ClickHouse builds
-# with clang 21+, so we unconditionally include the BF16 builtins.
-list(APPEND BUILTINS_ARCH_SOURCES ${BUILTINS_BF16_SOURCES})
+# BFloat16 builtin support depends on the compiler having a `__bf16` type for
+# the target ABI. On x86_64 and aarch64 this is true since clang 15 (we use
+# clang 21+). On ppc64le and s390x clang refuses `__bf16` ("not supported on
+# this target") so we omit BF16 sources — no compiler-generated code on those
+# arches will reference them.
+if (ARCH_AMD64 OR ARCH_AARCH64)
+    list(APPEND BUILTINS_ARCH_SOURCES ${BUILTINS_BF16_SOURCES})
+endif()
 
 _prepend_dir(BUILTINS_SOURCES "${BUILTINS_SOURCE_DIR}" ${BUILTINS_ARCH_SOURCES})
 
@@ -172,12 +204,6 @@ target_compile_options(clang_rt_builtins PRIVATE
     -nostdinc++
     # Suppress all warnings — these are external sources we don't audit.
     -w
-    # Override project-wide instrumentation flags (set in cmake/sanitize.cmake
-    # and the global CMAKE_CXX_FLAGS for XRay). The compiler-rt runtime must
-    # not be instrumented by the sanitizer it implements (see asan_internal.h
-    # and msan_interface_internal.h, which #error out if sanitized).
-    -fno-sanitize=all
-    -fno-xray-instrument
 )
 target_compile_definitions(clang_rt_builtins PRIVATE VISIBILITY_HIDDEN)
 set_target_properties(clang_rt_builtins PROPERTIES
@@ -247,16 +273,8 @@ set(SANITIZER_COMMON_FLAGS
     -funwind-tables
     -fno-stack-protector
     -fvisibility=hidden
-    -fno-lto
-    -O3
     # Suppress all warnings — these are external sources we don't audit.
     -w
-    # Don't instrument the sanitizer runtime with the active sanitizer (the
-    # runtime explicitly errors out if instrumented). This overrides the
-    # -fsanitize=... and -fxray-instrument flags that propagate via
-    # CMAKE_CXX_FLAGS from cmake/sanitize.cmake.
-    -fno-sanitize=all
-    -fno-xray-instrument
 )
 
 set(SANITIZER_COMMON_DEFS HAVE_RPC_XDR_H=0)

@@ -33,43 +33,55 @@ $CLICKHOUSE_CLIENT -q "
 "
 
 # Test 1: Correlated scalar subquery with ORDER BY (SortingStep in the plan).
-# On master: throws 'Cannot check Sorting plan step for correlated expressions'
+# On master: throws 'Cannot check Sorting plan step for correlated expressions'.
 # After the fix, the default `hasCorrelatedExpressions` returns false instead of
-# throwing NOT_IMPLEMENTED. The query may then either decorrelate successfully or
-# fail with a clearer NOT_IMPLEMENTED message (e.g. 'Cannot decorrelate query, ...').
-# Either outcome is acceptable — the only invariant is that the pre-fix error
-# message must not appear.
-ERROR=$($CLICKHOUSE_CLIENT -q "
+# throwing `NOT_IMPLEMENTED`. The query may then either decorrelate successfully or
+# fail with a clearer `NOT_IMPLEMENTED` message (e.g. `Cannot decorrelate query, ...`).
+# Both are acceptable; any other outcome (including the pre-fix error or some new
+# unexpected exception) must fail the test.
+OUTPUT=$($CLICKHOUSE_CLIENT -q "
     SET enable_analyzer = 1;
     SET allow_experimental_correlated_subqueries = 1;
     SELECT a, (SELECT x FROM t2 WHERE t2.y = t1.a * 100 ORDER BY x) as s FROM t1 ORDER BY a;
 " 2>&1)
+RC=$?
 
-if echo "$ERROR" | grep -q "Cannot check.*plan step for correlated expressions"; then
+if echo "$OUTPUT" | grep -q "Cannot check.*plan step for correlated expressions"; then
     echo "FAIL: got pre-fix error (hasCorrelatedExpressions threw instead of returning false)"
+    echo "$OUTPUT" >&2
     exit 1
-else
+elif [ "$RC" -eq 0 ] || echo "$OUTPUT" | grep -qE "Code: 48|NOT_IMPLEMENTED|Cannot decorrelate"; then
     echo "OK: did not hit pre-fix hasCorrelatedExpressions failure"
+else
+    echo "FAIL: unexpected output (rc=$RC)"
+    echo "$OUTPUT" >&2
+    exit 1
 fi
 
 # Test 2: Correlated subquery in an IN clause.
-# The subquery plan contains PLACEHOLDER nodes for the correlated column (t1.b).
-# Without the fix, buildSetInplace / buildOrderedSetInplace would attempt to execute
-# this plan and throw "Trying to execute PLACEHOLDER action".
-# With the fix, in-place set construction is skipped for correlated plans.
-ERROR=$($CLICKHOUSE_CLIENT -q "
+# The subquery plan contains `PLACEHOLDER` nodes for the correlated column (`t1.b`).
+# Without the fix, `buildSetInplace` / `buildOrderedSetInplace` would attempt to execute
+# this plan and throw `Trying to execute PLACEHOLDER action`.
+# With the fix, in-place set construction is skipped for correlated plans, so the query
+# must either succeed or fail with a clear `NOT_IMPLEMENTED` decorrelation error.
+# Any other outcome must fail the test.
+OUTPUT=$($CLICKHOUSE_CLIENT -q "
     SET enable_analyzer = 1;
     SET allow_experimental_correlated_subqueries = 1;
     SELECT a FROM t1 WHERE a IN (SELECT x FROM t2 WHERE t2.y = t1.b);
 " 2>&1)
+RC=$?
 
-if echo "$ERROR" | grep -q "Trying to execute PLACEHOLDER action"; then
+if echo "$OUTPUT" | grep -q "Trying to execute PLACEHOLDER action"; then
     echo "FAIL: correlated IN subquery triggered PLACEHOLDER execution"
+    echo "$OUTPUT" >&2
     exit 1
-else
-    # The query may succeed or fail with a decorrelation error — either is acceptable.
-    # The key invariant is that it must NOT throw 'Trying to execute PLACEHOLDER action'.
+elif [ "$RC" -eq 0 ] || echo "$OUTPUT" | grep -qE "Code: 48|NOT_IMPLEMENTED|Cannot decorrelate"; then
     echo "OK: correlated IN subquery did not trigger PLACEHOLDER execution"
+else
+    echo "FAIL: unexpected output (rc=$RC)"
+    echo "$OUTPUT" >&2
+    exit 1
 fi
 
 $CLICKHOUSE_CLIENT -q "

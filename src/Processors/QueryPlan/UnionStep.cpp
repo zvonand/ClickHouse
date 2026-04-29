@@ -30,8 +30,9 @@ static SharedHeader checkHeaders(const SharedHeaders & input_headers)
     return res;
 }
 
-UnionStep::UnionStep(SharedHeaders input_headers_, size_t max_threads_)
+UnionStep::UnionStep(SharedHeaders input_headers_, size_t max_threads_, bool is_sql_union_)
     : max_threads(max_threads_)
+    , is_sql_union(is_sql_union_)
 {
     updateInputHeaders(std::move(input_headers_));
 }
@@ -88,13 +89,21 @@ QueryPipelineBuilderPtr UnionStep::updatePipeline(QueryPipelineBuilders pipeline
 
     *pipeline = QueryPipelineBuilder::unitePipelines(std::move(pipelines), new_max_threads, &processors);
 
-    /// Compute effective stream limit from the settings and the actual max_threads
-    /// available on this node (which may differ from the coordinator in distributed execution).
+    /// The `max_streams_for_union_step*` cap only applies to steps built for SQL
+    /// `UNION ALL` / `UNION DISTINCT`. For non-SQL-UNION call sites the narrowing must be
+    /// skipped: shuffling streams through `ConcatProcessor` would break the ordering
+    /// invariants of `GroupingAggregatedTransform` (memory-efficient distributed
+    /// aggregation), `MergingSortedTransform`, and similar order-sensitive consumers.
+    /// We still validate the ratio so misconfiguration is reported on every query rather
+    /// than only when a SQL `UNION` happens to be present.
     const double max_streams_ratio = settings.max_streams_for_union_step_to_max_threads_ratio;
     if (!isFinite(max_streams_ratio) || max_streams_ratio < 0)
         throw Exception(ErrorCodes::PARAMETER_OUT_OF_BOUND,
             "Invalid value for `max_streams_for_union_step_to_max_threads_ratio`: {}. Must be a finite non-negative number.",
             max_streams_ratio);
+
+    if (!is_sql_union)
+        return pipeline;
 
     size_t effective_max_streams = settings.max_streams_for_union_step;
     if (max_streams_ratio > 0 && new_max_threads > 0)

@@ -199,10 +199,6 @@ EOL
 
     cat > /etc/clickhouse-server/config.d/core.xml <<EOL
 <clickhouse>
-    <core_dump>
-        <!-- 100GiB -->
-        <size_limit>107374182400</size_limit>
-    </core_dump>
     <core_path>/cores</core_path>
 
     <remote_servers>

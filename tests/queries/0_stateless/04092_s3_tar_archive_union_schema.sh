@@ -26,7 +26,7 @@ $CLICKHOUSE_CLIENT -q "
 
 $CLICKHOUSE_CLIENT -q "
     INSERT INTO FUNCTION s3(s3_conn, url='http://localhost:11111/${S3_PATH}/test_2.parquet', format=Parquet)
-    SELECT number + 4 AS timestamp, number + 4.0 AS a, ['hello', 'world', 'foo'][number + 1] AS b
+    SELECT number + 4 AS timestamp, number + 4.0 AS a, toNullable(['hello', 'world', 'foo'][number + 1]) AS b
     FROM numbers(3)
     SETTINGS s3_truncate_on_insert=1
 "

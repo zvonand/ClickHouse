@@ -160,6 +160,14 @@ public:
     FuzzConfig & fc;
     uint64_t next_type_mask = std::numeric_limits<uint64_t>::max();
 
+    /// Recursion depth tracked while generating SQL string values for nested compound
+    /// types (`Map`, `Array`, ...). Used by `appendRandomRawValue` / `insertNumberEntry`
+    /// of those types to clamp their per-level row count and prevent exponential blowup
+    /// of the generated value (see `depthCappedNestedRows` in `SQLTypes.cpp`).
+    /// Distinct from the private `depth` field, which is used for type-generation
+    /// recursion in `randomNextType` / `randomAggregateType`.
+    uint32_t value_gen_depth = 0;
+
 private:
     std::vector<TableEngineValues> likeEngsDeterministic;
     std::vector<TableEngineValues> likeEngsNotDeterministic;

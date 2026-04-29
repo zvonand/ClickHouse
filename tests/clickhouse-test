@@ -1859,12 +1859,7 @@ class TestCase:
         """
         name = removesuffix(name, ".gen")
 
-        os_name = platform.system()
-        file_extentions = [
-            f".{os_name}.reference",
-            ".reference",
-            ".gen.reference",
-        ]
+        file_extentions = [".reference", ".gen.reference"]
         if is_old_analyzer_used(args):
             file_extentions = [".oldanalyzer.reference", *file_extentions]
 

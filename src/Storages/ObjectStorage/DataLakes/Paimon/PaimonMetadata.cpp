@@ -452,8 +452,16 @@ ObjectIterator PaimonMetadata::iterate(
         bool lock_acquired = false;
         SCOPE_EXIT(
         {
-            if (lock_acquired)
-                stream_state->releaseProcessingLock();
+            try
+            {
+                if (lock_acquired)
+                    stream_state->releaseProcessingLock();
+            }
+            catch (...)
+            {
+                tryLogCurrentException(__PRETTY_FUNCTION__,
+                    "Failed to release Paimon processing lock in SCOPE_EXIT");
+            }
         });
 
         stream_state->acquireProcessingLock();
@@ -571,9 +579,15 @@ PaimonTableStatePtr PaimonMetadata::loadStateForSnapshot(Int64 snapshot_id) cons
 }
 
 std::vector<PaimonTableStatePtr> PaimonMetadata::getSnapshotsBetween(
-    Int64 from_snapshot_id, Int64 to_snapshot_id, UInt64 max_snapshots_to_load, bool skip_compact) const
+    Int64 from_snapshot_id,
+    Int64 to_snapshot_id,
+    UInt64 max_snapshots_to_load,
+    bool skip_compact,
+    std::optional<Int64> & last_scanned_snapshot_id) const
 {
     std::vector<PaimonTableStatePtr> snapshots;
+    last_scanned_snapshot_id.reset();
+
     if (to_snapshot_id <= from_snapshot_id)
         return snapshots;
 
@@ -587,7 +601,25 @@ std::vector<PaimonTableStatePtr> PaimonMetadata::getSnapshotsBetween(
         if (max_snapshots_to_load > 0 && snapshots.size() >= max_snapshots_to_load)
             break;
 
-        auto state = loadStateForSnapshot(snapshot_id);
+        /// Track the highest snapshot_id we attempted to scan, regardless of whether
+        /// the snapshot was loaded, skipped (compact), or missing (expired by compaction).
+        /// The caller uses this to advance the watermark past gaps.
+        last_scanned_snapshot_id = snapshot_id;
+
+        PaimonTableStatePtr state;
+        try
+        {
+            state = loadStateForSnapshot(snapshot_id);
+        }
+        catch (...)
+        {
+            /// Snapshot file may have been removed by Paimon compaction.
+            /// Log and skip — the watermark will still advance past it.
+            LOG_WARNING(log, "Failed to load snapshot_id={}, it may have been removed by "
+                "Paimon compaction. Skipping. Error: {}",
+                snapshot_id, getCurrentExceptionMessage(false));
+            continue;
+        }
 
         if (skip_compact && state->isCompact())
         {
@@ -638,12 +670,23 @@ Strings PaimonMetadata::collectIncrementalDataFiles(
         /// In Paimon, each snapshot's delta_manifest_list contains the changes in that snapshot.
         /// We need to read all delta manifests from snapshots between committed+1 and current.
         /// Skip Compact snapshots: their delta manifests contain compaction output (not new data).
-        auto snapshots = getSnapshotsBetween(*committed_snapshot_id, state->snapshot_id, max_consume_snapshots, /*skip_compact=*/true);
+        std::optional<Int64> last_scanned_snapshot_id;
+        auto snapshots = getSnapshotsBetween(
+            *committed_snapshot_id, state->snapshot_id, max_consume_snapshots,
+            /*skip_compact=*/true, last_scanned_snapshot_id);
+
         if (snapshots.empty())
+        {
+            /// All snapshots in the range were either compact or missing.
+            /// Still advance the watermark so we don't re-scan them next time.
+            if (last_scanned_snapshot_id)
+                last_consumed_snapshot_id = *last_scanned_snapshot_id;
             return {};
+        }
 
         data_files = collectDataFilesFromManifests(snapshots, ManifestKind::Delta, partition_pruner, true, false);
-        last_consumed_snapshot_id = snapshots.back()->snapshot_id;
+        /// Use last_scanned (not snapshots.back()) to advance past trailing compact/missing snapshots.
+        last_consumed_snapshot_id = last_scanned_snapshot_id.value_or(snapshots.back()->snapshot_id);
     }
 
     return data_files;

@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# shellcheck source=./utils.lib
-source /repo/tests/docker_scripts/utils.lib
 
 function run_with_retry()
 {

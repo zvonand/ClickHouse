@@ -12,6 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import List
 
+from ci.jobs.scripts.clickhouse_service import ClickHouseService
 from ci.jobs.scripts.log_parser import FuzzerLogParser
 from ci.praktika import Secret
 from ci.praktika.info import Info
@@ -35,19 +36,6 @@ remote_servers:
 """
 CLICKHOUSE_CI_LOGS_CLUSTER = "system_logs_export"
 CLICKHOUSE_CI_LOGS_USER = "ci"
-
-
-def collect_and_encrypt_cores(directory, key_path: str, aes_key_path: str = None) -> List[str]:
-    if aes_key_path is None:
-        aes_key_path = str(Path(directory) / "aes.key")
-    encrypted = []
-    for core in sorted(Path(directory).glob("core.*"))[:3]:
-        if not core.name.endswith(".zst") and not core.name.endswith(".enc"):
-            zst_path = Utils.compress_zst(core)
-            encrypted.append(Utils.encrypt(str(zst_path), key_path, aes_key_path))
-    if encrypted and Path(f"{aes_key_path}.rsa").exists():
-        encrypted.append(f"{aes_key_path}.rsa")
-    return encrypted
 
 
 class ClickHouseProc:
@@ -82,8 +70,6 @@ class ClickHouseProc:
         self.log_dir = f"{temp_dir}/var/log/clickhouse-server"
         self.pid_file = f"{self.ch_config_dir}/clickhouse-server.pid"
         self.config_file = f"{self.ch_config_dir}/config.xml"
-        self.aes_key = f"{temp_dir}/aes.key"
-
         # NOTE: should be the same for all replicas (for database replicated), since some tests uses CREATE TABLE Engine=File(${USER_FILES_PATH})
         self.user_files_path = f"{self.run_path0}/user_files"
         self.test_output_file = f"{temp_dir}/test_result.txt"
@@ -904,11 +890,7 @@ clickhouse-client --query "SELECT count() FROM test.visits"
     def _collect_core_dumps(self) -> List[str]:
         result = []
         for run_dir in sorted(p_temp_dir.glob("run_r*")):
-            result.extend(
-                collect_and_encrypt_cores(
-                    run_dir, f"{repo_dir}/ci/defs/public.pem", self.aes_key
-                )
-            )
+            result.extend(ClickHouseService.collect_cores(run_dir))
         return result
 
     @classmethod

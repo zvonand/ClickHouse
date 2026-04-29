@@ -3216,9 +3216,9 @@ public:
             // const +|- variable
             if (left.column && isColumnConst(*left.column))
             {
-                auto left_type = removeNullable(removeLowCardinality(left.type));
-                auto right_type = removeNullable(removeLowCardinality(right.type));
-                auto ret_type = removeNullable(removeLowCardinality(return_type));
+                auto left_type = removeNullable(recursiveRemoveLowCardinality(left.type));
+                auto right_type = removeNullable(recursiveRemoveLowCardinality(right.type));
+                auto ret_type = removeNullable(recursiveRemoveLowCardinality(return_type));
 
                 auto transform = [&](const Field & point)
                 {
@@ -3228,7 +3228,9 @@ public:
 
                     /// This is a bit dangerous to call Base::executeImpl cause it ignores `use Default Implementation For XXX` flags.
                     /// It was possible to check monotonicity for nullable right type which result to exception.
-                    /// Adding removeNullable above fixes the issue, but some other inconsistency may left.
+                    /// We also strip `LowCardinality` recursively (e.g. `Array(LowCardinality(Float64))` -> `Array(Float64)`)
+                    /// because the framework's `LowCardinality` default implementation is bypassed when calling `Base::executeImpl`
+                    /// directly, and the inner numeric dispatch (via `castBothTypes`) does not recognize `LowCardinality`.
                     auto col = Base::executeImpl(columns_with_constant, ret_type, 1);
                     Field point_transformed;
                     col->get(0, point_transformed);
@@ -3254,9 +3256,9 @@ public:
             // variable +|- constant
             if (right.column && isColumnConst(*right.column))
             {
-                auto left_type = removeNullable(removeLowCardinality(left.type));
-                auto right_type = removeNullable(removeLowCardinality(right.type));
-                auto ret_type = removeNullable(removeLowCardinality(return_type));
+                auto left_type = removeNullable(recursiveRemoveLowCardinality(left.type));
+                auto right_type = removeNullable(recursiveRemoveLowCardinality(right.type));
+                auto ret_type = removeNullable(recursiveRemoveLowCardinality(return_type));
 
                 auto transform = [&](const Field & point)
                 {

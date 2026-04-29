@@ -197,9 +197,10 @@ struct DNSResolver::Impl
     /// If disabled, will not make cache lookups, will resolve addresses manually on each call
     std::atomic<bool> disable_cache{false};
 
-    /// host_name and host_addresses are populated lazily by `getHostName` and
-    /// `updateHostNameAndAddresses`. The latter is called periodically by
-    /// `DNSCacheUpdater` (server-only), and explicitly during server startup,
+    /// `host_name` is populated lazily by `getHostName`. `host_addresses`
+    /// (and a re-read of `host_name`) is populated by
+    /// `updateHostNameAndAddresses`, which is called periodically by
+    /// `DNSCacheUpdater` (server-only) and explicitly during server startup,
     /// so non-server programs (`clickhouse-client`, `-local`, `-keeper`,
     /// `-disks`) never trigger a DNS lookup of the local hostname here.
 };

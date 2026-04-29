@@ -1867,7 +1867,8 @@ std::tuple<QueryPlan, JoinPtr> buildJoinQueryPlan(
             settings[Setting::max_block_size],
             settings[Setting::min_joined_block_size_rows],
             settings[Setting::min_joined_block_size_bytes],
-            settings[Setting::max_threads],
+            getMaxThreadsForAvailableMemory(
+                settings[Setting::max_threads], settings[Setting::max_threads_min_free_memory_per_thread]),
             required_columns_after_join,
             false /*optimize_read_in_order*/,
             true /*optimize_skip_unused_shards*/,

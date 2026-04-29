@@ -3226,8 +3226,8 @@ public:
                         = {{left_type->createColumnConst(1, (*left.column)[0]), left_type, left.name},
                            {right_type->createColumnConst(1, point), right_type, right.name}};
 
-                    /// This is a bit dangerous to call Base::executeImpl cause it ignores `use Default Implementation For XXX` flags.
-                    /// It was possible to check monotonicity for nullable right type which result to exception.
+                    /// This is a bit dangerous to call `Base::executeImpl` cause it ignores `use Default Implementation For XXX` flags.
+                    /// It was possible to check monotonicity for nullable right type, which results in an exception.
                     /// We also strip `LowCardinality` recursively (e.g. `Array(LowCardinality(Float64))` -> `Array(Float64)`)
                     /// because the framework's `LowCardinality` default implementation is bypassed when calling `Base::executeImpl`
                     /// directly, and the inner numeric dispatch (via `castBothTypes`) does not recognize `LowCardinality`.

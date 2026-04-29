@@ -1043,6 +1043,24 @@ std::vector<StorageID> DatabaseCatalog::getDependentViews(const StorageID & sour
     return view_dependencies.getDependencies(source_table_id);
 }
 
+std::vector<StorageID> DatabaseCatalog::takeSourceViewDependencies(const StorageID & source_table_id)
+{
+    std::lock_guard lock{databases_mutex};
+    auto views = view_dependencies.getDependencies(source_table_id);
+    for (const auto & view : views)
+        view_dependencies.removeDependency(source_table_id, view, /* remove_isolated_tables= */ true);
+    return views;
+}
+
+void DatabaseCatalog::addSourceViewDependencies(const StorageID & source_table_id, const std::vector<StorageID> & view_ids)
+{
+    if (view_ids.empty())
+        return;
+    std::lock_guard lock{databases_mutex};
+    for (const auto & view_id : view_ids)
+        view_dependencies.addDependency(source_table_id, view_id);
+}
+
 std::vector<StorageID> DatabaseCatalog::getReadyDependentViews(const StorageID & source_table_id, const ContextPtr & query_context) const
 {
     /// During server startup, not all dependent views may be registered yet.

@@ -50,7 +50,7 @@ TEST(FieldAccurateComparisonTest, DecimalVsNaN)
     /// equals: NaN is not equal to anything
     EXPECT_FALSE(accurateEquals(decimal_val, float_nan));
     EXPECT_FALSE(accurateEquals(float_nan, decimal_val));
-    EXPECT_TRUE(accurateEquals(float_nan, float_nan));   /// same-type NaN: FloatCompareHelper treats NaN == NaN as true
+    EXPECT_FALSE(accurateEquals(float_nan, float_nan));   /// same-type NaN: accurate::equalsOp treats NaN == NaN as false
 
     /// less: NaN is greater than all values
     EXPECT_TRUE(accurateLess(decimal_val, float_nan));   /// decimal < NaN

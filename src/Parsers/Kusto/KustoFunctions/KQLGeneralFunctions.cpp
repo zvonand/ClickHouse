@@ -213,6 +213,72 @@ bool BinAt::convertImpl(String & out, IParser::Pos & pos)
     return true;
 }
 
+bool Floor::convertImpl(String & out, IParser::Pos & pos)
+{
+    /// KQL `floor(value [, roundTo])`. When `roundTo` is omitted it defaults to 1
+    /// (rounding the value down to the nearest integer). When provided, the
+    /// behaviour is identical to `bin(value, roundTo)`.
+    const String fn_name = getKQLFunctionName(pos);
+    if (fn_name.empty())
+        return false;
+
+    ++pos;
+    String value = getConvertedArgument(fn_name, pos);
+    value.erase(std::remove_if(value.begin(), value.end(), [](unsigned char c) { return std::isspace(c); }), value.end());
+    if (value.empty())
+        return false;
+
+    /// Single-argument form: `floor(x)`. `getConvertedArgument` stops at the closing
+    /// bracket without consuming it, so we leave `pos` there for the caller.
+    if (pos->type == TokenType::ClosingRoundBracket)
+    {
+        out = fmt::format("floor(toFloat64({}))", value);
+        return true;
+    }
+
+    /// Two-argument form: `floor(x, roundTo)`. Reuse `Bin` semantics.
+    if (pos->type != TokenType::Comma)
+        return false;
+
+    ++pos;
+    String round_to = getConvertedArgument(fn_name, pos);
+    round_to.erase(std::remove_if(round_to.begin(), round_to.end(), [](unsigned char c) { return std::isspace(c); }), round_to.end());
+    if (round_to.empty())
+        return false;
+
+    /// Try to interpret round_to as a constant for the zero-bin guard.
+    bool is_const_bin_size = false;
+    double bin_size = 0;
+    try
+    {
+        bin_size = std::stod(round_to);
+        is_const_bin_size = true;
+    }
+    catch (const std::exception &)
+    {
+        ParserKQLDateTypeTimespan time_span_parser;
+        if (time_span_parser.parseConstKQLTimespan(round_to))
+        {
+            bin_size = time_span_parser.toSeconds();
+            is_const_bin_size = true;
+        }
+    }
+
+    if (is_const_bin_size && bin_size <= 0)
+    {
+        out = "NULL";
+        return true;
+    }
+
+    auto bin_sz = is_const_bin_size ? std::to_string(bin_size) : fmt::format("toFloat64({})", round_to);
+    auto result = fmt::format("toInt64(floor(toFloat64({0}) / {1})) * {1}", value, bin_sz);
+    if (!is_const_bin_size)
+        out = fmt::format("if(({}) <= 0, NULL, {})", bin_sz, result);
+    else
+        out = result;
+    return true;
+}
+
 bool Iif::convertImpl(String & out, IParser::Pos & pos)
 {
     const String fn_name = getKQLFunctionName(pos);

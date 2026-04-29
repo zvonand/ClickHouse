@@ -914,7 +914,7 @@ std::unique_ptr<IParserKQLFunction> KQLFunctionFactory::get(String & kql_functio
             return std::make_unique<Any>();
 
         case KQLFunctionValue::kql_floor:
-            return std::make_unique<Bin>();
+            return std::make_unique<Floor>();
 
         case KQLFunctionValue::kql_format:
             return std::make_unique<Format>();

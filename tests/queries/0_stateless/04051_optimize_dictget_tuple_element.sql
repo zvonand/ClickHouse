@@ -114,6 +114,13 @@ SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), 
 WITH ('CTECountry', 'CTECity') AS d
 SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), d).2;
 
+-- Same as above with named access — ensures the named-index code path also bails out on alias defaults.
+SELECT 'dictGetOrDefault with CTE alias default named access';
+WITH ('CTECountry', 'CTECity') AS d
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), d).country;
+WITH ('CTECountry', 'CTECity') AS d
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(999), d).city;
+
 -- Test shared-parent scenario: ORDER BY ALL references the SELECT expression, so the tupleElement
 -- (and its inner dictGet) node is shared between SELECT and ORDER BY. The pass must not mutate the
 -- shared dictGet in place — that would leave the other parent's tupleElement wrapping a scalar.

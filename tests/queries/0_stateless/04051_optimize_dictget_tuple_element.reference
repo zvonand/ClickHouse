@@ -49,6 +49,9 @@ MatCity
 dictGetOrDefault with CTE alias default
 CTECountry
 CTECity
+dictGetOrDefault with CTE alias default named access
+CTECountry
+CTECity
 shared tupleElement across SELECT and ORDER BY ALL
 New York
 Paris

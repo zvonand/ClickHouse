@@ -312,12 +312,12 @@ void ReadBufferFromAzureBlobStorage::initialize(size_t attempt)
             }
 
             ProfileEvents::increment(ProfileEvents::ReadBufferFromAzureRequestsErrors);
-            LOG_DEBUG(log, "Exception caught during Azure Read for file {} at attempt {}/{}: {}", path, i + 1, max_single_read_retries, getCurrentExceptionMessage(false));
+            LOG_DEBUG(log, "Exception caught during Azure Download for file {} at attempt {}/{}: {}", path, i + 1, max_single_download_retries, getCurrentExceptionMessage(false));
             /// It doesn't make sense to retry allocator errors
             if (getCurrentExceptionCode() == ErrorCodes::CANNOT_ALLOCATE_MEMORY)
                 throw;
 
-            if (i + 1 == max_single_read_retries)
+            if (i + 1 == max_single_download_retries)
                 throw;
 
             sleepForMilliseconds(sleep_time_with_backoff_milliseconds);
@@ -426,12 +426,12 @@ size_t ReadBufferFromAzureBlobStorage::readBigAt(char * to, size_t n, size_t ran
             }
 
             ProfileEvents::increment(ProfileEvents::ReadBufferFromAzureRequestsErrors);
-            LOG_DEBUG(log, "Exception caught during Azure Read for file {} at attempt {}/{}: {}", path, i + 1, max_single_read_retries, getCurrentExceptionMessage(false));
+            LOG_DEBUG(log, "Exception caught during Azure Download for file {} at attempt {}/{}: {}", path, i + 1, max_single_download_retries, getCurrentExceptionMessage(false));
             /// It doesn't make sense to retry allocator errors
             if (getCurrentExceptionCode() == ErrorCodes::CANNOT_ALLOCATE_MEMORY)
                 throw;
 
-            if (i + 1 == max_single_read_retries)
+            if (i + 1 == max_single_download_retries)
                 throw;
 
             sleepForMilliseconds(sleep_time_with_backoff_milliseconds);

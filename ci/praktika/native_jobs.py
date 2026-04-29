@@ -639,27 +639,33 @@ def _config_workflow(workflow: Workflow.Config, job_name) -> Result:
         )
 
     if results[-1].is_ok() and workflow.enable_cache:
-        print("Cache Lookup")
-        stop_watch = Utils.Stopwatch()
-        info = ""
-        try:
-            workflow_config = CacheRunnerHooks.configure(workflow)
-            files.append(RunConfig.file_name_static(workflow.name))
-            res = True
-        except Exception as e:
-            res = False
-            traceback.print_exc()
-            info = traceback.format_exc()
-
-        results.append(
-            Result(
-                name="Cache Lookup",
-                status=Result.Status.OK if res else Result.Status.FAIL,
-                start_time=stop_watch.start_time,
-                duration=stop_watch.duration,
-                info=info,
+        pr_labels = Info().pr_labels
+        if Settings.CI_FORCE_ALL_LABEL in pr_labels:
+            print(
+                f"NOTE: Cache lookup bypassed (label '{Settings.CI_FORCE_ALL_LABEL}')"
             )
-        )
+        else:
+            print("Cache Lookup")
+            stop_watch = Utils.Stopwatch()
+            info = ""
+            try:
+                workflow_config = CacheRunnerHooks.configure(workflow)
+                files.append(RunConfig.file_name_static(workflow.name))
+                res = True
+            except Exception as e:
+                res = False
+                traceback.print_exc()
+                info = traceback.format_exc()
+
+            results.append(
+                Result(
+                    name="Cache Lookup",
+                    status=Result.Status.OK if res else Result.Status.FAIL,
+                    start_time=stop_watch.start_time,
+                    duration=stop_watch.duration,
+                    info=info,
+                )
+            )
 
     if results[-1].is_ok() and workflow.enable_cache and Settings.ENABLE_SUBMODULE_CACHE:
         result = _prepare_submodule_cache(workflow_config)

@@ -1087,7 +1087,10 @@ namespace
                 /// that's why we are using it instead of the 'clickhouse su' tool.
                 /// by default, sudo resets all the ENV variables, but we should preserve
                 /// the values /etc/default/clickhouse in /etc/init.d/clickhouse file
-                command = fmt::format("sudo --preserve-env -u {} {}", shellQuote(user), command);
+                if (!group.empty())
+                    command = fmt::format("sudo --preserve-env -u {} -g {} {}", shellQuote(user), shellQuote(group), command);
+                else
+                    command = fmt::format("sudo --preserve-env -u {} {}", shellQuote(user), command);
             }
         }
 

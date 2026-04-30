@@ -112,5 +112,19 @@ DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_persist;
 # Host-relative URL with dot-segments: /a/../b.csv → /b.csv (RFC 3986 dot-segment normalization)
 run_and_check "SELECT * FROM url('/a/../b.csv', CSV, 'c String') SETTINGS url_base = 'http://base.invalid/dir/file.csv', $FAST" 'http://base.invalid/b.csv'
 
+# URL engine: resolved URL must be materialized for named-collection form too.
+# Without the fix, restarting with url_base unset would fail to resolve the relative URL.
+$CLICKHOUSE_CLIENT -n -q "
+DROP NAMED COLLECTION IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_nc;
+CREATE NAMED COLLECTION ${CLICKHOUSE_TEST_UNIQUE_NAME}_nc AS url='persist.csv', format='CSV';
+SET url_base = 'http://base.invalid/dir/';
+DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_persist;
+CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_persist (c String) ENGINE = URL(${CLICKHOUSE_TEST_UNIQUE_NAME}_nc);
+SET url_base = '';
+SHOW CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_persist FORMAT TabSeparatedRaw;
+DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_persist;
+DROP NAMED COLLECTION IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_nc;
+" 2>&1 | grep -oF "url = 'http://base.invalid/dir/persist.csv'" | head -1
+
 # Invalid url_base (no scheme) should produce an error
 $CLICKHOUSE_CLIENT --query "SELECT * FROM url('data.csv', CSV, 'c String') SETTINGS url_base = 'example.invalid/def/', $FAST" 2>&1 | grep -oF 'must contain a scheme' | head -1

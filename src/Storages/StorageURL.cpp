@@ -11,6 +11,7 @@
 #include <Parsers/ASTInsertQuery.h>
 #include <Parsers/ASTLiteral.h>
 #include <Parsers/ASTFunction.h>
+#include <Parsers/ASTIdentifier.h>
 
 #include <IO/ConnectionTimeouts.h>
 #include <IO/WriteBufferFromHTTP.h>
@@ -1861,16 +1862,40 @@ void StorageURL::addInferredEngineArgsToCreateQuery(ASTs & args, const ContextPt
     /// Materialize the resolved URL into engine args so that DETACH/ATTACH and server restart
     /// reproduce the originally-resolved URL even if `url_base` is later changed or unset.
     /// `uri` is the URL after `url_base` resolution (computed by `getConfiguration`).
-    if (!args.empty())
+    if (args.empty())
+        return;
+
+    /// Positional form: `URL('url', ...)` — replace the first literal argument.
+    if (const auto * existing_literal = args[0]->as<ASTLiteral>();
+        existing_literal && existing_literal->value.getType() == Field::Types::String)
     {
-        const auto * existing_literal = args[0]->as<ASTLiteral>();
-        if (existing_literal && existing_literal->value.getType() == Field::Types::String)
-        {
-            const auto & current_url = existing_literal->value.safeGet<String>();
-            if (current_url != uri)
-                args[0] = make_intrusive<ASTLiteral>(uri);
-        }
+        const auto & current_url = existing_literal->value.safeGet<String>();
+        if (current_url != uri)
+            args[0] = make_intrusive<ASTLiteral>(uri);
+        return;
     }
+
+    /// Named-collection or key-value form: `URL(nc)`, `URL(nc, url='...')`, or `URL(url='...', ...)`.
+    /// If a `url='...'` key-value override is already present, update its literal in place.
+    /// Otherwise, append a `url='<resolved>'` override so that named-collection resolution
+    /// picks up the resolved URL at restart time.
+    for (auto & arg : args)
+    {
+        auto * func = arg->as<ASTFunction>();
+        if (!func || func->name != "equals" || !func->arguments)
+            continue;
+        auto * func_args = func->arguments->as<ASTExpressionList>();
+        if (!func_args || func_args->children.size() != 2)
+            continue;
+        const auto * key_ast = func_args->children[0]->as<ASTIdentifier>();
+        if (!key_ast || key_ast->name() != "url")
+            continue;
+        func_args->children[1] = make_intrusive<ASTLiteral>(uri);
+        return;
+    }
+
+    ASTs key_value_args = {make_intrusive<ASTIdentifier>("url"), make_intrusive<ASTLiteral>(uri)};
+    args.push_back(makeASTOperator("equals", std::move(key_value_args)));
 }
 
 StorageURL::Configuration StorageURL::getConfiguration(ASTs & args, const ContextPtr & local_context, const StorageID * table_id)

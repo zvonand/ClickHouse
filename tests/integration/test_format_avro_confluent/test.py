@@ -341,6 +341,75 @@ def test_output_subject_encoding(started_cluster):
     )
 
 
+def test_output_register_same_schema_is_idempotent(started_cluster):
+    # type: (ClickHouseCluster) -> None
+
+    # Registering a schema is just a translation from a schema definition to a
+    # schema id: if an identical schema is already registered under the
+    # subject, the Schema Registry returns the existing id and no error is
+    # raised. Verify by running the AvroConfluent output twice with the same
+    # subject and schema, comparing the schema id embedded in the Confluent
+    # framing (magic byte + 4-byte big-endian id) and asserting that the
+    # registry still only holds a single version under the subject.
+
+    instance = started_cluster.instances["dummy"]  # type: ClickHouseInstance
+    schema_registry_url = "http://{}:{}".format(
+        started_cluster.schema_registry_host, started_cluster.schema_registry_port
+    )
+    local_registry_url = "http://localhost:{}".format(
+        started_cluster.schema_registry_port
+    )
+
+    subject = "test_output_idempotent_subject"
+
+    run_query(
+        instance,
+        "create table avro_output_idempotent_source(value Int64) engine = Memory()",
+    )
+    run_query(instance, "insert into avro_output_idempotent_source values (1),(2),(3)")
+
+    settings = {
+        "format_avro_schema_registry_url": schema_registry_url,
+        "output_format_avro_confluent_subject": subject,
+    }
+
+    def get_schema_id(framed_bytes):
+        # Confluent framing: 1 magic byte (0x00) + 4-byte big-endian schema id
+        # followed by the Avro-encoded payload.
+        assert len(framed_bytes) >= 5
+        assert framed_bytes[0] == 0x00
+        return int.from_bytes(framed_bytes[1:5], byteorder="big")
+
+    data_first = instance.http_query(
+        "select * from avro_output_idempotent_source format AvroConfluent",
+        data=" ",
+        params=settings,
+        content=True,
+    )
+    data_second = instance.http_query(
+        "select * from avro_output_idempotent_source format AvroConfluent",
+        data=" ",
+        params=settings,
+        content=True,
+    )
+
+    first_id = get_schema_id(data_first)
+    second_id = get_schema_id(data_second)
+    assert first_id == second_id, (
+        f"Re-registering the same schema produced a different id: "
+        f"{first_id} vs {second_id}"
+    )
+
+    versions = json.loads(
+        urllib.request.urlopen(
+            local_registry_url + "/subjects/" + parse.quote(subject, safe="") + "/versions"
+        ).read()
+    )
+    assert versions == [1], (
+        f"Expected exactly one version under subject '{subject}', got {versions}"
+    )
+
+
 def test_output_incompatible_schema(started_cluster):
     # type: (ClickHouseCluster) -> None
 

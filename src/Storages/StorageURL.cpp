@@ -1816,12 +1816,14 @@ String StorageURL::resolveURLBase(const String & url, const String & base)
         return base.substr(0, scheme_end + 1) + url;
 
     /// Host-relative URL: /path → use scheme and authority from base.
+    /// Dot segments in the path are normalized per RFC 3986.
     if (url.starts_with("/"))
     {
         auto authority_end = base_before_query.find('/', authority_start);
-        if (authority_end == String::npos)
-            return base_before_query + url;
-        return base_before_query.substr(0, authority_end) + url;
+        String merged = (authority_end == String::npos)
+            ? base_before_query + url
+            : base_before_query.substr(0, authority_end) + url;
+        return normalizeDotSegmentsInURL(merged, authority_start);
     }
 
     /// Query-only relative reference: ?query → append to full base path (before any existing query/fragment).

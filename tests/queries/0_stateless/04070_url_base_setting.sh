@@ -109,5 +109,8 @@ SHOW CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_persist FORMAT TabSeparated
 DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_persist;
 " 2>&1 | grep -oF "URL('http://base.invalid/dir/persist.csv'" | head -1
 
+# Host-relative URL with dot-segments: /a/../b.csv → /b.csv (RFC 3986 dot-segment normalization)
+run_and_check "SELECT * FROM url('/a/../b.csv', CSV, 'c String') SETTINGS url_base = 'http://base.invalid/dir/file.csv', $FAST" 'http://base.invalid/b.csv'
+
 # Invalid url_base (no scheme) should produce an error
 $CLICKHOUSE_CLIENT --query "SELECT * FROM url('data.csv', CSV, 'c String') SETTINGS url_base = 'example.invalid/def/', $FAST" 2>&1 | grep -oF 'must contain a scheme' | head -1

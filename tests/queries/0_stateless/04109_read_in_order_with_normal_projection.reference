@@ -15,16 +15,11 @@ Expression (Project names)
 ---
 Expression (Project names)
   Sorting (Sorting for ORDER BY)
-    Expression
-      ReadFromMergeTree (proj)
----
-(Expression)
-ExpressionTransform
-  (Sorting)
-  RemoveVirtualRowTransform
-    (Expression)
-    ExpressionTransform
-      (ReadFromMergeTree)
-      VirtualRowTransform
-        MergeTreeSelect(pool: ReadPoolInOrder, algorithm: InOrder) 0 → 1
+    Union
+      Sorting
+        Expression ((Before ORDER BY + Projection))
+          Expression ((WHERE + Change column names to column identifiers))
+            ReadFromMergeTree (default.mt)
+      Expression
+        ReadFromMergeTree (proj)
 ---

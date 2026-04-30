@@ -83,8 +83,7 @@ static std::optional<ActionsDAG> makeMaterializingDAG(const Block & proj_header,
 std::optional<String> optimizeUseNormalProjections(
     Stack & stack,
     QueryPlan::Nodes & nodes,
-    bool is_parallel_replicas_initiator_with_projection_support,
-    size_t max_step_description_length)
+    const QueryPlanOptimizationSettings & optimization_settings)
 {
     const auto & frame = stack.back();
 
@@ -249,6 +248,9 @@ std::optional<String> optimizeUseNormalProjections(
     auto projection_sort_order_useful = [&](const ProjectionDescription * projection)
     {
         if (!outer_sorting_step)
+            return false;
+
+        if (!optimization_settings.read_in_order)
             return false;
 
         return wouldReadInOrderBeUseful(
@@ -423,7 +425,7 @@ std::optional<String> optimizeUseNormalProjections(
 
     /// Only the initiator should read the projection to avoid potential data duplication.
     bool has_parent_parts = !parent_reading_select_result->parts_with_ranges.empty();
-    bool should_skip_projection_reading_on_remote_replicas = reading->isParallelReadingEnabled() && !is_parallel_replicas_initiator_with_projection_support
+    bool should_skip_projection_reading_on_remote_replicas = reading->isParallelReadingEnabled() && !optimization_settings.is_parallel_replicas_initiator_with_projection_support
         && has_parent_parts;
     if (!projection_reading || should_skip_projection_reading_on_remote_replicas)
     {
@@ -444,7 +446,7 @@ std::optional<String> optimizeUseNormalProjections(
         projection_reading = std::make_unique<ReadFromPreparedSource>(std::move(pipe));
     }
 
-    if (has_parent_parts && is_parallel_replicas_initiator_with_projection_support)
+    if (has_parent_parts && optimization_settings.is_parallel_replicas_initiator_with_projection_support)
         fallbackToLocalProjectionReading(projection_reading);
 
     if (!query_info.is_internal && context->hasQueryContext())
@@ -456,7 +458,7 @@ std::optional<String> optimizeUseNormalProjections(
         });
     }
 
-    projection_reading->setStepDescription(best_candidate->projection->name, max_step_description_length);
+    projection_reading->setStepDescription(best_candidate->projection->name, optimization_settings.max_step_description_length);
 
     auto & projection_reading_node = nodes.emplace_back(QueryPlan::Node{.step = std::move(projection_reading)});
     auto * next_node = &projection_reading_node;

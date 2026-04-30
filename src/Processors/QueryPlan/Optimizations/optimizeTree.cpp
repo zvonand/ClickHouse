@@ -312,16 +312,8 @@ void optimizeTreeSecondPass(
 
                 /// Projection optimization relies on PK optimization
                 if (optimization_settings.optimize_projection)
-                {
-                    auto applied_projection = optimizeUseAggregateProjections(
-                        *frame.node,
-                        nodes,
-                        optimization_settings.optimize_use_implicit_projections,
-                        optimization_settings.is_parallel_replicas_initiator_with_projection_support,
-                        optimization_settings.max_step_description_length);
-                    if (applied_projection)
+                    if (auto applied_projection = optimizeUseAggregateProjections(*frame.node, nodes, optimization_settings))
                         applied_projection_names.insert(*applied_projection);
-                }
 
                 if (optimization_settings.aggregation_in_order)
                     optimizeAggregationInOrder(*frame.node, nodes, optimization_settings);
@@ -340,11 +332,7 @@ void optimizeTreeSecondPass(
         if (optimization_settings.optimize_projection)
         {
             /// Projection optimization relies on PK optimization
-            if (auto applied_projection = optimizeUseNormalProjections(
-                stack,
-                nodes,
-                optimization_settings.is_parallel_replicas_initiator_with_projection_support,
-                optimization_settings.max_step_description_length))
+            if (auto applied_projection = optimizeUseNormalProjections(stack, nodes, optimization_settings))
             {
                 applied_projection_names.insert(*applied_projection);
 

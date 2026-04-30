@@ -45,6 +45,8 @@ private:
 
     Poco::URI base_url;
     CacheBase<uint32_t, avro::ValidSchema> schema_cache;
+    /// Cache of (subject, schema_json) -> schema_id, populated on successful registration.
+    CacheBase<std::string, uint32_t> register_cache;
 };
 
 /// Global cache of ConfluentSchemaRegistry instances, keyed by base URL.

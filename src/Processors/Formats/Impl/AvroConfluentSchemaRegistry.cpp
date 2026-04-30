@@ -45,6 +45,7 @@ namespace ErrorCodes
 ConfluentSchemaRegistry::ConfluentSchemaRegistry(const std::string & base_url_, size_t schema_cache_max_size)
     : base_url(base_url_)
     , schema_cache(CurrentMetrics::AvroSchemaCacheBytes, CurrentMetrics::AvroSchemaCacheCells, schema_cache_max_size)
+    , register_cache(CurrentMetrics::AvroSchemaCacheBytes, CurrentMetrics::AvroSchemaCacheCells, schema_cache_max_size)
 {
     if (base_url.empty())
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Empty Schema Registry URL");
@@ -150,100 +151,114 @@ avro::ValidSchema ConfluentSchemaRegistry::fetchSchema(uint32_t id, const Format
 uint32_t ConfluentSchemaRegistry::registerSchema(const std::string & subject, const avro::ValidSchema & schema, const FormatSettings::AvroSchemaRegistryTimeouts & timeouts)
 {
     std::string schema_json = schema.toJson(false);
-    try
-    {
-        try
+
+    /// Cache key disambiguates `(subject, schema_json)` using a NUL byte that
+    /// cannot occur in either component when produced by `avro::ValidSchema::toJson`.
+    std::string cache_key = subject;
+    cache_key.push_back('\0');
+    cache_key.append(schema_json);
+
+    auto [cached_id, loaded] = register_cache.getOrSet(
+        cache_key,
+        [&]() -> std::shared_ptr<uint32_t>
         {
-            /// Percent-encode the subject for use as a path segment.
-            std::string encoded_subject;
-            Poco::URI::encode(subject, "?#/;+@&=", encoded_subject);
-
-            /// Build the request path directly to preserve percent-encoding.
-            /// Poco::URI normalizes paths by decoding %2F -> /, which breaks
-            /// subjects containing slashes.
-            std::string request_path = base_url.getPath() + "/subjects/" + encoded_subject + "/versions";
-            LOG_TRACE(getLogger("ConfluentSchemaRegistry"), "Registering schema under subject '{}' at path {}", subject, request_path);
-
-            auto connection_timeouts = buildTimeouts(timeouts);
-
-            Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, request_path, Poco::Net::HTTPRequest::HTTP_1_1);
-            request.setContentType("application/vnd.schemaregistry.v1+json");
-            if (base_url.getPort())
-                request.setHost(base_url.getHost(), base_url.getPort());
-            else
-                request.setHost(base_url.getHost());
-
-            applyAuth(base_url, request);
-
-            /// Build request body: {"schema": "<schema_json>"}
-            Poco::JSON::Object body;
-            body.set("schema", schema_json);
-            std::ostringstream body_stream; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
-            body.stringify(body_stream);
-            std::string body_str = body_stream.str();
-            request.setContentLength(body_str.size());
-
-            auto session = makeHTTPSession(HTTPConnectionGroupType::HTTP, base_url, connection_timeouts);
-            std::ostream & os = session->sendRequest(request);
-            os << body_str;
-
-            Poco::Net::HTTPResponse response;
-            std::istream & response_stream = session->receiveResponse(response);
-
-            if (response.getStatus() == Poco::Net::HTTPResponse::HTTP_CONFLICT)
+            try
             {
-                std::string response_body;
-                Poco::StreamCopier::copyToString(response_stream, response_body);
-
-                /// Confluent Schema Registry returns a JSON object with an "error_code" and a human-readable "message".
-                std::string registry_message = response_body;
-                LOG_TRACE(getLogger("ConfluentSchemaRegistry"), "Received HTTP 409 Conflict from Schema Registry for subject '{}': {}", subject, registry_message);
                 try
                 {
-                    Poco::JSON::Parser error_parser;
-                    auto error_json = error_parser.parse(response_body).extract<Poco::JSON::Object::Ptr>();
-                    if (error_json && error_json->has("message"))
-                        registry_message = error_json->getValue<std::string>("message");
+                    /// Percent-encode the subject for use as a path segment.
+                    std::string encoded_subject;
+                    Poco::URI::encode(subject, "?#/;+@&=", encoded_subject);
+
+                    /// Build the request path directly to preserve percent-encoding.
+                    /// Poco::URI normalizes paths by decoding %2F -> /, which breaks
+                    /// subjects containing slashes.
+                    std::string request_path = base_url.getPath() + "/subjects/" + encoded_subject + "/versions";
+                    LOG_TRACE(getLogger("ConfluentSchemaRegistry"), "Registering schema under subject '{}' at path {}", subject, request_path);
+
+                    auto connection_timeouts = buildTimeouts(timeouts);
+
+                    Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, request_path, Poco::Net::HTTPRequest::HTTP_1_1);
+                    request.setContentType("application/vnd.schemaregistry.v1+json");
+                    if (base_url.getPort())
+                        request.setHost(base_url.getHost(), base_url.getPort());
+                    else
+                        request.setHost(base_url.getHost());
+
+                    applyAuth(base_url, request);
+
+                    /// Build request body: {"schema": "<schema_json>"}
+                    Poco::JSON::Object body;
+                    body.set("schema", schema_json);
+                    std::ostringstream body_stream; // STYLE_CHECK_ALLOW_STD_STRING_STREAM
+                    body.stringify(body_stream);
+                    std::string body_str = body_stream.str();
+                    request.setContentLength(body_str.size());
+
+                    auto session = makeHTTPSession(HTTPConnectionGroupType::HTTP, base_url, connection_timeouts);
+                    std::ostream & os = session->sendRequest(request);
+                    os << body_str;
+
+                    Poco::Net::HTTPResponse response;
+                    std::istream & response_stream = session->receiveResponse(response);
+
+                    if (response.getStatus() == Poco::Net::HTTPResponse::HTTP_CONFLICT)
+                    {
+                        std::string response_body;
+                        Poco::StreamCopier::copyToString(response_stream, response_body);
+
+                        /// Confluent Schema Registry returns a JSON object with an "error_code" and a human-readable "message".
+                        std::string registry_message = response_body;
+                        LOG_TRACE(getLogger("ConfluentSchemaRegistry"), "Received HTTP 409 Conflict from Schema Registry for subject '{}': {}", subject, registry_message);
+                        try
+                        {
+                            Poco::JSON::Parser error_parser;
+                            auto error_json = error_parser.parse(response_body).extract<Poco::JSON::Object::Ptr>();
+                            if (error_json && error_json->has("message"))
+                                registry_message = error_json->getValue<std::string>("message");
+                        }
+                        catch (const Poco::Exception &) // NOLINT(bugprone-empty-catch)
+                        {
+                            /// Fall back to the raw body if it is not JSON.
+                        }
+
+                        throw Exception(
+                            ErrorCodes::INCOMPATIBLE_SCHEMA,
+                            "Schema Registry returned HTTP 409 Conflict for subject '{}': {}. This typically means the schema is "
+                            "incompatible with an existing version under the subject's compatibility level. One way to resolve "
+                            "it is to set the compatibility level to NONE for this subject on the Confluent Schema Registry.",
+                            subject, registry_message);
+                    }
+
+                    assertResponseIsOk(request.getURI(), response, response_stream, false);
+
+                    Poco::JSON::Parser parser;
+                    auto json_body = parser.parse(response_stream).extract<Poco::JSON::Object::Ptr>();
+                    uint32_t schema_id = json_body->getValue<uint32_t>("id");
+                    LOG_TRACE(getLogger("ConfluentSchemaRegistry"), "Successfully registered schema under subject '{}', id = {}", subject, schema_id);
+                    return std::make_shared<uint32_t>(schema_id);
                 }
-                catch (const Poco::Exception &) // NOLINT(bugprone-empty-catch)
+                catch (const Exception &)
                 {
-                    /// Fall back to the raw body if it is not JSON.
+                    throw;
                 }
-
-                throw Exception(
-                    ErrorCodes::INCOMPATIBLE_SCHEMA,
-                    "Schema Registry returned HTTP 409 Conflict for subject '{}': {}. This typically means the schema is "
-                    "incompatible with an existing version under the subject's compatibility level. One way to resolve "
-                    "it is to set the compatibility level to NONE for this subject on the Confluent Schema Registry.",
-                    subject, registry_message);
+                catch (const Poco::Exception & e)
+                {
+                    throw Exception(Exception::CreateFromPocoTag{}, e);
+                }
+                catch (const avro::Exception & e)
+                {
+                    throw Exception::createDeprecated(e.what(), ErrorCodes::INCORRECT_DATA);
+                }
             }
+            catch (Exception & e)
+            {
+                e.addMessage("while registering schema under subject '" + subject + "'");
+                throw;
+            }
+        });
 
-            assertResponseIsOk(request.getURI(), response, response_stream, false);
-
-            Poco::JSON::Parser parser;
-            auto json_body = parser.parse(response_stream).extract<Poco::JSON::Object::Ptr>();
-            uint32_t schema_id = json_body->getValue<uint32_t>("id");
-            LOG_TRACE(getLogger("ConfluentSchemaRegistry"), "Successfully registered schema under subject '{}', id = {}", subject, schema_id);
-            return schema_id;
-        }
-        catch (const Exception &)
-        {
-            throw;
-        }
-        catch (const Poco::Exception & e)
-        {
-            throw Exception(Exception::CreateFromPocoTag{}, e);
-        }
-        catch (const avro::Exception & e)
-        {
-            throw Exception::createDeprecated(e.what(), ErrorCodes::INCORRECT_DATA);
-        }
-    }
-    catch (Exception & e)
-    {
-        e.addMessage("while registering schema under subject '" + subject + "'");
-        throw;
-    }
+    return *cached_id;
 }
 
 #define SCHEMA_REGISTRY_CACHE_MAX_SIZE 1000

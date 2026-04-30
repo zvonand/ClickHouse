@@ -117,6 +117,11 @@ def _check_impl() -> None:
         traceback.print_exc()
         return
 
+    for _k in ("pct", "passed", "failed", "unsupported"):
+        if _k not in new:
+            print(f"PromQL compliance hook: result JSON missing key {_k!r}")
+            return
+
     commits = master_track_commits(info)
     base, s3_sha = fetch_baseline_from_s3(commits)
     if base is not None and s3_sha:

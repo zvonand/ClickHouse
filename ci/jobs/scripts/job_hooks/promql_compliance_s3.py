@@ -20,6 +20,7 @@ from ci.defs.defs import S3_BUCKET_HTTP_ENDPOINT
 from ci.praktika.info import Info
 from ci.praktika.settings import Settings
 from ci.praktika.s3 import S3
+from ci.praktika.utils import Shell
 
 S3_KEY_DIR = "promql_compliance"
 RESULT_NAME = "promql_compliance_result.json"
@@ -79,10 +80,31 @@ def fetch_baseline_from_s3(commits: list[str]) -> Tuple[Optional[dict[str, Any]]
 
 
 def master_track_commits(info: Info) -> list[str]:
+    """SHAs on master from store_data, or GH merge-base walk (same fallback as llvm_coverage_job)."""
     out = list(info.get_kv_data("master_track_commits_sha") or [])
     if out:
         return out
-    return []
+    if info.is_local_run or info.pr_number <= 0:
+        return []
+    sha = (info.sha or "").strip()
+    if len(sha) != 40:
+        return []
+    try:
+        merge_base = Shell.get_output(
+            f"gh api repos/ClickHouse/ClickHouse/compare/master...{sha} -q .merge_base_commit.sha",
+            strict=False,
+            verbose=False,
+        ).strip()
+        if not merge_base:
+            return []
+        raw = Shell.get_output(
+            f"gh api 'repos/ClickHouse/ClickHouse/commits?sha={merge_base}&per_page=30' -q '.[].sha'",
+            strict=False,
+            verbose=False,
+        )
+        return [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    except Exception:
+        return []
 
 
 def upload_master_result(local_path: Path, commit_sha: str) -> Optional[str]:

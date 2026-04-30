@@ -39,8 +39,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-_THIS_DIR = Path(__file__).resolve().parent
-_REPO_ROOT = _THIS_DIR.parent.parent.parent
+# Repo root: file is under tests/integration/test_prometheus_protocols/; parents[3] is repo root.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _TESTS_INTEGRATION = _REPO_ROOT / "tests" / "integration"
 _CI_TMP = _REPO_ROOT / "ci" / "tmp"
 _DEFAULT_OUT = _CI_TMP / "promql_compliance_baseline_export.json"

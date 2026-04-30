@@ -748,7 +748,7 @@ String Client::getHelpHeader() const
 String Client::getHelpFooter() const
 {
     return fmt::format(
-        "Note: if clickhouse is installed, you can use '{0}' invocation with a dash.\n\n"
+        "Note: if clickhouse is installed, you can use 'clickhouse-client' invocation with a dash.\n\n"
         "Example printing current longest running query on a server:\n"
         "    {0} --query \\\n"
         "        'SELECT * FROM system.processes ORDER BY elapsed LIMIT 1 FORMAT Vertical'\n"

@@ -11,8 +11,6 @@
 #   * clang_rt_tsan / tsan_cxx               — if SANITIZE = thread
 #   * clang_rt_ubsan_standalone / ubsan_standalone_cxx — if SANITIZE = undefined
 #   * clang_rt_xray                          — if ENABLE_XRAY
-#
-# Supported architectures: x86_64, aarch64, ppc64le, riscv64, s390x, loongarch64.
 
 set(COMPILER_RT_DIR     "${ClickHouse_SOURCE_DIR}/contrib/llvm-project/compiler-rt")
 set(BUILTINS_SOURCE_DIR "${COMPILER_RT_DIR}/lib/builtins")

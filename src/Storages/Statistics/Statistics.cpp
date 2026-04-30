@@ -389,6 +389,9 @@ std::shared_ptr<ColumnStatistics> ColumnStatistics::deserialize(ReadBuffer & buf
                         "Statistics deserialization for type {} consumed {} bytes but stat_size was {}. "
                         "The statistics file may be corrupted.",
                         statisticsTypeToString(type), consumed, stat_size);
+
+                auto ast = make_intrusive<ASTIdentifier>(statisticsTypeToString(type));
+                result->stats_desc.types_to_desc.emplace(type, SingleStatisticsDescription(type, ast, false));
                 result->stats[type] = std::move(stat_ptr);
             }
             else

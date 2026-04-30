@@ -508,6 +508,19 @@ TEST(Statistics, SerializeDeserializeRoundTrip)
     EXPECT_TRUE(read_buf.eof());
 }
 
+TEST(Statistics, DeserializeV3CloneEmptyPreservesStatsDescription)
+{
+    auto data_type = std::make_shared<DataTypeNullable>(std::make_shared<DataTypeInt32>());
+    auto stats = buildNullableInt32Stats({StatisticsType::MinMax, StatisticsType::NullCount}, 100, 5);
+    auto deserialized = roundTripStats(stats, data_type);
+    auto clone = deserialized->cloneEmpty();
+
+    EXPECT_EQ(clone->getNumRows(), 0);
+    EXPECT_TRUE(clone->structureEquals(*deserialized));
+    EXPECT_TRUE(clone->getStats().contains(StatisticsType::MinMax));
+    EXPECT_TRUE(clone->getStats().contains(StatisticsType::NullCount));
+}
+
 TEST(Statistics, DeserializeV3SkipsTrailingBytes)
 {
     /// Test that V3 deserialization correctly skips trailing bytes when a known

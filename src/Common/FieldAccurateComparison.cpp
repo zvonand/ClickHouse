@@ -28,7 +28,7 @@ static Float64 decimalFieldToFloat64(const DecimalField<T> & decimal)
   * Differs from Field::operator< and Field::operator== in that it also compares values of different types.
   * Comparison rules are same as in FunctionsComparison (to be consistent with expression evaluation in query).
   *
-  * NaN policy: NaN == NaN is true (for same-type), NaN != any non-NaN value (for cross-type).
+  * NaN policy: NaN != any value including NaN (same-type and cross-type).
   * This is consistent with ClickHouse sort order where NaN has a defined position.
   */
 class FieldVisitorAccurateEquals : public StaticVisitor<bool>

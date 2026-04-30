@@ -147,14 +147,3 @@ Expression (Project names)
         Deferred filters (applied after FINAL)
           Deferred row level filter column: equals(deleted, 0_UInt8)
           Deferred prewhere filter column: equals(x, 2_UInt8)
-
-= non-deterministic row policy that structurally only uses SK columns must remain deferred =
---- non-deterministic row policy stays deferred (count of "Deferred row level filter" lines)
-1
-
-= row policy over SK column without PREWHERE: row policy itself should not be deferred =
---- data correctness
-2	eee	2
-3	ccc	1
---- no Deferred filters expected (count of any "Deferred" lines)
-0

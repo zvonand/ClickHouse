@@ -6,6 +6,8 @@
 #include <thread>
 #include <Common/logger_useful.h>
 #include <Common/NamedCollections/NamedCollectionsFactory.h>
+#include <Common/RemoteHostFilter.h>
+#include <Poco/URI.h>
 #include <Columns/ColumnNullable.h>
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnConst.h>
@@ -141,6 +143,7 @@ ColumnPtr FunctionBaseAI::executeImpl(const ColumnsWithTypeAndName & arguments, 
     }
 
     auto config = resolveConfig(arguments);
+    getContext()->getRemoteHostFilter().checkURL(Poco::URI(config.endpoint));
     auto provider = createAIProvider(config.provider, config.endpoint, config.api_key, config.api_version);
     float temperature = resolveTemperature(arguments, config);
 

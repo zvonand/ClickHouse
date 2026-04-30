@@ -349,9 +349,11 @@ void AccessRightsElement::makeBackwardCompatible()
 {
     static const auto string_to_accessType = [] {
         std::unordered_map<std::string, AccessType> result;
-        /// Use DB::toString() to build keys so they match what replaceDeprecated() stores
-        /// (DB::toString replaces underscores with spaces, e.g. ARROW_FLIGHT -> "ARROW FLIGHT").
-        #define ADD_BACKWARD_COMPAT_SOURCE(name, alias) result.emplace(DB::toString(AccessType::name), AccessType::name);
+        /// Insert both the spaced form (e.g. "ARROW FLIGHT" from replaceDeprecated())
+        /// and the canonical form (e.g. "ARROW_FLIGHT" from unifySource() in the parser).
+        #define ADD_BACKWARD_COMPAT_SOURCE(name, alias) \
+            result.emplace(DB::toString(AccessType::name), AccessType::name); \
+            result.emplace(#name, AccessType::name);
         APPLY_FOR_SOURCE(ADD_BACKWARD_COMPAT_SOURCE)
         #undef ADD_BACKWARD_COMPAT_SOURCE
         return result;

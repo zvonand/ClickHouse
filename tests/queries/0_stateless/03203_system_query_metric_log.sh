@@ -94,6 +94,6 @@ $CLICKHOUSE_CLIENT -m -q """
         =
         (SELECT event_time_microseconds
          FROM system.query_log
-         WHERE event_date >= yesterday() AND event_time >= now() - 600 AND query_id = '${query_prefix}_1000' AND type = 'QueryFinish'
+         WHERE event_date >= yesterday() AND event_time >= now() - 600 AND current_database = currentDatabase() AND query_id = '${query_prefix}_1000' AND type = 'QueryFinish'
          LIMIT 1)
 """

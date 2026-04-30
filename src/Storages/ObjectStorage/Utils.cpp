@@ -296,9 +296,12 @@ void expandPaimonKeeperMacrosIfNeeded(
     const auto is_on_cluster = args.getLocalContext()->getClientInfo().query_kind == ClientInfo::QueryKind::SECONDARY_QUERY;
     const auto is_replicated_database = is_on_cluster
         && DatabaseCatalog::instance().getDatabase(args.table_id.database_name)->getEngineName() == "Replicated";
-    /// Allow implicit {uuid} macro only in ON CLUSTER / Replicated / ATTACH / explicit UUID scenarios,
-    /// aligned with the standard pattern in TableZnodeInfo::resolve.
-    const auto allow_uuid_macro = is_on_cluster || is_replicated_database || args.query.attach || args.query.has_uuid;
+    /// Unlike ReplicatedMergeTree (which uses the stricter is_on_cluster || is_replicated_database ||
+    /// query.attach || query.has_uuid pattern in TableZnodeInfo::resolve), Paimon's keeper_path stores
+    /// per-table incremental read state and does not require cross-replica path consistency.
+    /// Using hasUUID() allows {uuid} expansion in Atomic databases, which is essential to guarantee
+    /// unique keeper paths — especially after DROP + re-CREATE of the same table name.
+    const auto allow_uuid_macro = args.table_id.hasUUID();
 
     if (args.mode < LoadingStrictnessLevel::ATTACH)
     {

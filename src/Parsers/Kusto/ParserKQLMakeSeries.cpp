@@ -140,8 +140,25 @@ bool ParserKQLMakeSeries ::parseFromToStepClause(FromToStepClause & from_to_step
     from_to_step.step_str = String(step_pos->begin, end_pos->end);
 
     ParserKQLDateTypeTimespan timespan;
-    if (String(step_pos->begin, step_pos->end) == "time" || String(step_pos->begin, step_pos->end) == "timespan"
-        || timespan.parseConstKQLTimespan(from_to_step.step_str))
+    /// `step_str` is either a bare timespan literal like `1h`, a `time(...)`/`timespan(...)`
+    /// wrapper, or a numeric value. For wrappers, extract the inner literal so that
+    /// `parseConstKQLTimespan` can recognize it. We must never call `toSeconds` without
+    /// a successful `parseConstKQLTimespan` first, otherwise it reads uninitialized state.
+    const String step_token(step_pos->begin, step_pos->end);
+    String timespan_literal = from_to_step.step_str;
+    if (step_token == "time" || step_token == "timespan")
+    {
+        const auto open = timespan_literal.find('(');
+        const auto close = timespan_literal.rfind(')');
+        if (open == String::npos || close == String::npos || close <= open + 1)
+            return false;
+        timespan_literal = timespan_literal.substr(open + 1, close - open - 1);
+        if (!timespan.parseConstKQLTimespan(timespan_literal))
+            return false;
+        from_to_step.is_timespan = true;
+        from_to_step.step = timespan.toSeconds();
+    }
+    else if (timespan.parseConstKQLTimespan(from_to_step.step_str))
     {
         from_to_step.is_timespan = true;
         /// `getExprFromToken` would wrap timespan literals like `1h` in a KQL display-format

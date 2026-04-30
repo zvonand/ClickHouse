@@ -42,7 +42,9 @@ bool ParserKQLJoin::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
         ++pos;
     }
 
-    /// Map KQL join kind to ClickHouse join type
+    /// Map KQL join kind to ClickHouse join type.
+    /// Reject unsupported `kind=...` values rather than silently treating them as `INNER`,
+    /// which would mask typos and unsupported kinds with semantically different results.
     String ch_join_type;
     if (join_kind == "inner" || join_kind == "innerunique")
         ch_join_type = "INNER";
@@ -61,7 +63,7 @@ bool ParserKQLJoin::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     else if (join_kind == "rightsemi")
         ch_join_type = "RIGHT SEMI";
     else
-        ch_join_type = "INNER";
+        return false;
 
     /// Parse the right-side subquery in parentheses
     if (!isValidKQLPos(pos) || pos->type != TokenType::OpeningRoundBracket)

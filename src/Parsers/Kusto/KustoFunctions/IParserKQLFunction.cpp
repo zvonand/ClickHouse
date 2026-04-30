@@ -327,12 +327,16 @@ void IParserKQLFunction::validateEndOfFunction(const String & fn_name, IParser::
 
 String IParserKQLFunction::formatTimespanSQL(const String & seconds_expr)
 {
+    /// Bind `seconds_expr` to a SQL alias (`_ts`) once and reuse it. Otherwise the
+    /// expression is expanded and re-evaluated nine times in the generated SQL —
+    /// costly for non-trivial inputs and incorrect for non-deterministic ones,
+    /// because each fragment could observe a different value.
     return "concat("
-        "if(toInt64(" + seconds_expr + ") < 0, '-', ''), "
-        "if(abs(toInt64(" + seconds_expr + ")) >= 86400, concat(toString(intDiv(abs(toInt64(" + seconds_expr + ")), 86400)), '.'), ''), "
-        "leftPad(toString(intDiv(abs(toInt64(" + seconds_expr + ")) % 86400, 3600)), 2, '0'), ':', "
-        "leftPad(toString(intDiv(abs(toInt64(" + seconds_expr + ")) % 3600, 60)), 2, '0'), ':', "
-        "leftPad(toString(abs(toInt64(" + seconds_expr + ")) % 60), 2, '0'))";
+        "if((toInt64(" + seconds_expr + ") as _ts) < 0, '-', ''), "
+        "if(abs(_ts) >= 86400, concat(toString(intDiv(abs(_ts), 86400)), '.'), ''), "
+        "leftPad(toString(intDiv(abs(_ts) % 86400, 3600)), 2, '0'), ':', "
+        "leftPad(toString(intDiv(abs(_ts) % 3600, 60)), 2, '0'), ':', "
+        "leftPad(toString(abs(_ts) % 60), 2, '0'))";
 }
 
 String IParserKQLFunction::getExpression(IParser::Pos & pos)

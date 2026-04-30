@@ -343,7 +343,6 @@ void optimizeTreeSecondPass(
             if (auto applied_projection = optimizeUseNormalProjections(
                 stack,
                 nodes,
-                optimization_settings,
                 optimization_settings.is_parallel_replicas_initiator_with_projection_support,
                 optimization_settings.max_step_description_length))
             {
@@ -377,12 +376,6 @@ void optimizeTreeSecondPass(
 
             if (optimization_settings.distinct_in_order)
                 optimizeDistinctInOrder(frame_node, nodes, optimization_settings);
-        },
-        [&](auto & frame_node)
-        {
-            tryMergeExpressions(&frame_node, nodes, extra_settings);
-            tryMergeFilters(&frame_node, nodes, extra_settings);
-            tryPushDownFilter(&frame_node, nodes, extra_settings);
         });
 
     /// Find ReadFromLocalParallelReplicaStep and replace with optimized local plan.

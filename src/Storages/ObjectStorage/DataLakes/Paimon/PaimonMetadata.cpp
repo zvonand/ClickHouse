@@ -46,6 +46,7 @@ namespace ErrorCodes
 extern const int BAD_ARGUMENTS;
 extern const int LOGICAL_ERROR;
 extern const int NO_ZOOKEEPER;
+extern const int REPLICA_IS_ALREADY_ACTIVE;
 }
 
 namespace Setting
@@ -435,6 +436,11 @@ ObjectIterator PaimonMetadata::iterate(
     if (persistent_components.incremental_read_enabled && target_snapshot_id > 0)
     {
         auto target_state = loadStateForSnapshot(target_snapshot_id);
+        if (target_state->isCompact())
+            LOG_WARNING(log, "Target snapshot_id={} is a COMPACT snapshot. "
+                "Its delta manifest contains compaction output (not incremental changes). "
+                "Consider using a non-COMPACT snapshot for accurate incremental semantics.",
+                target_snapshot_id);
         data_files = collectDeltaFilesForSnapshot(target_state, partition_pruner);
     }
     /// 4.b Regular incremental mode
@@ -446,7 +452,11 @@ ObjectIterator PaimonMetadata::iterate(
             auto keeper = getContext()->getZooKeeper();
             stream_state->setKeeper(keeper);
             stream_state->initializeKeeperNodes();
-            stream_state->activate();
+            if (!stream_state->activate())
+                throw Exception(
+                    ErrorCodes::REPLICA_IS_ALREADY_ACTIVE,
+                    "Failed to activate Paimon replica after Keeper reconnection. "
+                    "Another server may be using the same replica_name.");
         }
 
         bool lock_acquired = false;
@@ -615,6 +625,17 @@ std::vector<PaimonTableStatePtr> PaimonMetadata::getSnapshotsBetween(
         {
             /// Snapshot file may have been removed by Paimon compaction.
             /// Log and skip — the watermark will still advance past it.
+            ///
+            /// We use catch(...) rather than filtering for specific "file not found"
+            /// exceptions because IObjectStorage has no unified "not found" exception
+            /// type — each backend (S3, Azure, Local, HDFS) throws its own SDK-level
+            /// exception.  Coupling this metadata layer to backend-specific exception
+            /// types would violate layering and require updating every time a new
+            /// backend is added.  Under At-Most-Once semantics the worst outcome of
+            /// a false positive (transient error mistaken for a missing snapshot) is
+            /// skipping one snapshot — which is within the accepted data-loss budget.
+            /// The logged error message provides sufficient observability for operators
+            /// to distinguish transient failures from genuine compaction gaps.
             LOG_WARNING(log, "Failed to load snapshot_id={}, it may have been removed by "
                 "Paimon compaction. Skipping. Error: {}",
                 snapshot_id, getCurrentExceptionMessage(false));
@@ -684,7 +705,7 @@ Strings PaimonMetadata::collectIncrementalDataFiles(
             return {};
         }
 
-        data_files = collectDataFilesFromManifests(snapshots, ManifestKind::Delta, partition_pruner, true, false);
+        data_files = collectDataFilesFromManifests(snapshots, ManifestKind::Delta, partition_pruner, true, true);
         /// Use last_scanned (not snapshots.back()) to advance past trailing compact/missing snapshots.
         last_consumed_snapshot_id = last_scanned_snapshot_id.value_or(snapshots.back()->snapshot_id);
     }

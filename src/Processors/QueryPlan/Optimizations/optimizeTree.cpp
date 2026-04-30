@@ -378,7 +378,7 @@ void optimizeTreeSecondPass(
             if (optimization_settings.distinct_in_order)
                 optimizeDistinctInOrder(frame_node, nodes, optimization_settings);
         },
-        [&]([[maybe_unused]] auto & frame_node)
+        [&](auto & frame_node)
         {
             tryMergeExpressions(&frame_node, nodes, extra_settings);
             tryMergeFilters(&frame_node, nodes, extra_settings);

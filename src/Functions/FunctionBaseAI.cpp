@@ -1,4 +1,6 @@
 #include <Functions/FunctionBaseAI.h>
+#include <Access/Common/AccessType.h>
+#include <Access/ContextAccess.h>
 #include <Common/ProfileEvents.h>
 #include <Common/Exception.h>
 #include <thread>
@@ -80,6 +82,9 @@ FunctionBaseAI::ResolvedConfig FunctionBaseAI::resolveConfig(const ColumnsWithTy
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "First argument to AI function must be a named collection (constant String)");
 
     String collection_name = col_const->getValue<String>();
+
+    getContext()->checkAccess(AccessType::NAMED_COLLECTION, collection_name);
+
     const auto & named_collection = NamedCollectionFactory::instance().get(collection_name);
 
     config.provider = named_collection->getOrDefault<String>("provider", "");

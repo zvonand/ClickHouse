@@ -264,9 +264,9 @@ void optimizeTreeSecondPass(
                 while (true)
                 {
                     size_t changed_nodes = 0;
-                    changed_nodes += tryMergeExpressions(&frame_node, nodes, {});
-                    changed_nodes += tryMergeFilters(&frame_node, nodes, {});
-                    changed_nodes += tryPushDownFilter(&frame_node, nodes, {});
+                    changed_nodes += tryMergeExpressions(&frame_node, nodes, extra_settings);
+                    changed_nodes += tryMergeFilters(&frame_node, nodes, extra_settings);
+                    changed_nodes += tryPushDownFilter(&frame_node, nodes, extra_settings);
 
                     if (!changed_nodes)
                         break;
@@ -285,14 +285,7 @@ void optimizeTreeSecondPass(
     }
 
     traverseQueryPlan(stack, root,
-        [&](auto & frame_node)
-        {
-            if (optimization_settings.read_in_order)
-                optimizeReadInOrder(frame_node, nodes, optimization_settings);
-
-            if (optimization_settings.distinct_in_order)
-                optimizeDistinctInOrder(frame_node, nodes, optimization_settings);
-        },
+        [&](auto &) {},
         [&](auto & frame_node)
         {
             /// After all children were processed, try to apply distributed read, join and aggregation optimizations.
@@ -376,20 +369,21 @@ void optimizeTreeSecondPass(
         stack.pop_back();
     }
 
-    /// If some projection was used query plan was rewritten using Union for cases where
-    /// not every part has this projection. In this case read-in-order optimization can still be valuable.
-    if (!applied_projection_names.empty())
-    {
-        traverseQueryPlan(stack, root,
-            [&](auto & frame_node)
-            {
-                if (optimization_settings.read_in_order)
-                    optimizeReadInOrder(frame_node, nodes, optimization_settings);
+    traverseQueryPlan(stack, root,
+        [&](auto & frame_node)
+        {
+            if (optimization_settings.read_in_order)
+                optimizeReadInOrder(frame_node, nodes, optimization_settings);
 
-                if (optimization_settings.distinct_in_order)
-                    optimizeDistinctInOrder(frame_node, nodes, optimization_settings);
-            });
-    }
+            if (optimization_settings.distinct_in_order)
+                optimizeDistinctInOrder(frame_node, nodes, optimization_settings);
+        },
+        [&]([[maybe_unused]] auto & frame_node)
+        {
+            tryMergeExpressions(&frame_node, nodes, extra_settings);
+            tryMergeFilters(&frame_node, nodes, extra_settings);
+            tryPushDownFilter(&frame_node, nodes, extra_settings);
+        });
 
     /// Find ReadFromLocalParallelReplicaStep and replace with optimized local plan.
     /// Place it after projection optimization to avoid executing projection optimization twice in the local plan,

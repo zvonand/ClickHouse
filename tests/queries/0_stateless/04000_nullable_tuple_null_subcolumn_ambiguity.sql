@@ -9,3 +9,11 @@ CREATE TABLE test_null_tuple (t Tuple(null UInt32)) ENGINE = Memory; -- { server
 
 -- Normal Tuple element names work fine.
 SELECT CAST((1, 2), 'Tuple(a UInt32, b UInt64)');
+
+-- Regression: reading the `.null` subcolumn of `Array(Nullable(T))` must not
+-- attempt to construct an `Array(Tuple(null T))` in `Nested::getSubcolumnsOfNested`.
+DROP TABLE IF EXISTS test_array_nullable_null_subcolumn;
+CREATE TABLE test_array_nullable_null_subcolumn (a3 Array(Nullable(UInt32))) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO test_array_nullable_null_subcolumn VALUES ([1, NULL, 2]);
+SELECT a3.null FROM test_array_nullable_null_subcolumn;
+DROP TABLE test_array_nullable_null_subcolumn;

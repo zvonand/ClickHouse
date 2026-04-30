@@ -14,7 +14,8 @@ ORDER BY id
 SETTINGS
     enable_block_number_column = 0,
     enable_block_offset_column = 0,
-    auto_statistics_types = 'uniq,minmax';
+    auto_statistics_types = 'uniq,minmax',
+    index_granularity = 8192; -- avoid tiny index_granularity that makes OPTIMIZE FINAL time out
 
 SYSTEM STOP MERGES test_table;
 

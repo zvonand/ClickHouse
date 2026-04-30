@@ -410,7 +410,7 @@ Chunk StorageObjectStorageSource::generate()
                     path);
             }
 
-            std::string path_for_virtual_column = getAbsolutePathFromObjectInfo(object_info).value_or(path);
+            std::string path_for_virtual_column = getMetadataPathFromObjectInfo(object_info).value_or(path);
 
             const String * iceberg_metadata_file_path = nullptr;
 #if USE_AVRO
@@ -1346,15 +1346,15 @@ StorageObjectStorageSource::ReadTaskIterator::ReadTaskIterator(
         if (object)
         {
 #if USE_AVRO
-            /// For Iceberg objects, resolve the storage from the absolute path
+            /// For Iceberg objects, resolve the storage from the raw metadata path
             if (auto iceberg_info = std::dynamic_pointer_cast<IcebergDataObjectInfo>(object))
             {
                 if (!iceberg_info->getResolvedStorage())
                 {
-                    if (auto abs_path = iceberg_info->getAbsolutePath())
+                    if (auto metadata_path = iceberg_info->getMetadataPath())
                     {
                         auto [storage_to_use, key] = resolveObjectStorageForPath(
-                            table_location, *abs_path, object_storage, secondary_storages, getContext());
+                            table_location, *metadata_path, object_storage, secondary_storages, getContext());
                         if (!key.empty())
                         {
                             iceberg_info->setResolvedStorage(storage_to_use);
@@ -1383,15 +1383,15 @@ ObjectInfoPtr StorageObjectStorageSource::ReadTaskIterator::next(size_t)
         object_info = raw->getObjectInfo();
 
 #if USE_AVRO
-        /// For Iceberg objects, resolve the storage from the absolute path
+        /// For Iceberg objects, resolve the storage from the raw metadata path
         if (auto iceberg_info = std::dynamic_pointer_cast<IcebergDataObjectInfo>(object_info))
         {
             if (!iceberg_info->getResolvedStorage())
             {
-                if (auto abs_path = iceberg_info->getAbsolutePath())
+                if (auto metadata_path = iceberg_info->getMetadataPath())
                 {
                     auto [storage_to_use, key] = resolveObjectStorageForPath(
-                        table_location, *abs_path, object_storage, secondary_storages, getContext());
+                        table_location, *metadata_path, object_storage, secondary_storages, getContext());
                     if (!key.empty())
                     {
                         iceberg_info->setResolvedStorage(storage_to_use);

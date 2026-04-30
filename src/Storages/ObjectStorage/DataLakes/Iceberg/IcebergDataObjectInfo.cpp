@@ -38,11 +38,11 @@ extern const SettingsBool use_roaring_bitmap_iceberg_positional_deletes;
 #if USE_AVRO
 
 IcebergDataObjectInfo::IcebergDataObjectInfo(
-    Iceberg::ProcessedManifestFileEntryPtr data_manifest_file_entry_, const String & resolved_storage_path_, Int32 schema_id_relevant_to_iterator_, ObjectStoragePtr resolved_storage_, const String & resolved_key_)
-    : ObjectInfo(RelativePathWithMetadata(resolved_key_.empty() ? resolved_storage_path_ : resolved_key_))
+    Iceberg::ProcessedManifestFileEntryPtr data_manifest_file_entry_, const String & metadata_path_, Int32 schema_id_relevant_to_iterator_, ObjectStoragePtr resolved_storage_, const String & resolved_key_)
+    : ObjectInfo(RelativePathWithMetadata(resolved_key_.empty() ? metadata_path_ : resolved_key_))
     , info{
           data_manifest_file_entry_->parsed_entry->file_path_key,
-          resolved_storage_path_,
+          metadata_path_,
           data_manifest_file_entry_->resolved_schema_id,
           schema_id_relevant_to_iterator_,
           data_manifest_file_entry_->sequence_number,
@@ -113,7 +113,7 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
             ErrorCodes::PROTOCOL_VERSION_MISMATCH,
             "Iceberg data file '{}' is outside of the table location, "
             "worker needs to have protocol version >= {}, but has {}. ",
-            data_object_file_absolute_path,
+            data_object_file_metadata_path,
             DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH,
             protocol_version);
     }
@@ -128,7 +128,7 @@ void IcebergObjectSerializableInfo::serializeForClusterFunctionProtocol(WriteBuf
     writeStringBinary(data_object_file_path_key.serialize(), out);
     if (protocol_version >= DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
     {
-        writeStringBinary(data_object_file_absolute_path, out);
+        writeStringBinary(data_object_file_metadata_path, out);
     }
     writeVarInt(underlying_format_read_schema_id, out);
     writeVarInt(schema_id_relevant_to_iterator, out);
@@ -206,7 +206,7 @@ void IcebergObjectSerializableInfo::deserializeForClusterFunctionProtocol(ReadBu
     }
     if (protocol_version >= DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION_WITH_ICEBERG_ABSOLUTE_PATH)
     {
-        readStringBinary(data_object_file_absolute_path, in);
+        readStringBinary(data_object_file_metadata_path, in);
     }
     readVarInt(underlying_format_read_schema_id, in);
     readVarInt(schema_id_relevant_to_iterator, in);

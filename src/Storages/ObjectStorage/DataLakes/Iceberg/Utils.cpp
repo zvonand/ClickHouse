@@ -1426,11 +1426,11 @@ ObjectStoragePtr getResolvedStorageFromObjectInfo([[maybe_unused]] const ObjectI
     return default_storage;
 }
 
-std::optional<String> getAbsolutePathFromObjectInfo([[maybe_unused]] const ObjectInfoPtr & object_info)
+std::optional<String> getMetadataPathFromObjectInfo([[maybe_unused]] const ObjectInfoPtr & object_info)
 {
 #if USE_AVRO
     if (auto iceberg_info = std::dynamic_pointer_cast<IcebergDataObjectInfo>(object_info))
-        return iceberg_info->getAbsolutePath();
+        return iceberg_info->getMetadataPath();
 #endif
     return std::nullopt;
 }

@@ -17,7 +17,10 @@ namespace DB::Iceberg
 struct IcebergObjectSerializableInfo
 {
     IcebergPathFromMetadata data_object_file_path_key;
-    String data_object_file_absolute_path;
+    /// Raw path string as written in the Iceberg manifest, preserved as-is (may be a full URI like
+    /// `s3://bucket/...` or a relative path). Used for the `_path` virtual column and as a stable
+    /// task identifier. Not a canonicalised storage key — see `IcebergPathResolver::resolve` for that.
+    String data_object_file_metadata_path;
     Int32 underlying_format_read_schema_id;
     Int32 schema_id_relevant_to_iterator;
     Int64 sequence_number;
@@ -59,7 +62,7 @@ struct IcebergDataObjectInfo : public ObjectInfo, std::enable_shared_from_this<I
     /// outside the table location (possibly in a different storage).
     explicit IcebergDataObjectInfo(
         Iceberg::ProcessedManifestFileEntryPtr data_manifest_file_entry_,
-        const String & resolved_storage_path_,
+        const String & metadata_path_,
         Int32 schema_id_relevant_to_iterator_,
         ObjectStoragePtr resolved_storage_ = nullptr,
         const String & resolved_key_ = "");
@@ -79,11 +82,11 @@ struct IcebergDataObjectInfo : public ObjectInfo, std::enable_shared_from_this<I
 
     void addPositionDeleteObject(Iceberg::ProcessedManifestFileEntryPtr position_delete_object, const String & resolved_storage_path);
 
-    std::optional<String> getAbsolutePath() const
+    std::optional<String> getMetadataPath() const
     {
-        if (info.data_object_file_absolute_path.empty())
+        if (info.data_object_file_metadata_path.empty())
             return std::nullopt;
-        return info.data_object_file_absolute_path;
+        return info.data_object_file_metadata_path;
     }
 
     ObjectStoragePtr getResolvedStorage() const { return resolved_storage; }

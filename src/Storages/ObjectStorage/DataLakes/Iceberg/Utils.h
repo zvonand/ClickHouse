@@ -23,7 +23,7 @@ using ObjectInfoPtr = std::shared_ptr<ObjectInfo>;
 
 /// These functions are always available; they return fallback values when USE_AVRO is not defined
 ObjectStoragePtr getResolvedStorageFromObjectInfo([[maybe_unused]] const ObjectInfoPtr & object_info, const ObjectStoragePtr & default_storage);
-std::optional<String> getAbsolutePathFromObjectInfo([[maybe_unused]] const ObjectInfoPtr & object_info);
+std::optional<String> getMetadataPathFromObjectInfo([[maybe_unused]] const ObjectInfoPtr & object_info);
 }
 
 #if USE_AVRO

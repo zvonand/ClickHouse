@@ -6,22 +6,6 @@
 namespace BuzzHouse
 {
 
-/// Reduce the maximum row count for nested compound types (`Map`, `Array`) based on the
-/// current value-generation depth. Without this cap, recursively nested values like
-/// `Map(Map(Map(...)))` can blow up exponentially (`max_nested_rows^max_depth`) — with
-/// the CI fuzzer config (`max_nested_rows` up to ~100, `max_depth` up to 5) that gives
-/// up to 10^10 entries in a single value, which trips ASan's `allocation-size-too-big`
-/// limit and aborts the fuzzer mid-run.
-///
-/// We bit-shift the cap by `2 * depth` to roughly quarter the allowed row count at each
-/// nesting level, so the total entry count stays bounded by a small polynomial in
-/// `max_nested_rows` rather than exponential.
-static inline uint64_t depthCappedNestedRows(uint64_t max_nested_rows, uint32_t depth)
-{
-    const uint32_t shift = std::min<uint32_t>(depth, 16u) * 2u;
-    return std::max<uint64_t>(UINT64_C(1), max_nested_rows >> shift);
-}
-
 static inline String nextFloatingPoint(RandomGenerator & rg, const bool extremes)
 {
     String ret;
@@ -1232,29 +1216,18 @@ String ArrayType::appendRandomRawValue(RandomGenerator & rg, StatementGenerator 
 
 String ArrayType::appendRandomRawValue(RandomGenerator & rg, StatementGenerator & gen) const
 {
-    /// See `depthCappedNestedRows`: cap row count so deeply nested values do not explode.
-    const uint64_t cap = depthCappedNestedRows(gen.fc.max_nested_rows, gen.value_gen_depth);
-    const uint64_t lo = std::min<uint64_t>(gen.fc.min_nested_rows, cap);
-    std::uniform_int_distribution<uint64_t> rows_dist(lo, cap);
-    const uint64_t limit = rows_dist(rg.generator);
+    std::uniform_int_distribution<uint64_t> rows_dist(gen.fc.min_nested_rows, gen.fc.max_nested_rows);
 
-    gen.value_gen_depth++;
-    String ret = appendRandomRawValue(rg, gen, subtype.get(), limit);
-    gen.value_gen_depth--;
-    return ret;
+    return appendRandomRawValue(rg, gen, subtype.get(), rows_dist(rg.generator));
 }
 
 String ArrayType::insertNumberEntry(
     RandomGenerator & rg, StatementGenerator & gen, const uint32_t max_strlen, const uint32_t max_nested_rows) const
 {
     String ret = "[";
-    /// See `depthCappedNestedRows`: cap row count so deeply nested values do not explode.
-    const uint64_t cap = depthCappedNestedRows(static_cast<uint64_t>(max_nested_rows), gen.value_gen_depth);
-    const uint64_t lo = std::min<uint64_t>(gen.fc.min_nested_rows, cap);
-    std::uniform_int_distribution<uint64_t> rows_dist(lo, cap);
+    std::uniform_int_distribution<uint64_t> rows_dist(gen.fc.min_nested_rows, max_nested_rows);
     const uint32_t limit = static_cast<uint32_t>(rows_dist(rg.generator));
 
-    gen.value_gen_depth++;
     for (uint64_t i = 0; i < limit; i++)
     {
         if (i != 0)
@@ -1263,7 +1236,6 @@ String ArrayType::insertNumberEntry(
         }
         ret += subtype->insertNumberEntry(rg, gen, max_strlen, max_nested_rows);
     }
-    gen.value_gen_depth--;
     ret += "]";
     return ret;
 }
@@ -1296,13 +1268,9 @@ std::unique_ptr<SQLType> MapType::typeDeepCopy() const
 String MapType::appendRandomRawValue(RandomGenerator & rg, StatementGenerator & gen) const
 {
     String ret = "map(";
-    /// See `depthCappedNestedRows`: cap row count so deeply nested values do not explode.
-    const uint64_t cap = depthCappedNestedRows(gen.fc.max_nested_rows, gen.value_gen_depth);
-    const uint64_t lo = std::min<uint64_t>(gen.fc.min_nested_rows, cap);
-    std::uniform_int_distribution<uint64_t> rows_dist(lo, cap);
+    std::uniform_int_distribution<uint64_t> rows_dist(gen.fc.min_nested_rows, gen.fc.max_nested_rows);
     const uint64_t limit = rows_dist(rg.generator);
 
-    gen.value_gen_depth++;
     for (uint64_t i = 0; i < limit; i++)
     {
         if (i != 0)
@@ -1313,7 +1281,6 @@ String MapType::appendRandomRawValue(RandomGenerator & rg, StatementGenerator & 
         ret += ",";
         ret += value->appendRandomRawValue(rg, gen);
     }
-    gen.value_gen_depth--;
     ret += ")";
     return ret;
 }
@@ -1322,13 +1289,9 @@ String
 MapType::insertNumberEntry(RandomGenerator & rg, StatementGenerator & gen, const uint32_t max_strlen, const uint32_t max_nested_rows) const
 {
     String ret = "map(";
-    /// See `depthCappedNestedRows`: cap row count so deeply nested values do not explode.
-    const uint64_t cap = depthCappedNestedRows(static_cast<uint64_t>(max_nested_rows), gen.value_gen_depth);
-    const uint64_t lo = std::min<uint64_t>(gen.fc.min_nested_rows, cap);
-    std::uniform_int_distribution<uint64_t> rows_dist(lo, cap);
+    std::uniform_int_distribution<uint64_t> rows_dist(gen.fc.min_nested_rows, max_nested_rows);
     const uint64_t limit = rows_dist(rg.generator);
 
-    gen.value_gen_depth++;
     for (uint64_t i = 0; i < limit; i++)
     {
         if (i != 0)
@@ -1339,7 +1302,6 @@ MapType::insertNumberEntry(RandomGenerator & rg, StatementGenerator & gen, const
         ret += ",";
         ret += value->insertNumberEntry(rg, gen, max_strlen, max_nested_rows);
     }
-    gen.value_gen_depth--;
     ret += ")";
     return ret;
 }

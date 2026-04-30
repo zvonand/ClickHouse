@@ -170,7 +170,13 @@ def main():
     max_string_length = min_string_length + (10 if allow_hardcoded_inserts else 300)
     buzz_config = {
         "seed": random.randint(1, 18446744073709551615),
-        "max_depth": random.randint(2, 5),
+        # Cap max_depth at 3: BuzzHouse value generators recurse on Map/Array
+        # child types, multiplying the per-level row count at each nesting
+        # level. With max_nested_rows up to 105, depth 5 produces ~10^10
+        # entries in a single value, which trips ASan's
+        # `allocation-size-too-big` guard. Depth 3 keeps the worst-case
+        # product near 1.2 * 10^6 entries.
+        "max_depth": random.randint(2, 3),
         "max_width": random.randint(2, 7),
         "max_databases": random.randint(2, 5),
         "max_tables": random.randint(3, 10),

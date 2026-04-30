@@ -680,7 +680,7 @@ Strings PaimonMetadata::collectIncrementalDataFiles(
             /// All snapshots in the range were either compact or missing.
             /// Still advance the watermark so we don't re-scan them next time.
             if (last_scanned_snapshot_id)
-                last_consumed_snapshot_id = *last_scanned_snapshot_id;
+                last_consumed_snapshot_id = last_scanned_snapshot_id;
             return {};
         }
 

@@ -29,15 +29,21 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type', 'text/plain')
         self.end_headers()
-    
+
     def do_GET(self):
-        # Slow GET - takes 30 seconds (tests cancellation during GET retries)
-        time.sleep(30)
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/plain')
-        self.end_headers()
-        self.wfile.write(b'1\n')
-    
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'OK')
+        elif self.path == '/sample-data':
+            # Slow GET - takes 30 seconds (tests cancellation during GET retries)
+            time.sleep(30)
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'1\n')
+
     def log_message(self, *args):
         pass
 
@@ -48,7 +54,7 @@ trap 'kill $HTTP_PID 2>/dev/null; wait $HTTP_PID 2>/dev/null; rm -f "$log_file"'
 
 # Wait for server to start
 for _ in $(seq 1 50); do
-    curl -s "http://127.0.0.1:$HTTP_PORT/" -o /dev/null 2>/dev/null && break
+    curl -s "http://127.0.0.1:$HTTP_PORT/health" -o /dev/null 2>/dev/null && break
     sleep 0.1
 done
 
@@ -62,7 +68,7 @@ $CLICKHOUSE_CLIENT \
     --query_id="$query_id" \
     --query "
         SELECT count()
-        FROM url('http://127.0.0.1:$HTTP_PORT/', 'CSV', 'x UInt64')
+        FROM url('http://127.0.0.1:$HTTP_PORT/sample-data', 'CSV', 'x UInt64')
         FORMAT Null
     " >/dev/null 2>"$log_file" &
 CLIENT_PID=$!

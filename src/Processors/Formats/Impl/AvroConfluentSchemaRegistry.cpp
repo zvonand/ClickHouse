@@ -279,6 +279,11 @@ std::shared_ptr<ConfluentSchemaRegistry> getConfluentSchemaRegistry(const Format
     return schema_registry;
 }
 
+void clearConfluentSchemaRegistryCache()
+{
+    schema_registry_cache.clear();
+}
+
 }
 
 #endif

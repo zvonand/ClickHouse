@@ -54,6 +54,11 @@ private:
 /// the schema cache and HTTP connection pool.
 std::shared_ptr<ConfluentSchemaRegistry> getConfluentSchemaRegistry(const FormatSettings & format_settings);
 
+/// Drop the global registry-instance cache. Forces subsequent calls to construct
+/// fresh `ConfluentSchemaRegistry` objects, which discards their per-URL fetch and
+/// register caches. Backs `SYSTEM DROP AVRO SCHEMA CACHE`.
+void clearConfluentSchemaRegistryCache();
+
 }
 
 #endif

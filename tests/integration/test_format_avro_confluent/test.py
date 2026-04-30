@@ -386,6 +386,12 @@ def test_output_register_same_schema_is_idempotent(started_cluster):
         params=settings,
         content=True,
     )
+
+    # Drop the schema registry cache so the second registration goes back over
+    # the wire. Otherwise the in-process register cache would short-circuit the
+    # call and we wouldn't actually exercise the server's idempotency.
+    run_query(instance, "system drop avro schema cache")
+
     data_second = instance.http_query(
         "select * from avro_output_idempotent_source format AvroConfluent",
         data=" ",

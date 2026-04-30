@@ -19,6 +19,7 @@
 #include <Processors/QueryPlan/QueryPlan.h>
 #include <Processors/QueryPlan/ReadFromMergeTree.h>
 #include <Storages/MergeTree/KeyCondition.h>
+#include <Storages/MergeTree/MergeTreeData.h>
 #include <Storages/MergeTree/MergeTreeDataSelectExecutor.h>
 #include <Storages/MergeTree/MergeTreeIndexConditionText.h>
 #include <Storages/MergeTree/MergeTreeIndexTextPreprocessor.h>
@@ -159,11 +160,23 @@ void collectTextIndexReadInfos(const ReadFromMergeTree * read_from_merge_tree_st
     auto logger = getLogger("optimizeDirectReadFromTextIndex");
     auto metadata_snapshot = read_from_merge_tree_step->getStorageMetadata();
     auto mutations_snapshot = read_from_merge_tree_step->getMutationsSnapshot();
-    const auto & all_updated_columns = mutations_snapshot->getAllUpdatedColumns();
+    auto context = read_from_merge_tree_step->getContext();
 
     std::unordered_set<DataPartPtr> unique_parts;
     for (const auto & part : parts_with_ranges)
         unique_parts.insert(part.data_part);
+
+    /// Compute the union of updated columns only across the parts that will actually be read by this step.
+    /// Using `mutations_snapshot->getAllUpdatedColumns()` directly would include pending updates from
+    /// other partitions/parts not in `parts_with_ranges`, disabling direct text index reads even when
+    /// the queried parts have no on-the-fly updates for the index columns.
+    NameSet all_updated_columns;
+    for (const auto & part : unique_parts)
+    {
+        auto alter_conversions = MergeTreeData::getAlterConversionsForPart(part, mutations_snapshot, context);
+        const auto & part_updated_columns = alter_conversions->getAllUpdatedColumns();
+        all_updated_columns.insert(part_updated_columns.begin(), part_updated_columns.end());
+    }
 
     for (const auto & index : indexes->skip_indexes.useful_indices)
     {

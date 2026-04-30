@@ -1,3 +1,22 @@
+#!/usr/bin/env bash
+
+CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=../shell_config.sh
+. "$CUR_DIR"/../shell_config.sh
+
+# Secondary databases. Suffixed with $CLICKHOUSE_DATABASE so parallel runs of
+# this test don't collide on shared global names.
+DB_X="${CLICKHOUSE_DATABASE}_x"
+DB_RENAME_BEFORE="${CLICKHOUSE_DATABASE}_rb"
+DB_RENAME_AFTER="${CLICKHOUSE_DATABASE}_ra"
+DB_RENAME_EXT="${CLICKHOUSE_DATABASE}_rext"
+
+$CLICKHOUSE_CLIENT --query "DROP DATABASE IF EXISTS ${DB_X}"
+$CLICKHOUSE_CLIENT --query "DROP DATABASE IF EXISTS ${DB_RENAME_BEFORE}"
+$CLICKHOUSE_CLIENT --query "DROP DATABASE IF EXISTS ${DB_RENAME_AFTER}"
+$CLICKHOUSE_CLIENT --query "DROP DATABASE IF EXISTS ${DB_RENAME_EXT}"
+
+$CLICKHOUSE_CLIENT <<EOF
 DROP TABLE IF EXISTS 03760_src1;
 DROP TABLE IF EXISTS 03760_src2;
 DROP VIEW IF EXISTS 03760_view1;
@@ -62,31 +81,33 @@ SELECT arraySort(dependencies_table) FROM system.tables WHERE database = current
 
 DROP VIEW 03760_mv_alter;
 DROP TABLE 03760_mv_dest;
+EOF
 
--- Cross-database
-CREATE DATABASE IF NOT EXISTS db_03760_x;
-CREATE TABLE db_03760_x.remote_t (id UInt64) ENGINE = MergeTree ORDER BY id;
-CREATE VIEW 03760_local_view_of_x AS SELECT * FROM db_03760_x.remote_t;
-CREATE VIEW db_03760_x.remote_view_of_local AS SELECT * FROM 03760_src1;
+# Cross-database section
+$CLICKHOUSE_CLIENT <<EOF
+CREATE DATABASE ${DB_X};
+CREATE TABLE ${DB_X}.remote_t (id UInt64) ENGINE = MergeTree ORDER BY id;
+CREATE VIEW 03760_local_view_of_x AS SELECT * FROM ${DB_X}.remote_t;
+CREATE VIEW ${DB_X}.remote_view_of_local AS SELECT * FROM 03760_src1;
 
--- 03760_src1 should list db_03760_x.remote_view_of_local among dependents (view in other db depends on current db table)
+-- 03760_src1 should list ${DB_X}.remote_view_of_local among dependents (view in other db depends on current db table)
 SELECT concat(dependencies_database, '.', dependencies_table) AS dep
 FROM system.tables
 ARRAY JOIN dependencies_database, dependencies_table
 WHERE database = currentDatabase() AND name = '03760_src1'
 ORDER BY dep;
 
--- db_03760_x.remote_t should list 03760_local_view_of_x as dependent (view in current db depends on other db table)
+-- ${DB_X}.remote_t should list 03760_local_view_of_x as dependent (view in current db depends on other db table)
 SELECT DISTINCT dependencies_table AS dep
 FROM system.tables
 ARRAY JOIN dependencies_table
-WHERE database = 'db_03760_x' AND name = 'remote_t'
+WHERE database = '${DB_X}' AND name = 'remote_t'
 ORDER BY dep;
 
-DROP VIEW db_03760_x.remote_view_of_local;
+DROP VIEW ${DB_X}.remote_view_of_local;
 DROP VIEW 03760_local_view_of_x;
-DROP TABLE db_03760_x.remote_t;
-DROP DATABASE db_03760_x;
+DROP TABLE ${DB_X}.remote_t;
+DROP DATABASE ${DB_X};
 
 DROP VIEW 03760_view3;
 DROP VIEW 03760_view2;
@@ -99,43 +120,44 @@ SELECT arraySort(dependencies_table) FROM system.tables WHERE database = current
 
 DROP TABLE 03760_src2;
 DROP TABLE 03760_src1;
+EOF
 
+# RENAME DATABASE section
+$CLICKHOUSE_CLIENT <<EOF
 -- RENAME DATABASE: plain-view dependencies must be migrated to the new database name.
 -- Three cases are exercised:
 --   (a) single-source plain view: v_simple reads from src1 (same DB, renamed together)
 --   (b) multi-source plain view: v_join reads from src1 JOIN src2 (same DB, renamed together)
 --   (c) cross-db plain view: v_xdb lives in an external DB and reads from src1 (source DB renamed)
-DROP DATABASE IF EXISTS db_03760_rename_before;
-DROP DATABASE IF EXISTS db_03760_rename_after;
-DROP DATABASE IF EXISTS db_03760_rename_ext;
+CREATE DATABASE ${DB_RENAME_BEFORE} ENGINE = Atomic;
+CREATE TABLE ${DB_RENAME_BEFORE}.src1 (id UInt64) ENGINE = MergeTree ORDER BY id;
+CREATE TABLE ${DB_RENAME_BEFORE}.src2 (id UInt64) ENGINE = MergeTree ORDER BY id;
+CREATE VIEW ${DB_RENAME_BEFORE}.v_simple AS SELECT * FROM ${DB_RENAME_BEFORE}.src1;
+CREATE VIEW ${DB_RENAME_BEFORE}.v_join   AS SELECT a.id FROM ${DB_RENAME_BEFORE}.src1 a JOIN ${DB_RENAME_BEFORE}.src2 b ON a.id = b.id;
 
-CREATE DATABASE db_03760_rename_before ENGINE = Atomic;
-CREATE TABLE db_03760_rename_before.src1 (id UInt64) ENGINE = MergeTree ORDER BY id;
-CREATE TABLE db_03760_rename_before.src2 (id UInt64) ENGINE = MergeTree ORDER BY id;
-CREATE VIEW db_03760_rename_before.v_simple AS SELECT * FROM db_03760_rename_before.src1;
-CREATE VIEW db_03760_rename_before.v_join   AS SELECT a.id FROM db_03760_rename_before.src1 a JOIN db_03760_rename_before.src2 b ON a.id = b.id;
-
-CREATE DATABASE db_03760_rename_ext ENGINE = Atomic;
-CREATE VIEW db_03760_rename_ext.v_xdb AS SELECT * FROM db_03760_rename_before.src1;
+CREATE DATABASE ${DB_RENAME_EXT} ENGINE = Atomic;
+CREATE VIEW ${DB_RENAME_EXT}.v_xdb AS SELECT * FROM ${DB_RENAME_BEFORE}.src1;
 
 -- Before rename: verify all three views appear as dependents.
 SELECT arraySort(arrayMap((x, y) -> concat(x, '.', y), dependencies_database, dependencies_table))
-FROM system.tables WHERE database = 'db_03760_rename_before' AND name = 'src1';
+FROM system.tables WHERE database = '${DB_RENAME_BEFORE}' AND name = 'src1';
 SELECT arraySort(dependencies_table)
-FROM system.tables WHERE database = 'db_03760_rename_before' AND name = 'src2';
+FROM system.tables WHERE database = '${DB_RENAME_BEFORE}' AND name = 'src2';
 
-RENAME DATABASE db_03760_rename_before TO db_03760_rename_after;
+RENAME DATABASE ${DB_RENAME_BEFORE} TO ${DB_RENAME_AFTER};
 
 -- After rename: the same three views must still be reported under the new DB name.
 -- v_simple and v_join have been renamed together with their source; v_xdb stays in its own DB.
 SELECT arraySort(arrayMap((x, y) -> concat(x, '.', y), dependencies_database, dependencies_table))
-FROM system.tables WHERE database = 'db_03760_rename_after' AND name = 'src1';
+FROM system.tables WHERE database = '${DB_RENAME_AFTER}' AND name = 'src1';
 SELECT arraySort(dependencies_table)
-FROM system.tables WHERE database = 'db_03760_rename_after' AND name = 'src2';
+FROM system.tables WHERE database = '${DB_RENAME_AFTER}' AND name = 'src2';
 
-DROP DATABASE db_03760_rename_after;
-DROP DATABASE db_03760_rename_ext;
+DROP DATABASE ${DB_RENAME_AFTER};
+DROP DATABASE ${DB_RENAME_EXT};
+EOF
 
+$CLICKHOUSE_CLIENT <<EOF
 -- DROP source table must remove plain_view_dependencies edges where it appears as source.
 DROP TABLE IF EXISTS 03760_stale_src;
 DROP VIEW  IF EXISTS 03760_stale_view;
@@ -173,3 +195,4 @@ SELECT arraySort(dependencies_table) FROM system.tables WHERE database = current
 
 DROP VIEW 03760_rename_view;
 DROP TABLE 03760_rename_src2;
+EOF

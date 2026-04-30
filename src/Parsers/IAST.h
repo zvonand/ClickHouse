@@ -380,6 +380,10 @@ public:
         bool parent_has_trailing_settings = false; /// A parent ASTQueryWithOutput will append SETTINGS after this node's output.
         bool has_trailing_output_options = false; /// A parent ASTQueryWithOutput has trailing output options (SETTINGS, FORMAT, INTO OUTFILE).
         bool disable_from_first_syntax = false; /// Disable FROM-first syntax for SELECTs inside INSERT (to avoid parsing ambiguity).
+        /// Set by a parent formatter that has explicitly emitted `(` around this child to indicate
+        /// that the child should not emit its own `parenthesized` parens (which would duplicate the parent's).
+        /// Consumed (cleared) by `IAST::format` so it only applies one level deep.
+        bool wrapped_in_parens = false;
     };
 
     void format(WriteBuffer & ostr, const FormatSettings & settings) const;

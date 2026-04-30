@@ -365,11 +365,15 @@ void IAST::format(WriteBuffer & ostr, const FormatSettings & settings) const
 {
     FormatState state;
     FormatStateStacked frame;
-    const bool parens = isParenthesized();
+    const bool parens = isParenthesized() && !frame.wrapped_in_parens;
+    frame.wrapped_in_parens = false;
     if (parens)
     {
         ostr.write('(');
         frame.need_parens = false;
+        /// We are now inside our own parens, so the parser-ambiguity checks that fire when
+        /// formatting directly as a multi-argument function argument no longer apply.
+        frame.current_function = nullptr;
     }
     formatImpl(ostr, settings, state, std::move(frame));
     if (parens)
@@ -378,11 +382,13 @@ void IAST::format(WriteBuffer & ostr, const FormatSettings & settings) const
 
 void IAST::format(WriteBuffer & ostr, const FormatSettings & settings, FormatState & state, FormatStateStacked frame) const
 {
-    const bool parens = isParenthesized();
+    const bool parens = isParenthesized() && !frame.wrapped_in_parens;
+    frame.wrapped_in_parens = false;
     if (parens)
     {
         ostr.write('(');
         frame.need_parens = false;
+        frame.current_function = nullptr;
     }
     formatImpl(ostr, settings, state, std::move(frame));
     if (parens)
@@ -391,11 +397,13 @@ void IAST::format(WriteBuffer & ostr, const FormatSettings & settings, FormatSta
 
 void IAST::format(FormattingBuffer out) const
 {
-    const bool parens = isParenthesized();
+    const bool parens = isParenthesized() && !out.frame.wrapped_in_parens;
+    out.frame.wrapped_in_parens = false;
     if (parens)
     {
         out.ostr.write('(');
         out.frame.need_parens = false;
+        out.frame.current_function = nullptr;
     }
     formatImpl(out.ostr, out.settings, out.state, out.frame);
     if (parens)

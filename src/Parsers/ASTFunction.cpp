@@ -395,13 +395,22 @@ void ASTFunction::formatImplWithoutAlias(WriteBuffer & ostr, const FormatSetting
                 ostr << func_symbol;
 
                 if (inside_parens)
+                {
                     ostr << '(';
-
-                arguments->format(ostr, settings, state, nested_need_parens);
-                written = true;
-
-                if (inside_parens)
+                    /// We have just emitted `(` around the single argument, so suppress the
+                    /// argument's own `parenthesized` parens (which would otherwise duplicate ours).
+                    /// We bypass ASTExpressionList::format here to ensure the flag reaches the
+                    /// argument node directly (the flag is consumed at the first IAST::format call).
+                    FormatStateStacked inner_frame = nested_need_parens;
+                    inner_frame.wrapped_in_parens = true;
+                    arguments->children[0]->format(ostr, settings, state, inner_frame);
                     ostr << ')';
+                }
+                else
+                {
+                    arguments->format(ostr, settings, state, nested_need_parens);
+                }
+                written = true;
 
                 if (outside_parens)
                     ostr << ')';

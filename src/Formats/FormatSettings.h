@@ -181,9 +181,17 @@ struct FormatSettings
         bool output_unsupported_types_as_binary = true;
     } arrow{};
 
+    struct AvroSchemaRegistryTimeouts
+    {
+        UInt64 connection_timeout = 1;
+        UInt64 send_timeout = 1;
+        UInt64 receive_timeout = 1;
+    };
+
     struct
     {
         String schema_registry_url;
+        AvroSchemaRegistryTimeouts schema_registry_timeouts;
         String output_codec;
         UInt64 output_sync_interval = 16 * 1024;
         bool allow_missing_fields = false;

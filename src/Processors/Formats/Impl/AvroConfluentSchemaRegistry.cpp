@@ -50,11 +50,24 @@ ConfluentSchemaRegistry::ConfluentSchemaRegistry(const std::string & base_url_, 
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Empty Schema Registry URL");
 }
 
-avro::ValidSchema ConfluentSchemaRegistry::getSchema(uint32_t id)
+namespace
+{
+
+ConnectionTimeouts buildTimeouts(const FormatSettings::AvroSchemaRegistryTimeouts & timeouts)
+{
+    return ConnectionTimeouts()
+        .withConnectionTimeout(timeouts.connection_timeout)
+        .withSendTimeout(timeouts.send_timeout)
+        .withReceiveTimeout(timeouts.receive_timeout);
+}
+
+}
+
+avro::ValidSchema ConfluentSchemaRegistry::getSchema(uint32_t id, const FormatSettings::AvroSchemaRegistryTimeouts & timeouts)
 {
     auto [schema, loaded] = schema_cache.getOrSet(
         id,
-        [this, id]() { return std::make_shared<avro::ValidSchema>(fetchSchema(id)); });
+        [this, id, &timeouts]() { return std::make_shared<avro::ValidSchema>(fetchSchema(id, timeouts)); });
     return *schema;
 }
 
@@ -82,7 +95,7 @@ void ConfluentSchemaRegistry::applyAuth(const Poco::URI & url, Poco::Net::HTTPRe
     }
 }
 
-avro::ValidSchema ConfluentSchemaRegistry::fetchSchema(uint32_t id)
+avro::ValidSchema ConfluentSchemaRegistry::fetchSchema(uint32_t id, const FormatSettings::AvroSchemaRegistryTimeouts & timeouts)
 {
     try
     {
@@ -91,11 +104,7 @@ avro::ValidSchema ConfluentSchemaRegistry::fetchSchema(uint32_t id)
             Poco::URI url(base_url, base_url.getPath() + "/schemas/ids/" + std::to_string(id));
             LOG_TRACE(getLogger("ConfluentSchemaRegistry"), "Fetching schema id = {} from url {}", id, url.toString());
 
-            /// One second for connect/send/receive. Just in case.
-            auto timeouts = ConnectionTimeouts()
-                .withConnectionTimeout(1)
-                .withSendTimeout(1)
-                .withReceiveTimeout(1);
+            auto connection_timeouts = buildTimeouts(timeouts);
 
             Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_GET, url.getPathAndQuery(), Poco::Net::HTTPRequest::HTTP_1_1);
             if (url.getPort())
@@ -105,7 +114,7 @@ avro::ValidSchema ConfluentSchemaRegistry::fetchSchema(uint32_t id)
 
             applyAuth(url, request);
 
-            auto session = makeHTTPSession(HTTPConnectionGroupType::HTTP, url, timeouts);
+            auto session = makeHTTPSession(HTTPConnectionGroupType::HTTP, url, connection_timeouts);
             session->sendRequest(request);
 
             Poco::Net::HTTPResponse response;
@@ -138,7 +147,7 @@ avro::ValidSchema ConfluentSchemaRegistry::fetchSchema(uint32_t id)
     }
 }
 
-uint32_t ConfluentSchemaRegistry::registerSchema(const std::string & subject, const avro::ValidSchema & schema)
+uint32_t ConfluentSchemaRegistry::registerSchema(const std::string & subject, const avro::ValidSchema & schema, const FormatSettings::AvroSchemaRegistryTimeouts & timeouts)
 {
     std::string schema_json = schema.toJson(false);
     try
@@ -155,10 +164,7 @@ uint32_t ConfluentSchemaRegistry::registerSchema(const std::string & subject, co
             std::string request_path = base_url.getPath() + "/subjects/" + encoded_subject + "/versions";
             LOG_TRACE(getLogger("ConfluentSchemaRegistry"), "Registering schema under subject '{}' at path {}", subject, request_path);
 
-            auto timeouts = ConnectionTimeouts()
-                .withConnectionTimeout(1)
-                .withSendTimeout(1)
-                .withReceiveTimeout(1);
+            auto connection_timeouts = buildTimeouts(timeouts);
 
             Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_POST, request_path, Poco::Net::HTTPRequest::HTTP_1_1);
             request.setContentType("application/vnd.schemaregistry.v1+json");
@@ -177,7 +183,7 @@ uint32_t ConfluentSchemaRegistry::registerSchema(const std::string & subject, co
             std::string body_str = body_stream.str();
             request.setContentLength(body_str.size());
 
-            auto session = makeHTTPSession(HTTPConnectionGroupType::HTTP, base_url, timeouts);
+            auto session = makeHTTPSession(HTTPConnectionGroupType::HTTP, base_url, connection_timeouts);
             std::ostream & os = session->sendRequest(request);
             os << body_str;
 

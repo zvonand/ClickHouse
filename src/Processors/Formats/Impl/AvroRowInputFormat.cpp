@@ -1176,7 +1176,7 @@ const AvroDeserializer & AvroConfluentRowInputFormat::getOrCreateDeserializer(Sc
     auto it = deserializer_cache.find(schema_id);
     if (it == deserializer_cache.end())
     {
-        auto schema = schema_registry->getSchema(schema_id);
+        auto schema = schema_registry->getSchema(schema_id, format_settings.avro.schema_registry_timeouts);
         AvroDeserializer deserializer(
             output.getHeader(), schema, format_settings.avro.allow_missing_fields, format_settings.null_as_default, format_settings);
         it = deserializer_cache.emplace(schema_id, deserializer).first;
@@ -1195,7 +1195,7 @@ NamesAndTypesList AvroSchemaReader::readSchema()
     if (confluent)
     {
         UInt32 schema_id = readConfluentSchemaId(in);
-        root_node = getConfluentSchemaRegistry(format_settings)->getSchema(schema_id).root();
+        root_node = getConfluentSchemaRegistry(format_settings)->getSchema(schema_id, format_settings.avro.schema_registry_timeouts).root();
     }
     else
     {

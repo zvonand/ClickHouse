@@ -1,4 +1,4 @@
-# Shared compiler-rt linking logic for Linux and FreeBSD.
+# Shared compiler-rt linking logic.
 #
 # All compiler-rt runtimes (builtins, sanitizers, XRay) are built as regular
 # cmake targets in contrib/compiler-rt-cmake/. Here we wire the resulting

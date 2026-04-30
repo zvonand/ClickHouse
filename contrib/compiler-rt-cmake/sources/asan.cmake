@@ -45,7 +45,9 @@ set(ASAN_SOURCES
     asan_win.cpp
 )
 
-# Linux-only assembly: vfork interception trampoline.
+# vfork interception trampoline. Upstream gates it on "NOT WIN32 AND NOT APPLE",
+# so it is included on every Unix-like target we build for. The same gate is
+# applied where this list is consumed in CMakeLists.txt.
 set(ASAN_ASM_SOURCES asan_interceptors_vfork.S)
 
 set(ASAN_PREINIT_SOURCES asan_preinit.cpp)

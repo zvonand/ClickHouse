@@ -298,13 +298,7 @@ void SystemLogBase<LogElement>::handleCrash()
 template <typename LogElement>
 SystemLogBase<LogElement>::~SystemLogBase()
 {
-    try
-    {
-        stopFlushThread();
-    }
-    catch (...) // NOLINT(bugprone-empty-catch)
-    {
-    }
+    stopFlushThread();
 }
 
 template <typename LogElement>

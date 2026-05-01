@@ -240,14 +240,8 @@ bool accurateEquals(const Field & left, const Field & right)
             case Field::Types::Int64:
                 return left.safeGet<Int64>() == right.safeGet<Int64>();
             case Field::Types::Float64:
-            {
-                auto l = left.safeGet<Float64>();
-                auto r = right.safeGet<Float64>();
-                /// NaN == NaN is true for index analysis (consistent with ClickHouse sort order).
-                if (std::isnan(l) && std::isnan(r))
-                    return true;
-                return l == r;
-            }
+                /// IEEE 754 semantics: NaN != NaN, matching the visitor's `accurate::equalsOp`.
+                return left.safeGet<Float64>() == right.safeGet<Float64>();
             case Field::Types::Null:
                 /// Null encodes three distinct sentinels: NULL, -Inf, +Inf.
                 /// Must compare their infinity flags to keep them distinct.

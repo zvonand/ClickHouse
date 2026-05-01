@@ -42,10 +42,10 @@ Failing test history: <play.clickhouse.com link with base64 SQL>
 Extract `(number, test_name)` pairs:
 
 ```bash
-jq -r '.[] | [.number, (.body | capture("Test name: (?<n>.+)") | .n // "")] | @tsv' tmp/flaky/issues.json
+jq -r '.[] | [.number, ((.body | capture("Test name: (?<n>.+)")? | .n) // "")] | @tsv' tmp/flaky/issues.json
 ```
 
-If the regex misses an entry (some old issues use the title rather than `Test name:` in the body), pull the test name out of the title or decode the base64 SQL after `#` in the `Failing test history` URL.
+The trailing `?` after `capture` is required: without it, an issue with a `null` body or one that doesn't contain `Test name:` raises an error that aborts the whole pipeline and silently drops every subsequent issue. With `?`, those rows produce an empty string instead, and you can fall back to the title or to the base64 SQL after `#` in the `Failing test history` URL — some old issues use the title rather than `Test name:` in the body.
 
 ### 2. Query CI failure history
 

@@ -114,6 +114,11 @@ struct JoinSettings
 
     void updatePlanSettings(QueryPlanSerializationSettings & settings) const;
 
+    /// Returns the effective threshold for converting a hash join into a grace hash join (spilling to disk),
+    /// combining the absolute `max_bytes_before_external_join` and the ratio `max_bytes_ratio_before_external_join`
+    /// (the smaller of the two applies). Returns 0 if neither is set, meaning no automatic spilling.
+    static UInt64 getMaxBytesBeforeExternalJoin(UInt64 max_bytes_before_external_join, double max_bytes_ratio_before_external_join);
+
     bool operator==(const JoinSettings & other) const = default;
 };
 

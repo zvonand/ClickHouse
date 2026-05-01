@@ -127,6 +127,14 @@ SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), 
 SELECT 'shared tupleElement across SELECT and ORDER BY ALL';
 SELECT DISTINCT tupleElement(dictGet(currentDatabase() || '.test_dict', ('country', 'city', 'population'), id), 'city') FROM test_keys ORDER BY ALL;
 
+-- Test `LowCardinality` key: the tuple-attribute form drops the `LowCardinality` wrapper from
+-- the result, but the single-attribute form preserves it. Rewriting would change the result
+-- type (`String` vs `LowCardinality(String)`) and break parent functions that expected the
+-- original type. The pass must bail out in this case.
+SELECT 'LowCardinality key bail out';
+SELECT tupleElement(dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(toLowCardinality(1)), ('Default', 'Default')), 'city');
+SELECT tupleElement(dictGet(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(toLowCardinality(2))), 'country');
+
 DROP TABLE test_keys;
 DROP DICTIONARY test_dict;
 DROP TABLE dict_source;

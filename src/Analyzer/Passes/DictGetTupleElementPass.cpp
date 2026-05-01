@@ -221,6 +221,13 @@ public:
 
         resolveOrdinaryFunctionNodeByName(new_dict_get_function, dict_get_name, getContext());
 
+        /// The single-attribute form of `dictGet` preserves a `LowCardinality` wrapper from the
+        /// key argument, while the tuple-attribute form drops it (a tuple cannot be `LowCardinality`).
+        /// If the result types differ, the rewrite would change the type observed by the parent
+        /// node and break the surrounding query tree. Bail out in that case.
+        if (!new_dict_get_function.getResultType()->equals(*tuple_element_function->getResultType()))
+            return;
+
         node = std::move(new_dict_get_node);
     }
 };

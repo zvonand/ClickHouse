@@ -4614,7 +4614,7 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
             static const String tracing_levels[] = {"none", "error", "warning", "information", "debug", "trace"};
             system_query->delta_kernel_tracing_level = tracing_levels[fuzz_rand() % std::size(tracing_levels)];
         }
-        /// Fuzz DROP REPLICA optional fields: shard, is_drop_whole_replica, with_tables
+        /// Fuzz DROP REPLICA optional fields
         if ((system_query->type == Type::DROP_REPLICA || system_query->type == Type::DROP_DATABASE_REPLICA
              || system_query->type == Type::DROP_CATALOG_REPLICA)
             && fuzz_rand() % 5 == 0)

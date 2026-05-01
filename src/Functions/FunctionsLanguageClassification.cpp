@@ -182,7 +182,11 @@ public:
             const UInt8 * str = input_data.data() + input_offsets[i - 1];
             const size_t str_len = input_offsets[i] - input_offsets[i - 1];
 
-            if (str_len != 0 && UTF8::isValidUTF8(str, str_len))
+            if (str_len == 0)
+            {
+                /// Keep old semantics for empty input: return an empty map.
+            }
+            else if (UTF8::isValidUTF8(str, str_len))
             {
                 CLD2::DetectLanguageSummary(
                     reinterpret_cast<const char *>(str),

@@ -802,10 +802,12 @@ void GraceHashJoin::addBlockToJoinImpl(Block block)
             current_block = concatenateBlocks(current_blocks);
         }
 
-        /// After rehashing, only ~1/buckets_snapshot.size() of the rows stay in this bucket; the
-        /// rest are flushed to disk. Reserving for `prev_keys_num` would allocate a power-of-two
-        /// buffer for the pre-rehash size and immediately blow past `max_bytes_before_external_join`.
-        hash_join = makeInMemoryJoin(fmt::format("grace{}", bucket_index), prev_keys_num / buckets_snapshot.size());
+        /// `rehashBuckets` doubles the bucket count from N to 2N. Of the `prev_keys_num` rows that
+        /// were in this bucket, about half map to bucket `i` and half to bucket `i + N` under the
+        /// new modulus, so ~half stay here and the rest are flushed to disk. Reserving for the
+        /// full `prev_keys_num` would allocate a power-of-two buffer for the pre-rehash size and
+        /// immediately blow past `max_bytes_before_external_join`.
+        hash_join = makeInMemoryJoin(fmt::format("grace{}", bucket_index), prev_keys_num / 2);
 
         if (current_block.rows() > 0)
             hash_join->addBlockToJoin(current_block, /* check_limits = */ false);

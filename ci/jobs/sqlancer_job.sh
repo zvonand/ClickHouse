@@ -5,12 +5,25 @@
 # 2. Other than for demonstration purposes it would be wierd to write this in bash
 
 set -exu
+set -o pipefail
 
 TMP_PATH=$(readlink -f ./ci/tmp/)
 OUTPUT_PATH="$TMP_PATH/sqlancer_output"
 PID_FILE="$TMP_PATH/clickhouse-server.pid"
 CLICKHOUSE_BIN="$TMP_PATH/clickhouse"
-RESULT_FILE="$TMP_PATH/result_job.json"
+
+# Praktika reads the job result from `./ci/tmp/result_<normalized_job_name>.json`,
+# where the normalization matches `Utils.normalize_string` in `ci/praktika/utils.py`.
+# `JOB_NAME` is not propagated into the docker container, so read it from the
+# serialized environment file that Praktika writes before invoking the job.
+NORMALIZED_JOB_NAME=$(python3 -c '
+import sys
+sys.path.insert(0, ".")
+from ci.praktika._environment import _Environment
+from ci.praktika.utils import Utils
+print(Utils.normalize_string(_Environment.get().JOB_NAME))
+')
+RESULT_FILE="$TMP_PATH/result_${NORMALIZED_JOB_NAME}.json"
 
 mkdir -p $OUTPUT_PATH
 
@@ -23,7 +36,16 @@ json_escape() {
 # Write result on any exit to ensure logs are always uploaded as artifacts
 write_result() {
     local status="${OVERALL_STATUS:-error}"
-    local info="${RESULT_INFO:-Script terminated unexpectedly}"
+    local info
+    if [ -n "${RESULT_INFO:-}" ]; then
+        info="$RESULT_INFO"
+    elif [ "$status" = "success" ]; then
+        info=""
+    elif [ "$status" = "failure" ]; then
+        info="Some SQLancer tests failed"
+    else
+        info="Script terminated unexpectedly"
+    fi
 
     # Build results array
     local results_json=""

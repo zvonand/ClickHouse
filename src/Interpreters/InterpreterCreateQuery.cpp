@@ -1979,7 +1979,7 @@ bool InterpreterCreateQuery::doCreateTable(ASTCreateQuery & create,
         {
             String as_database_name = getContext()->resolveDatabase(as_database_saved);
             StoragePtr as_storage = DatabaseCatalog::instance().getTable({as_database_name, as_table_saved}, getContext());
-            auto as_storage_metadata = as_storage->getInMemoryMetadataPtr();
+            auto as_storage_metadata = as_storage->getInMemoryMetadataPtr(getContext(), false);
 
             if (!create_query.storage)
             {

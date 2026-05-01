@@ -6,6 +6,8 @@
 #include <Parsers/Kusto/ParserKQLSort.h>
 #include <Parsers/Kusto/Utilities.h>
 
+#include <Poco/String.h>
+
 namespace DB
 {
 
@@ -27,7 +29,8 @@ bool ParserKQLSort::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 
     while (isValidKQLPos(new_pos) && new_pos->type != TokenType::PipeMark && new_pos->type != TokenType::Semicolon)
     {
-        String tmp(new_pos->begin, new_pos->end);
+        /// KQL keywords are case-insensitive, so accept `ASC`/`Desc`/etc.
+        const String tmp = Poco::toLower(String(new_pos->begin, new_pos->end));
         if (tmp == "desc" || tmp == "asc")
             has_dir = true;
 

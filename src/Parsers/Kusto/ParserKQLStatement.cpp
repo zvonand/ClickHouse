@@ -20,8 +20,10 @@ namespace DB
 bool ParserKQLStatement::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 {
     /// Handle KQL let statements: let name = value;
-    /// Store the binding and generate a no-op SELECT
-    if (isValidKQLPos(pos) && pos->type == TokenType::BareWord && String(pos->begin, pos->end) == "let")
+    /// Store the binding and generate a no-op SELECT.
+    /// KQL keywords are case-insensitive, so accept `LET`/`Let`/etc. as well.
+    if (isValidKQLPos(pos) && pos->type == TokenType::BareWord
+        && Poco::toLower(String(pos->begin, pos->end)) == "let")
     {
         auto let_pos = pos;
         ++pos;

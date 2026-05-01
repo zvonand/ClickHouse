@@ -188,15 +188,14 @@ String IParserKQLFunction::getConvertedArgument(const String & fn_name, IParser:
                     token = "'" + escapeSingleQuotes(String(pos->begin + 1, pos->end - 1)) + "'";
                 else if (pos->type == TokenType::At)
                 {
-                    /// KQL verbatim string: @'...' — skip the @ and use the string literal
+                    /// KQL verbatim string: @'...' — skip the @ and use the string literal.
+                    /// `@` not followed by a string literal is a syntax error in KQL: rejecting
+                    /// it here gives a clear diagnostic at the point of failure instead of
+                    /// silently rewinding and producing a confusing downstream exception.
                     ++pos;
-                    if (isValidKQLPos(pos) && pos->type == TokenType::StringLiteral)
-                        token = String(pos->begin, pos->end);
-                    else
-                    {
-                        --pos;
-                        token = String(pos->begin, pos->end);
-                    }
+                    if (!isValidKQLPos(pos) || pos->type != TokenType::StringLiteral)
+                        throw Exception(ErrorCodes::SYNTAX_ERROR, "KQL: '@' must be followed by a string literal (verbatim string)");
+                    token = String(pos->begin, pos->end);
                 }
                 else if (pos->type == TokenType::OpeningSquareBracket)
                 {

@@ -54,6 +54,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"max_streams_for_union_step", 0, 0, "New setting to limit the number of simultaneously active data streams in a UNION step to reduce peak memory usage."},
             {"max_streams_for_union_step_to_max_threads_ratio", 0, 8, "New setting: the limit on simultaneously active streams in a UNION step is computed as min(max_streams_for_union_step, max_threads * max_streams_for_union_step_to_max_threads_ratio), either being 0 disables that input."},
             {"send_table_structure_on_insert_with_inline_data", true, true, "New setting to control whether server sends table structure for INSERT queries with inline data."},
+            {"database_iceberg_purge_on_drop", false, false, "New setting."},
         });
         addSettingsChanges(settings_changes_history, "26.4",
         {
@@ -90,7 +91,6 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"analyzer_inline_views", false, false, "New setting"},
             {"distributed_cache_write_request_max_tries", 10, 10, "New setting"},
             {"highlight_max_matches_per_row", 10000, 10000, "New setting to limit the number of highlight matches per row to protect against excessive memory usage."},
-            {"database_iceberg_purge_on_drop", false, false, "New setting."},
             {"materialize_statistics_on_insert", true, false, "Disable building statistics on INSERT by default, rely on merges instead"},
             {"enable_join_transitive_predicates", false, false, "New setting to infer transitive equi-join predicates for join order optimization."},
             {"input_format_column_name_matching_mode", "match_case", "match_case", "New setting."},

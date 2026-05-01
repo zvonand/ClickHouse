@@ -11,8 +11,8 @@ SELECT obfuscateQueryWithSeed('SELECT arrayMap(x -> x + 1, a) FROM t', 2) LIKE '
 SELECT obfuscateQueryWithSeed('SELECT toUInt64(x) FROM numbers(10)', 3) LIKE '%toUInt64%' AS keep_to_uint64,
        obfuscateQueryWithSeed('SELECT toUInt64(x) FROM numbers(10)', 3) LIKE '%numbers%'  AS keep_numbers_table_function;
 
--- Table function names should also be preserved when written in uppercase or as aliases.
-SELECT lower(obfuscateQueryWithSeed('SELECT * FROM NUMBERS(10)', 6)) LIKE '%numbers%' AS keep_uppercase_numbers,
+-- Case-insensitive table functions (e.g. `VALUES`, `FORMAT`) and aliases must also be preserved.
+SELECT obfuscateQueryWithSeed('SELECT * FROM VALUES(''a UInt8'', 1, 2, 3)', 6) LIKE '%VALUES%' AS keep_uppercase_values,
        obfuscateQueryWithSeed('SELECT * FROM url(''https://example.com'', JSONEachRow)', 7) LIKE '%url%' AS keep_url_table_function;
 
 SELECT obfuscateQueryWithSeed('CREATE TABLE t (x UInt64, y String) ENGINE = MergeTree ORDER BY x', 4) LIKE '%MergeTree%' AS keep_engine,

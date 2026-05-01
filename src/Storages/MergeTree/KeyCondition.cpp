@@ -4393,6 +4393,14 @@ bool KeyCondition::extractPlainRanges(Ranges & ranges) const
                 if (element.set_index->hasMonotonicFunctionsChain())
                     return false;
 
+                /// A relaxed set is not exact (e.g. `tuple(i, i) IN (tuple(1, 2))` deduplicates to `i IN (1)`,
+                /// which is a superset of the true matches). For ordinary `MergeTree` reads this is harmless
+                /// because the row-level filter rejects false positives, but consumers that treat extracted
+                /// ranges as exact (e.g. `numbers()`/`generate_series()` sources, `LIMIT` pushdown) would
+                /// produce wrong results. Bail out and let the caller fall back to a conservative bound.
+                if (element.relaxed)
+                    return false;
+
                 if (element.set_index->size() == 0)
                 {
                     rpn_stack.push(PlainRanges::makeBlank()); /// skip blank range
@@ -4416,6 +4424,15 @@ bool KeyCondition::extractPlainRanges(Ranges & ranges) const
             else if (element.function == RPNElement::FUNCTION_NOT_IN_SET)
             {
                 if (element.set_index->hasMonotonicFunctionsChain())
+                    return false;
+
+                /// A relaxed set means the deduped/transformed set is a strict subset of the original.
+                /// For `NOT IN`, the complement built below is therefore stricter than the true predicate
+                /// and would incorrectly exclude rows that should match. Example:
+                /// `tuple(i, i) NOT IN (tuple(1, 2))` deduplicates to `i NOT IN (1)`, building ranges
+                /// `(-inf, 1) ∪ (1, +inf)` and skipping `i = 1`, even though `tuple(1, 1) != tuple(1, 2)`.
+                /// Bail out and let the caller fall back to a conservative bound.
+                if (element.relaxed)
                     return false;
 
                 if (element.set_index->size() == 0)

@@ -2289,7 +2289,17 @@ ProjectionNames QueryAnalyzer::resolveMatcher(QueryTreeNodePtr & matcher_node, I
                     auto function_to_resolve_untyped = expression_node->clone();
                     auto & function_to_resolve_typed = function_to_resolve_untyped->as<FunctionNode &>();
                     function_to_resolve_typed.getArguments().getNodes().push_back(node);
+                    /// Push the function onto the resolve stack so that argument resolution
+                    /// sees this scope as being inside the function. This matters for aggregate
+                    /// functions: without it, matched columns appended as arguments would be
+                    /// converted to Nullable in resolveExpressionNode (when group_by_use_nulls=1
+                    /// and the column is a GROUP BY key), causing a type mismatch with the
+                    /// non-Nullable aggregation input. The lambda branch is unaffected because
+                    /// resolveLambda resolves the body via resolveExpressionNode, which itself
+                    /// pushes the aggregate function before resolving its arguments.
+                    scope.pushExpressionNode(function_to_resolve_untyped);
                     node_projection_names = resolveFunction(function_to_resolve_untyped, scope);
+                    scope.popExpressionNode();
                     node = function_to_resolve_untyped;
                 }
                 else

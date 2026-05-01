@@ -29,5 +29,8 @@ SELECT * APPLY x -> toString(argMax(x, number)) FROM numbers(1) GROUP BY GROUPIN
 -- Deeply nested aggregate
 SELECT * APPLY x -> length(toString(sum(x))) FROM numbers(3) GROUP BY number WITH ROLLUP ORDER BY number;
 
+-- Function-form aggregate (covers ApplyColumnTransformerType::FUNCTION branch with aggregate detection)
+SELECT * APPLY sum FROM numbers(3) GROUP BY number WITH ROLLUP ORDER BY number;
+
 -- Non-aggregate APPLY should still produce Nullable output
 SELECT * APPLY toString FROM (SELECT number FROM numbers(2)) GROUP BY number WITH ROLLUP ORDER BY number;

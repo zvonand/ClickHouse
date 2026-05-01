@@ -493,6 +493,16 @@ class FlightSQLClient:
         action = flight.Action("ClosePreparedStatement", req.SerializeToString())
         list(self.client.do_action(action, self._flight_call_options()))
 
+    def close_all_prepared_statements(self):
+        """Close all prepared statements for the current user.
+
+        Sends a ClosePreparedStatement action with an empty handle,
+        which the server interprets as "close all".
+        """
+        req = ActionClosePreparedStatementRequest()
+        action = flight.Action("ClosePreparedStatement", req.SerializeToString())
+        list(self.client.do_action(action, self._flight_call_options()))
+
     def set_session_options(self, options: Dict[str, Any]) -> SetSessionOptionsResult:
         """Set session options via the SetSessionOptions action.
 

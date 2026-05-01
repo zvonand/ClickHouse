@@ -283,3 +283,97 @@ def test_prepared_statement_no_schema_when_null_invalid():
     result = stmt.execute()
     assert result.column("number").to_pylist() == [0, 1, 2, 3, 4]
     stmt.close()
+
+
+def test_close_all_prepared_statements():
+    """With a session, close-all only closes statements in that session."""
+    client1 = get_client("user_ps1", "pass1")
+    client2 = get_client("user_ps1", "pass1")  # same user, different session
+
+    # Create 2 in session 1, 1 in session 2 (limit is 3 total per user).
+    stmt_s1_a = client1.prepare("SELECT 1")
+    stmt_s1_b = client1.prepare("SELECT 2")
+    stmt_s2 = client2.prepare("SELECT 3")
+
+    # Limit reached — 4th should fail from either session.
+    with pytest.raises(flight.FlightServerError, match="Too many prepared statements"):
+        client1.prepare("SELECT 99")
+
+    # Close all in session 1 only.
+    client1.close_all_prepared_statements()
+
+    # Session 1's statements are gone.
+    with pytest.raises(pa.lib.ArrowKeyError, match="Prepared statement handle not found"):
+        client1.execute(stmt_s1_a)
+
+    # Session 2's statement is still alive.
+    result = client2.execute(stmt_s2)
+    assert result.column(0).to_pylist() == [3]
+
+    # Can create new statements again (2 slots freed).
+    stmt_new = client1.prepare("SELECT 42")
+    result = client1.execute(stmt_new)
+    assert result.column(0).to_pylist() == [42]
+    stmt_new.close()
+    stmt_s2.close()
+
+
+def test_close_all_does_not_affect_other_user():
+    """Closing all statements for one user does not affect another user's statements."""
+    client1 = get_client("user_ps1", "pass1")
+    client2 = get_client("user_ps2", "pass2")
+
+    stmt1 = client1.prepare("SELECT 1")
+    stmt2 = client2.prepare("SELECT 2")
+
+    # User 1 closes all their statements.
+    client1.close_all_prepared_statements()
+
+    # User 1's statement is gone.
+    with pytest.raises(pa.lib.ArrowKeyError, match="Prepared statement handle not found"):
+        client1.execute(stmt1)
+
+    # User 2's statement is still alive.
+    result = client2.execute(stmt2)
+    assert result.column(0).to_pylist() == [2]
+    stmt2.close()
+
+
+def test_close_all_sessionless():
+    """Without a session, close-all closes only session-less statements, not session-bound ones."""
+    def get_sessionless_client(username=None, password=None):
+        return FlightSQLClient(
+            host=node.ip_address,
+            port=8888,
+            insecure=True,
+            disable_server_verification=True,
+            username=username,
+            password=password,
+            features={'metadata-reflection': 'true'},
+        )
+
+    session_client = get_client("user_ps1", "pass1")  # has a session
+    sessionless_client = get_sessionless_client("user_ps1", "pass1")
+
+    # Create 1 statement with a session, 2 without.
+    stmt_session = session_client.prepare("SELECT 1")
+    stmt_no_session_a = sessionless_client.prepare("SELECT 2")
+    stmt_no_session_b = sessionless_client.prepare("SELECT 3")
+
+    # Limit reached (3 total for user_ps1).
+    with pytest.raises(flight.FlightServerError, match="Too many prepared statements"):
+        sessionless_client.prepare("SELECT 99")
+
+    # Close all session-less statements.
+    sessionless_client.close_all_prepared_statements()
+
+    # Session-less statements are gone.
+    with pytest.raises(pa.lib.ArrowKeyError, match="Prepared statement handle not found"):
+        sessionless_client.execute(stmt_no_session_a)
+    with pytest.raises(pa.lib.ArrowKeyError, match="Prepared statement handle not found"):
+        sessionless_client.execute(stmt_no_session_b)
+
+    # Session-bound statement is still alive.
+    result = session_client.execute(stmt_session)
+    assert result.column(0).to_pylist() == [1]
+    stmt_session.close()

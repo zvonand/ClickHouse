@@ -628,6 +628,66 @@ void CallsData::closePreparedStatement(const String & handle, const String & use
     }
 }
 
+void CallsData::closeAllPreparedStatements(const String & username, const String & session_id)
+{
+    std::lock_guard lock{mutex};
+
+    /// Determine which handles to close.
+    std::unordered_set<String> handles_to_close;
+    if (!session_id.empty())
+    {
+        /// Session-scoped: close only statements in this session that belong to this user.
+        auto s_it = session_to_prepared_statements.find(session_id);
+        if (s_it == session_to_prepared_statements.end())
+            return;
+        for (const auto & handle : s_it->second)
+        {
+            auto ps_it = prepared_statements.find(handle);
+            if (ps_it != prepared_statements.end() && ps_it->second->username == username)
+                handles_to_close.insert(handle);
+        }
+    }
+    else
+    {
+        /// Session-less: close only statements for this user that have no session association.
+        auto user_it = user_to_prepared_statements.find(username);
+        if (user_it == user_to_prepared_statements.end())
+            return;
+        for (const auto & handle : user_it->second)
+        {
+            if (prepared_statement_to_session.find(handle) == prepared_statement_to_session.end())
+                handles_to_close.insert(handle);
+        }
+    }
+
+    for (const auto & handle : handles_to_close)
+    {
+        LOG_DEBUG(log, "Closing prepared statement {} (close-all for user={}, session={})", handle, username, session_id);
+        prepared_statements.erase(handle);
+
+        auto user_it = user_to_prepared_statements.find(username);
+        if (user_it != user_to_prepared_statements.end())
+        {
+            user_it->second.erase(handle);
+            if (user_it->second.empty())
+                user_to_prepared_statements.erase(user_it);
+        }
+
+        auto ps_session_it = prepared_statement_to_session.find(handle);
+        if (ps_session_it != prepared_statement_to_session.end())
+        {
+            auto s_it = session_to_prepared_statements.find(ps_session_it->second);
+            if (s_it != session_to_prepared_statements.end())
+            {
+                s_it->second.erase(handle);
+                if (s_it->second.empty())
+                    session_to_prepared_statements.erase(s_it);
+            }
+            prepared_statement_to_session.erase(ps_session_it);
+        }
+    }
+}
+
 void CallsData::closeSessionPreparedStatements(const String & session_id)
 {
     std::lock_guard lock{mutex};

@@ -215,6 +215,11 @@ public:
     /// Checks that the caller's username matches the owner.
     void closePreparedStatement(const String & handle, const String & username);
 
+    /// Closes all prepared statements owned by a user.
+    /// If session_id is non-empty, only closes statements associated with that session.
+    /// If session_id is empty, closes all statements for the user regardless of session.
+    void closeAllPreparedStatements(const String & username, const String & session_id = {});
+
     /// Closes all prepared statements associated with a session.
     void closeSessionPreparedStatements(const String & session_id);
 

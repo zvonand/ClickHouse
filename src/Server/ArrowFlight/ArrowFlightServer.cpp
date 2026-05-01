@@ -1597,9 +1597,18 @@ arrow::Status ArrowFlightServer::DoAction(
                 return arrow::Status::Invalid("Could not deserialize ActionClosePreparedStatementRequest.");
 
             const auto & handle = request.prepared_statement_handle();
-            LOG_DEBUG(log, "ClosePreparedStatement request: handle={}", handle);
-
-            calls_data->closePreparedStatement(handle, auth.getUsername());
+            if (handle.empty())
+            {
+                const auto & sid = auth.getSessionId();
+                LOG_DEBUG(log, "ClosePreparedStatement request: closing all statements for user={}, session={}",
+                    auth.getUsername(), sid.empty() ? "(none)" : sid);
+                calls_data->closeAllPreparedStatements(auth.getUsername(), sid);
+            }
+            else
+            {
+                LOG_DEBUG(log, "ClosePreparedStatement request: handle={}", handle);
+                calls_data->closePreparedStatement(handle, auth.getUsername());
+            }
 
             /// ClosePreparedStatement has no response body per the spec.
         }

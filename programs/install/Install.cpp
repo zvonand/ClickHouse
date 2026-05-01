@@ -1294,6 +1294,13 @@ int mainEntryClickHouseStart(int argc, char ** argv)
 
         std::string user = options["user"].as<std::string>();
         std::string group = options["group"].as<std::string>();
+        /// `--group` has a default for help/documentation purposes only.
+        /// It should be applied to the launched server only when the user
+        /// explicitly requested it. Otherwise `clickhouse start --user alice`
+        /// would force `-g clickhouse` (or `alice:clickhouse` on the no-sudo
+        /// path), which fails when the user is not a member of `clickhouse`.
+        if (options["group"].defaulted())
+            group.clear();
 
         fs::path prefix = options["prefix"].as<std::string>();
         fs::path binary = prefix / options["binary-path"].as<std::string>() / "clickhouse";
@@ -1426,6 +1433,10 @@ int mainEntryClickHouseRestart(int argc, char ** argv)
 
         std::string user = options["user"].as<std::string>();
         std::string group = options["group"].as<std::string>();
+        /// See the comment in `mainEntryClickHouseStart`: only apply `--group`
+        /// when the user explicitly provided it.
+        if (options["group"].defaulted())
+            group.clear();
 
         fs::path prefix = options["prefix"].as<std::string>();
         fs::path binary = prefix / options["binary-path"].as<std::string>() / "clickhouse";

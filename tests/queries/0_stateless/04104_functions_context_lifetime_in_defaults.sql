@@ -102,3 +102,43 @@ INSERT INTO t_tuple_order_by VALUES ((0, 0), (3, 4));
 SELECT a, b, L1Distance(a, b) as dist FROM t_tuple_order_by ORDER BY dist;
 
 DROP TABLE t_tuple_order_by;
+
+-- least/greatest in DEFAULT expression (exercises LeastGreatestOverloadResolver,
+-- which builds FunctionBinaryArithmetic for two numeric arguments and needs
+-- live context at execution time).
+DROP TABLE IF EXISTS t_least_greatest_default;
+CREATE TABLE t_least_greatest_default
+(
+    x Int32,
+    y Int32,
+    min_val DEFAULT least(x, y),
+    max_val DEFAULT greatest(x, y)
+)
+ENGINE = MergeTree ORDER BY tuple();
+
+INSERT INTO t_least_greatest_default (x, y) VALUES (3, 5);
+INSERT INTO t_least_greatest_default (x, y) VALUES (8, 2);
+
+SELECT x, y, min_val, max_val FROM t_least_greatest_default ORDER BY x;
+
+DROP TABLE t_least_greatest_default;
+
+-- least/greatest with three or more arguments uses the generic implementation,
+-- which also receives a context at construction time.
+DROP TABLE IF EXISTS t_least_greatest_generic_default;
+CREATE TABLE t_least_greatest_generic_default
+(
+    x Int32,
+    y Int32,
+    z Int32,
+    min_val DEFAULT least(x, y, z),
+    max_val DEFAULT greatest(x, y, z)
+)
+ENGINE = MergeTree ORDER BY tuple();
+
+INSERT INTO t_least_greatest_generic_default (x, y, z) VALUES (3, 5, 1);
+INSERT INTO t_least_greatest_generic_default (x, y, z) VALUES (8, 2, 6);
+
+SELECT x, y, z, min_val, max_val FROM t_least_greatest_generic_default ORDER BY x;
+
+DROP TABLE t_least_greatest_generic_default;

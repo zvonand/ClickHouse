@@ -63,6 +63,10 @@ const KnownIdentifierFunc & getKnownIdentifierFunc()
         insert(DatabaseFactory::instance().getAllRegisteredNames());
         insert(DictionaryFactory::instance().getAllRegisteredNames());
         insert(DictionarySourceFactory::instance().getAllRegisteredNames());
+        /// `TableFunctionFactory::isTableFunctionName` is exact-case only and does not consult aliases or
+        /// the case-insensitive map, so add table function names to the pre-built set instead. The
+        /// case-insensitive fallback below then covers spellings like `NUMBERS` matching `numbers`.
+        insert(TableFunctionFactory::instance().getAllRegisteredNames());
 
         for (const auto * it = auto_time_zones; *it; ++it)
         {
@@ -82,7 +86,6 @@ const KnownIdentifierFunc & getKnownIdentifierFunc()
             std::string what(name);
             if (FunctionFactory::instance().has(what)
                 || AggregateFunctionFactory::instance().isAggregateFunctionName(what)
-                || TableFunctionFactory::instance().isTableFunctionName(what)
                 || FormatFactory::instance().isOutputFormat(what)
                 || FormatFactory::instance().isInputFormat(what)
                 || names->contains(what))

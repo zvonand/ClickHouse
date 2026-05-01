@@ -801,6 +801,18 @@ void DatabaseDataLake::createTable(
                 || col_decl->default_specifier == ColumnDefaultSpecifier::Ephemeral)
                 continue;
 
+            /// Iceberg supports column defaults via `initial-default` / `write-default` schema fields,
+            /// but `createEmptyMetadataFile` does not yet emit them. Accepting `DEFAULT <expr>` here
+            /// would silently drop the expression, so the on-disk schema would no longer match the
+            /// declared DDL. Reject explicitly until full support lands.
+            if (col_decl->default_specifier == ColumnDefaultSpecifier::Default
+                || col_decl->default_specifier == ColumnDefaultSpecifier::AutoIncrement)
+                throw Exception(
+                    ErrorCodes::BAD_ARGUMENTS,
+                    "Column '{}': {} expressions are not yet supported by DataLakeCatalog table creation",
+                    col_decl->name,
+                    toString(col_decl->default_specifier));
+
             columns.add(ColumnDescription(col_decl->name, DataTypeFactory::instance().get(col_decl->getType())));
         }
     }

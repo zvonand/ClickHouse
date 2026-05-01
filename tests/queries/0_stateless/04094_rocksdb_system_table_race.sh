@@ -71,7 +71,9 @@ optimize_thread 2>/dev/null & p4=$!
 # `system.rocksdb` race regresses.
 status=0
 for p in "$p1" "$p2" "$p3" "$p4"; do
-    wait "$p" || status=$?
+    ec=0
+    wait "$p" || ec=$?
+    ((status == 0)) && status=$ec
 done
 ((status == 0)) || exit "$status"
 

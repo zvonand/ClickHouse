@@ -427,8 +427,7 @@ void MergeTreeDataPartWide::doCheckConsistency(bool require_part_metadata) const
         const auto & cols_substreams = getColumnsSubstreams();
         if (!cols_substreams.empty())
         {
-            size_t col_idx = 0;
-            for (const auto & name_type : columns)
+            for (size_t col_idx = 0; col_idx != columns.size(); ++col_idx)
             {
                 const auto & substreams = cols_substreams.getColumnSubstreams(col_idx);
                 for (const auto & substream_name : substreams)
@@ -456,7 +455,6 @@ void MergeTreeDataPartWide::doCheckConsistency(bool require_part_metadata) const
                             ErrorCodes::BAD_SIZE_OF_FILE_IN_DATA_PART,
                             "Part {} is broken: marks have different sizes.", getDataPartStorage().getFullPath());
                 }
-                ++col_idx;
             }
         }
         else

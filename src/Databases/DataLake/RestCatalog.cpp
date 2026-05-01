@@ -1122,8 +1122,13 @@ bool RestCatalog::updateMetadata(const String & namespace_name, const String & t
 
 void RestCatalog::dropTable(const String & namespace_name, const String & table_name, bool purge) const
 {
-    const std::string purge_str = purge ? "true" : "false";
-    const std::string endpoint = fmt::format("{}/namespaces/{}/tables/{}?purgeRequested={}", base_url, namespace_name, table_name, purge_str);
+    /// Build the URL the same way as the other table endpoints (`createTable`, `updateMetadata`,
+    /// `getTableMetadataImpl`): include `config.prefix` and run the namespace through
+    /// `encodeNamespaceForURI` so nested namespaces (e.g. `ns.a.b`) are escaped to a single
+    /// segment instead of being split into separate path components.
+    const std::string base_endpoint =
+        (base_url / config.prefix / NAMESPACES_ENDPOINT / encodeNamespaceForURI(namespace_name) / "tables" / table_name).generic_string();
+    const std::string endpoint = fmt::format("{}?purgeRequested={}", base_endpoint, purge ? "true" : "false");
 
     Poco::JSON::Object::Ptr request_body = nullptr;
     try

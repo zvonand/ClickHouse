@@ -16,6 +16,9 @@
 
 #include <Storages/ObjectStorage/DataLakes/Iceberg/SchemaProcessor.h>
 
+#include <fmt/format.h>
+#include <Poco/URI.h>
+
 namespace DB::ErrorCodes
 {
 extern const int BAD_ARGUMENTS;
@@ -119,6 +122,94 @@ std::pair<std::string, std::string> parseTableName(const std::string & name)
     auto table_name = name.substr(pos + 1);
     auto namespace_name = name.substr(0, name.size() - table_name.size() - 1);
     return {namespace_name, table_name};
+}
+
+String constructTableLocation(
+    const String & location_scheme,
+    const String & storage_endpoint,
+    const String & namespace_name,
+    const String & table_name)
+{
+    Poco::URI uri(storage_endpoint);
+    auto path = uri.getPath();
+    while (path.starts_with('/'))
+        path.erase(0, 1);
+    while (path.ends_with('/'))
+        path.pop_back();
+
+    if (location_scheme == "abfss")
+    {
+        /// Azure ABFSS locations have the form `abfss://<container>@<account-host>/<path>`.
+        /// `storage_endpoint` may be supplied either as an HTTPS URL
+        ///   `https://<account-host>/<container>[/<extra>]`         → user-info empty, container
+        ///                                                            is the first path segment
+        /// or directly as an ABFSS URL
+        ///   `abfss://<container>@<account-host>[/<extra>]`         → container is the user-info
+        /// Reconstruct both pieces so the emitted location parses correctly via
+        /// `TableMetadata::setLocation` (which splits on `@`) and via the ABFSS URL parser in
+        /// `Storages/ObjectStorage/Azure/Configuration.cpp`.
+        String container = uri.getUserInfo();
+        String account_host = uri.getHost();
+        String extra_path = path;
+
+        if (container.empty())
+        {
+            auto first_slash = extra_path.find('/');
+            if (first_slash == String::npos)
+            {
+                container = std::move(extra_path);
+                extra_path.clear();
+            }
+            else
+            {
+                container = extra_path.substr(0, first_slash);
+                extra_path = extra_path.substr(first_slash + 1);
+            }
+        }
+
+        if (account_host.empty() || container.empty())
+            throw DB::Exception(
+                DB::ErrorCodes::BAD_ARGUMENTS,
+                "`storage_endpoint` ({}) for Azure must include both account host and container "
+                "(expected https://<account>.dfs.core.windows.net/<container>[/<sub-path>] or "
+                "abfss://<container>@<account>.dfs.core.windows.net[/<sub-path>])",
+                storage_endpoint);
+
+        if (extra_path.empty())
+            return fmt::format("abfss://{}@{}/{}/{}", container, account_host, namespace_name, table_name);
+        return fmt::format("abfss://{}@{}/{}/{}/{}", container, account_host, extra_path, namespace_name, table_name);
+    }
+
+    if (location_scheme == "s3")
+    {
+        /// For S3-compatible storages the `storage_endpoint` URL authority is just the network
+        /// endpoint (e.g. `http://minio:9000/<bucket>`); the bucket is the first path segment and
+        /// becomes the s3:// authority in the location URI.
+        if (path.empty())
+            throw DB::Exception(
+                DB::ErrorCodes::BAD_ARGUMENTS,
+                "`storage_endpoint` ({}) does not contain a bucket; "
+                "CREATE TABLE in DataLakeCatalog requires `storage_endpoint` to include a non-empty bucket path.",
+                storage_endpoint);
+        return fmt::format("s3://{}/{}/{}", path, namespace_name, table_name);
+    }
+
+    /// HDFS / file / other authority-bearing schemes: preserve the storage_endpoint authority
+    /// and path verbatim — they together identify the storage location and must round-trip.
+    String authority = uri.getAuthority();
+    if (authority.empty())
+    {
+        if (path.empty())
+            throw DB::Exception(
+                DB::ErrorCodes::BAD_ARGUMENTS,
+                "`storage_endpoint` ({}) does not contain a path",
+                storage_endpoint);
+        return fmt::format("{}:///{}/{}/{}", location_scheme, path, namespace_name, table_name);
+    }
+
+    if (path.empty())
+        return fmt::format("{}://{}/{}/{}", location_scheme, authority, namespace_name, table_name);
+    return fmt::format("{}://{}/{}/{}/{}", location_scheme, authority, path, namespace_name, table_name);
 }
 
 }

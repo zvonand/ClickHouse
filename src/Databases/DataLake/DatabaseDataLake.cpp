@@ -825,21 +825,7 @@ void DatabaseDataLake::createTable(
             "CREATE TABLE in DataLakeCatalog requires `storage_endpoint` to be set on the database.");
 
     const auto location_scheme = getLocationSchemeForTableCreation(catalog);
-    Poco::URI uri(storage_endpoint);
-    auto path = uri.getPath();
-    while (path.starts_with('/'))
-        path = path.substr(1);
-    while (path.ends_with('/'))
-        path = path.substr(0, path.size() - 1);
-
-    if (path.empty())
-        throw Exception(
-            ErrorCodes::BAD_ARGUMENTS,
-            "`storage_endpoint` ({}) does not contain a bucket/container path; "
-            "CREATE TABLE in DataLakeCatalog requires `storage_endpoint` to include a non-empty bucket or container path.",
-            storage_endpoint);
-
-    const String location = fmt::format("{}://{}/{}/{}", location_scheme, path, namespace_name, table_name);
+    const String location = DataLake::constructTableLocation(location_scheme, storage_endpoint, namespace_name, table_name);
 
     auto [metadata_content, metadata_str] = Iceberg::createEmptyMetadataFile(
         location,

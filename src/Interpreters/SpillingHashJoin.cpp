@@ -15,11 +15,6 @@ extern const Event JoinSpillingHashJoinSwitchedToGraceJoin;
 namespace DB
 {
 
-namespace ErrorCodes
-{
-extern const int LIMIT_EXCEEDED;
-}
-
 SpillingHashJoin::SpillingHashJoin(
     std::shared_ptr<TableJoin> table_join_,
     SharedHeader left_sample_block_,
@@ -154,14 +149,6 @@ bool SpillingHashJoin::addBlockToJoin(const Block & block, bool check_limits)
 
 void SpillingHashJoin::switchToGraceHashJoin()
 {
-    if (keep_left_read_in_order)
-        throw Exception(
-            ErrorCodes::LIMIT_EXCEEDED,
-            "Cannot switch from SpillingHashJoin to GraceHashJoin because the query plan requires "
-            "left-side read-in-order preservation (enabled by `query_plan_read_in_order_through_join`). "
-            "Either increase `max_bytes_before_external_join` so the right side fits in memory, "
-            "or disable the corresponding setting");
-
     const auto print_limit_exceeded_log = [this](const JoinPtr & join, std::string_view join_name)
     {
         LOG_DEBUG(

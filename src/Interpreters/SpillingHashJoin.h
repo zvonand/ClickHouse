@@ -37,9 +37,12 @@ class ConcurrentHashJoin;
 /// addBlockToJoin calls possibly from multiple threads.
 /// If all blocks fit in memory, the ConcurrentHashJoin is promoted to chosen_join with zero rework.
 ///
-/// hasDelayedBlocks always returns true so that the pipeline includes the delayed block
+/// hasDelayedBlocks always returns true so that the pipeline includes the delayed-block
 /// transforms needed by GraceHashJoin. When HashJoin / ConcurrentHashJoin is used,
 /// getDelayedBlocks returns nullptr and the delayed transforms finish instantly.
+/// Because hasDelayedBlocks returns true, the read-in-order-through-join optimisation
+/// in optimizeReadInOrder.cpp will NOT propagate through SpillingHashJoin (same as
+/// GraceHashJoin), since spilling may reorder rows.
 class SpillingHashJoin final : public IJoin
 {
 public:
@@ -80,8 +83,6 @@ public:
     size_t getTotalByteCount() const override;
     bool alwaysReturnsEmptySet() const override;
 
-    void keepLeftPipelineInOrder() override { keep_left_read_in_order = true; }
-
     bool supportParallelJoin() const override { return concurrent_join != nullptr; }
     bool supportParallelNonJoinedBlocksProcessing() const override;
     bool isParallelNonJoinedProcessingEnabled() const override;
@@ -97,10 +98,7 @@ public:
         size_t num_streams) const override;
 
     IBlocksStreamPtr getDelayedBlocks() override;
-    /// When keep_left_read_in_order is set, switching to GraceHashJoin is forbidden (would throw),
-    /// so delayed blocks will never be produced. Returning false avoids adding DelayedPortsProcessor
-    /// to the pipeline, which would break the single-stream read-in-order guarantee.
-    bool hasDelayedBlocks() const override { return !keep_left_read_in_order; }
+    bool hasDelayedBlocks() const override { return true; }
 
     void onBuildPhaseFinish() override;
 
@@ -127,7 +125,6 @@ private:
     SharedMutex switch_mutex;
     std::atomic<size_t> next_slot_to_convert{0};
     mutable std::mutex totals_mutex;
-    bool keep_left_read_in_order{false};
     bool supports_parallel_non_joined_blocks_processing{false};
 
     std::atomic<State> state{State::COLLECTING};

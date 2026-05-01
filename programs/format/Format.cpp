@@ -202,6 +202,10 @@ int mainEntryClickHouseFormat(int argc, char ** argv)
             auto all_known_database_engines = DatabaseFactory::instance().getAllRegisteredNames();
             auto all_known_dict_layouts = DictionaryFactory::instance().getAllRegisteredNames();
             auto all_known_dict_sources = DictionarySourceFactory::instance().getAllRegisteredNames();
+            /// `TableFunctionFactory::isTableFunctionName` is exact-case only and does not consult aliases
+            /// or the case-insensitive map, so add table function names here to take advantage of the
+            /// lowercase fallback below (e.g. `NUMBERS` matches `numbers`).
+            auto all_known_table_functions = TableFunctionFactory::instance().getAllRegisteredNames();
 
             additional_names.insert(all_known_storage_names.begin(), all_known_storage_names.end());
             additional_names.insert(all_known_data_type_names.begin(), all_known_data_type_names.end());
@@ -212,6 +216,7 @@ int mainEntryClickHouseFormat(int argc, char ** argv)
             additional_names.insert(all_known_database_engines.begin(), all_known_database_engines.end());
             additional_names.insert(all_known_dict_layouts.begin(), all_known_dict_layouts.end());
             additional_names.insert(all_known_dict_sources.begin(), all_known_dict_sources.end());
+            additional_names.insert(all_known_table_functions.begin(), all_known_table_functions.end());
 
             for (auto * it = auto_time_zones; *it; ++it)
             {
@@ -236,7 +241,6 @@ int mainEntryClickHouseFormat(int argc, char ** argv)
 
                 if (FunctionFactory::instance().has(what)
                     || AggregateFunctionFactory::instance().isAggregateFunctionName(what)
-                    || TableFunctionFactory::instance().isTableFunctionName(what)
                     || FormatFactory::instance().isOutputFormat(what)
                     || FormatFactory::instance().isInputFormat(what)
                     || additional_names.contains(what))

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 #include <IO/ReadBufferFromFileBase.h>
 #include <IO/ReadSettings.h>
 #include <Common/PageCache.h>
@@ -31,10 +33,10 @@ public:
     void setReadUntilEnd() override;
 
     size_t readBigAt(char * to, size_t n, size_t offset, const std::function<bool(size_t m)> & progress_callback) const override;
-    bool supportsReadAt() override { return inner_supports_read_at; }
+    bool supportsReadAt() override { return innerSupportsReadAt(); }
 
     std::vector<CachedRegion> readBigAtRetainCells(size_t n, size_t offset) const override;
-    bool supportsReadAtRetainCells() const override { return inner_supports_read_at; }
+    bool supportsReadAtRetainCells() const override { return innerSupportsReadAt(); }
 
     PageCache::MappedPtr getPageCacheCell() const { return chunk; }
     PageCachePtr getPageCache() const { return cache; }
@@ -54,8 +56,11 @@ private:
 
     PageCache::MappedPtr chunk;
 
-    /// Precomputed from in->supportsReadAt() to avoid calling it from multiple threads.
-    bool inner_supports_read_at;
+    /// Lazy: `in->supportsReadAt` may do HTTP/fstat, so don't probe in the ctor.
+    /// `call_once` also keeps the probe from racing with parallel `readBigAt` calls.
+    mutable std::once_flag inner_supports_read_at_init;
+    mutable bool inner_supports_read_at = false;
+    bool innerSupportsReadAt() const;
 
     /// Ensures all cache blocks covering [offset, offset+n) are populated.
     /// Returns a vector of MappedPtr, one per block. Each missing block is read

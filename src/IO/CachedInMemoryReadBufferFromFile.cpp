@@ -27,8 +27,16 @@ CachedInMemoryReadBufferFromFile::CachedInMemoryReadBufferFromFile(
     , settings(settings_)
     , in(std::move(in_)), read_until_position(file_size.value())
     , inner_read_until_position(read_until_position)
-    , inner_supports_read_at(in->supportsReadAt())
 {
+}
+
+bool CachedInMemoryReadBufferFromFile::innerSupportsReadAt() const
+{
+    std::call_once(inner_supports_read_at_init, [this]()
+    {
+        inner_supports_read_at = in->supportsReadAt();
+    });
+    return inner_supports_read_at;
 }
 
 String CachedInMemoryReadBufferFromFile::getFileName() const

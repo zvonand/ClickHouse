@@ -29,3 +29,23 @@ mergetree NOT IN tuple
 2
 3
 4
+primes NOT IN tuple
+2
+3
+5
+7
+11
+13
+17
+19
+primes IN tuple
+numbers NOT IN tuple LIMIT
+0
+1
+2
+primes NOT IN tuple LIMIT
+2
+3
+5
+7
+11

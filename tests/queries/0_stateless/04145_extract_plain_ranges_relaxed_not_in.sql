@@ -35,3 +35,24 @@ SELECT 'mergetree NOT IN tuple';
 SELECT i FROM t_extract_plain_ranges_relaxed WHERE tuple(i, i) NOT IN (tuple(1, 2)) ORDER BY i;
 
 DROP TABLE t_extract_plain_ranges_relaxed;
+
+-- `system.primes` consumes the same extracted ranges via `NumbersLikeUtils::extractRanges`.
+-- Without the fix, the relaxed set `{2}` would build the exact range `(-inf, 2) U (2, +inf)`,
+-- causing the source to skip the prime `2`.
+SELECT 'primes NOT IN tuple';
+SELECT prime FROM system.primes WHERE prime < 20 AND tuple(prime, prime) NOT IN (tuple(2, 3)) ORDER BY prime;
+
+-- The mirror `IN` predicate must remain consistent: no prime has `tuple(p, p) = tuple(2, 3)`.
+SELECT 'primes IN tuple';
+SELECT prime FROM system.primes WHERE prime < 20 AND tuple(prime, prime) IN (tuple(2, 3)) ORDER BY prime;
+
+-- `LIMIT` pushdown over exact ranges is the most user-visible failure mode: the source stops
+-- early, so even a small `LIMIT` reveals the missing row. With the fix, ranges are conservative
+-- and the row-level filter ensures the predicate is evaluated correctly before the `LIMIT` cuts in.
+SELECT 'numbers NOT IN tuple LIMIT';
+SELECT number FROM numbers(100) WHERE tuple(number, number) NOT IN (tuple(1, 2)) ORDER BY number LIMIT 3;
+
+-- Combined `system.primes` + `LIMIT` regression: without the fix the source would skip the prime
+-- `2`, returning `3, 5, 7, 11, 13` instead of `2, 3, 5, 7, 11`.
+SELECT 'primes NOT IN tuple LIMIT';
+SELECT prime FROM system.primes WHERE prime < 100 AND tuple(prime, prime) NOT IN (tuple(2, 3)) ORDER BY prime LIMIT 5;

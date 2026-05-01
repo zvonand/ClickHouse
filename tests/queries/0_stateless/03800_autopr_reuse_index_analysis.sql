@@ -40,11 +40,11 @@ FROM test.hits
 WHERE WatchID IN (SELECT a % 1000000 FROM t)
 FORMAT Null;
 
-SELECT sum(length(URL)) FROM test.hits WHERE CounterID IN (SELECT a % 100000 FROM t) FORMAT Null SETTINGS log_comment='3800_autopr_reuse_index_analysis_query_3', query_plan_optimize_prewhere = 1, optimize_move_to_prewhere = 1;
+SELECT sum(length(URL)) FROM test.hits WHERE CounterID IN (SELECT a % 100000 FROM t) FORMAT Null SETTINGS log_comment='3800_autopr_reuse_index_analysis_query_3';
 
-SELECT sum(length(URL)) FROM test.hits WHERE CounterID IN (SELECT a % 100000 FROM t) OR UserID IN (SELECT a % 1000000 FROM t) FORMAT Null SETTINGS log_comment='3800_autopr_reuse_index_analysis_query_4', query_plan_optimize_prewhere = 1, optimize_move_to_prewhere = 1;
+SELECT sum(length(URL)) FROM test.hits WHERE CounterID IN (SELECT a % 100000 FROM t) OR UserID IN (SELECT a % 1000000 FROM t) FORMAT Null SETTINGS log_comment='3800_autopr_reuse_index_analysis_query_4';
 
-SELECT sum(length(URL)) FROM test.hits WHERE WatchID IN (SELECT a % 1000000 FROM t) FORMAT Null SETTINGS log_comment='3800_autopr_reuse_index_analysis_query_5', query_plan_optimize_prewhere = 1, optimize_move_to_prewhere = 1;
+SELECT sum(length(URL)) FROM test.hits WHERE WatchID IN (SELECT a % 1000000 FROM t) FORMAT Null SETTINGS log_comment='3800_autopr_reuse_index_analysis_query_5';
 
 -- For Global IN-s now we can execute subquery twice with automatic parallel replicas :(
 SELECT sum(length(URL)) FROM test.hits WHERE WatchID GLOBAL IN (SELECT a % 1000000 FROM t) FORMAT Null SETTINGS log_comment='3800_autopr_reuse_index_analysis_query_6';

@@ -296,6 +296,18 @@ void SystemLogBase<LogElement>::handleCrash()
 }
 
 template <typename LogElement>
+SystemLogBase<LogElement>::~SystemLogBase()
+{
+    try
+    {
+        stopFlushThread();
+    }
+    catch (...) // NOLINT(bugprone-empty-catch)
+    {
+    }
+}
+
+template <typename LogElement>
 void SystemLogBase<LogElement>::startup()
 {
     std::lock_guard lock(thread_mutex);

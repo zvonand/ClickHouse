@@ -1,0 +1,4 @@
+single-thread hash
+1000000
+concurrent parallel_hash
+1000000

@@ -22,5 +22,6 @@ http://base.invalid/dir/data.csv
 http://base.invalid/dir/file.csv?token=abc
 URL('http://base.invalid/dir/persist.csv'
 http://base.invalid/b.csv
+http://other.invalid/b.csv
 url = 'http://base.invalid/dir/persist.csv'
 must contain a scheme

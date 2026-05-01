@@ -1813,8 +1813,12 @@ String StorageURL::resolveURLBase(const String & url, const String & base)
     auto base_before_query = (query_or_fragment == String::npos) ? base : base.substr(0, query_or_fragment);
 
     /// Scheme-relative URL: //host/path → prepend scheme from base.
+    /// Dot segments in the path are normalized per RFC 3986.
     if (url.starts_with("//"))
-        return base.substr(0, scheme_end + 1) + url;
+    {
+        String merged = base.substr(0, scheme_end + 1) + url;
+        return normalizeDotSegmentsInURL(merged, scheme_end + 3);
+    }
 
     /// Host-relative URL: /path → use scheme and authority from base.
     /// Dot segments in the path are normalized per RFC 3986.

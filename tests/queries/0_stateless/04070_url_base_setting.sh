@@ -112,6 +112,9 @@ DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_persist;
 # Host-relative URL with dot-segments: /a/../b.csv → /b.csv (RFC 3986 dot-segment normalization)
 run_and_check "SELECT * FROM url('/a/../b.csv', CSV, 'c String') SETTINGS url_base = 'http://base.invalid/dir/file.csv', $FAST" 'http://base.invalid/b.csv'
 
+# Scheme-relative URL with dot-segments: //other.invalid/a/../b.csv → //other.invalid/b.csv (RFC 3986 dot-segment normalization)
+run_and_check "SELECT * FROM url('//other.invalid/a/../b.csv', CSV, 'c String') SETTINGS url_base = 'http://base.invalid/dir/file.csv', $FAST" 'http://other.invalid/b.csv'
+
 # URL engine: resolved URL must be materialized for named-collection form too.
 # Without the fix, restarting with url_base unset would fail to resolve the relative URL.
 $CLICKHOUSE_CLIENT -n -q "

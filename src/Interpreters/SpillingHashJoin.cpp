@@ -110,35 +110,46 @@ bool SpillingHashJoin::addBlockToJoin(const Block & block, bool check_limits)
         return chosen_join->addBlockToJoin(block, check_limits);
     }
 
+    /// The hash table buffer grows in power-of-two steps. Doubling from X to 2X allocates the new
+    /// buffer while the old one is still alive, transiently using 3X memory. We must trigger the
+    /// switch BEFORE the inner `addBlockToJoin` runs (and possibly doubles the buffer); a check
+    /// that runs after the call would race with the doubling and observe the OOM only as an
+    /// allocator exception. Threshold is half of `max_bytes_before_external_join` so that after
+    /// the switch the live buffer (already at half) plus the conversion peak still fit under the
+    /// configured cap.
     if (concurrent_join)
     {
-        {
-            /// Shared lock: multiple threads add to ConcurrentHashJoin concurrently.
-            std::shared_lock lock(switch_mutex);
-
-            /// Re-check: another thread may have switched while we waited for the lock.
-            if (state.load(std::memory_order_acquire) != State::COLLECTING)
-                return chosen_join->addBlockToJoin(block, check_limits);
-
-            if (!concurrent_join->addBlockToJoin(block, check_limits))
-                return false;
-        }
-
-        /// Check memory limit outside the shared lock.
-        if (concurrent_join->getTotalByteCount() >= max_bytes_before_external_join)
+        if (concurrent_join->getTotalByteCount() * 2 >= max_bytes_before_external_join)
             switchToGraceHashJoin();
+    }
+    else
+    {
+        if (hash_join->getTotalByteCount() * 2 >= max_bytes_before_external_join)
+            switchToGraceHashJoin();
+    }
 
-        return true;
+    /// Re-check: we may have just switched.
+    if (state.load(std::memory_order_acquire) != State::COLLECTING)
+    {
+        if (concurrent_join)
+            tryConvertSlots();
+        return chosen_join->addBlockToJoin(block, check_limits);
+    }
+
+    if (concurrent_join)
+    {
+        /// Shared lock: multiple threads add to ConcurrentHashJoin concurrently.
+        std::shared_lock lock(switch_mutex);
+
+        /// Re-check: another thread may have switched while we waited for the lock.
+        if (state.load(std::memory_order_acquire) != State::COLLECTING)
+            return chosen_join->addBlockToJoin(block, check_limits);
+
+        return concurrent_join->addBlockToJoin(block, check_limits);
     }
 
     /// Single-thread HashJoin path.
-    if (!hash_join->addBlockToJoin(block, check_limits))
-        return false;
-
-    if (hash_join->getTotalByteCount() >= max_bytes_before_external_join)
-        switchToGraceHashJoin();
-
-    return true;
+    return hash_join->addBlockToJoin(block, check_limits);
 }
 
 void SpillingHashJoin::switchToGraceHashJoin()

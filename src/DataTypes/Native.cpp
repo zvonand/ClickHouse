@@ -266,6 +266,20 @@ llvm::Value * nativeCastWithDecimalScale(
             return llvm::cast<llvm::ConstantInt>(llvm::ConstantInt::get(b.getContext(), v));
         };
 
+        /// Build LLVM floating-point constant for `10^n` from an `APInt` of the requested bit width.
+        /// This goes through `APFloat::convertFromAPInt` rather than `APInt::getZExtValue` so that
+        /// it stays correct when `10^n` does not fit in 64 bits (e.g. `Decimal128` with `scale = 38`,
+        /// or `Decimal256` with even larger scales).
+        auto pow10_fp_const = [&](unsigned bit_width, UInt32 n, llvm::Type * fp_type) -> llvm::Constant *
+        {
+            llvm::APInt v(bit_width, 1);
+            for (UInt32 i = 0; i < n; ++i)
+                v *= 10;
+            llvm::APFloat fp(fp_type->getFltSemantics());
+            fp.convertFromAPInt(v, /*IsSigned=*/false, llvm::APFloat::rmNearestTiesToEven);
+            return llvm::ConstantFP::get(b.getContext(), fp);
+        };
+
         if (to_w.isDecimal())
         {
             if (from_w.isDecimal())
@@ -303,11 +317,10 @@ llvm::Value * nativeCastWithDecimalScale(
                     return b.CreateFPToSI(value, to_native_type);
                 /// `10^to_scale` may not be exactly representable as a float for very large scales,
                 /// but this matches the precision of the non-JIT path which performs the same
-                /// `value * 10^scale` multiplication in `Float64`.
-                llvm::APInt v(to_native_type->getIntegerBitWidth(), 1);
-                for (UInt32 i = 0; i < to_scale; ++i)
-                    v *= 10;
-                auto * factor_fp = llvm::ConstantFP::get(value->getType(), static_cast<double>(v.getZExtValue()));
+                /// `value * 10^scale` multiplication in `Float64`. Construct the multiplier through
+                /// `APFloat::convertFromAPInt` so it stays correct when `10^to_scale` exceeds 64 bits
+                /// (`Decimal128` with `to_scale >= 20`, `Decimal256` with even larger scales).
+                auto * factor_fp = pow10_fp_const(to_native_type->getIntegerBitWidth(), to_scale, value->getType());
                 auto * multiplied = b.CreateFMul(value, factor_fp);
                 return b.CreateFPToSI(multiplied, to_native_type);
             }
@@ -331,14 +344,13 @@ llvm::Value * nativeCastWithDecimalScale(
             if (to_w.isFloat32() || to_w.isFloat64())
             {
                 /// `Decimal` → float: convert to `Float64`, divide by `10^from_scale`,
-                /// then narrow to the target float type if needed.
+                /// then narrow to the target float type if needed. Construct the divider through
+                /// `APFloat::convertFromAPInt` so it stays correct when `10^from_scale` exceeds
+                /// 64 bits (`Decimal128` with `from_scale >= 20`, `Decimal256` with even larger scales).
                 auto * as_double = b.CreateSIToFP(value, b.getDoubleTy());
                 if (from_scale == 0)
                     return to_w.isFloat32() ? b.CreateFPCast(as_double, to_native_type) : as_double;
-                llvm::APInt v(from_native_type->getIntegerBitWidth(), 1);
-                for (UInt32 i = 0; i < from_scale; ++i)
-                    v *= 10;
-                auto * divider = llvm::ConstantFP::get(b.getDoubleTy(), static_cast<double>(v.getZExtValue()));
+                auto * divider = pow10_fp_const(from_native_type->getIntegerBitWidth(), from_scale, b.getDoubleTy());
                 auto * divided = b.CreateFDiv(as_double, divider);
                 return to_w.isFloat32() ? b.CreateFPCast(divided, to_native_type) : divided;
             }

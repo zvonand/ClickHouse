@@ -32,6 +32,19 @@ WITH materialize(1::Decimal(18, 7)) AS r, materialize(1) AS k SELECT sum(if(k !=
 WITH materialize(1::Decimal(38, 7)) AS r, materialize(1) AS k SELECT sum(if(k != 1, r, 1));
 WITH materialize(1::Decimal(38, 11)) AS r, materialize(1) AS k SELECT sum(if(k != 1, r, 1));
 
+-- High-scale `Decimal128`: `10^scale` exceeds 64 bits. The JIT helper builds the scale
+-- factor as a `128`-bit `APInt`, so the multiplication has to stay correct without ever
+-- narrowing to `uint64_t`.
+WITH materialize(1::Decimal(38, 20)) AS r, materialize(1) AS k SELECT sum(if(k != 1, r, 1));
+WITH materialize(1::Decimal(38, 30)) AS r, materialize(1) AS k SELECT sum(if(k != 1, r, 1));
+WITH materialize(1::Decimal(38, 37)) AS r, materialize(1) AS k SELECT sum(if(k != 1, r, 1));
+WITH materialize(2::Decimal(38, 30)) AS r, materialize(1) AS k SELECT sum(if(k = 1, 1, r));
+WITH materialize(3::Decimal(38, 30)) AS r, materialize(2) AS k SELECT sum(multiIf(k = 1, 1, k = 2, 2, r));
+
+-- `Decimal256` high scale: `10^scale` exceeds even 128 bits, exercising the `256`-bit `APInt` path.
+WITH materialize(1::Decimal(76, 60)) AS r, materialize(1) AS k SELECT sum(if(k != 1, r, 1));
+WITH materialize(1::Decimal(76, 73)) AS r, materialize(1) AS k SELECT sum(if(k != 1, r, 1));
+
 -- `Float` -> `Decimal` branch lift (the analyzer promotes the result to `Decimal`).
 WITH materialize(toDecimal64(1.5, 4)) AS r, materialize(1) AS k SELECT if(k != 1, r, 2.5::Float64);
 
@@ -40,3 +53,6 @@ SET compile_expressions = 0;
 WITH materialize(1::Decimal(18, 7)) AS r, materialize(1) AS k SELECT sum(if(k != 1, r, 1));
 WITH materialize(3::Decimal(18, 7)) AS r, materialize(2) AS k SELECT sum(multiIf(k = 1, 1, k = 2, 2, r));
 WITH materialize(1::Decimal(38, 11)) AS r, materialize(1) AS k SELECT sum(if(k != 1, r, 1));
+WITH materialize(1::Decimal(38, 30)) AS r, materialize(1) AS k SELECT sum(if(k != 1, r, 1));
+WITH materialize(1::Decimal(38, 37)) AS r, materialize(1) AS k SELECT sum(if(k != 1, r, 1));
+WITH materialize(1::Decimal(76, 73)) AS r, materialize(1) AS k SELECT sum(if(k != 1, r, 1));

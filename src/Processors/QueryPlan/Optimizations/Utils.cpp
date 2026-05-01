@@ -3,6 +3,7 @@
 #include <Columns/ColumnSet.h>
 #include <Columns/IColumn.h>
 #include <Functions/FunctionHelpers.h>
+#include <Functions/IFunction.h>
 #include <Processors/QueryPlan/ExpressionStep.h>
 #include <Processors/QueryPlan/FilterStep.h>
 
@@ -89,6 +90,19 @@ bool dagContainsNonReadySet(const ActionsDAG & dag)
     return false;
 }
 
+bool dagContainsNonDeterministicFunction(const ActionsDAG & dag)
+{
+    for (const auto & node : dag.getNodes())
+    {
+        if (node.type == ActionsDAG::ActionType::FUNCTION && node.function_base)
+        {
+            if (!node.function_base->isDeterministic())
+                return true;
+        }
+    }
+    return false;
+}
+
 FilterResult filterResultForNotMatchedRows(
     const ActionsDAG & filter_dag,
     const String & filter_column_name,
@@ -98,6 +112,14 @@ FilterResult filterResultForNotMatchedRows(
 {
     /// If the filter DAG contains IN subquery sets that are not yet built - we cannot evaluate the filter result
     if (dagContainsNonReadySet(filter_dag))
+        return FilterResult::UNKNOWN;
+
+    /// If the filter DAG contains non-deterministic functions (e.g. `rand`, `now`, `rowNumberInAllBlocks`),
+    /// we cannot soundly predict the filter result from default-input rows. Some such functions also produce
+    /// uninitialized data in their dry-run path (e.g. `rowNumberInAllBlocks::executeImplDryRun` returns a
+    /// `ColumnUInt64` allocated but never filled), causing `getFilterResult` to read uninitialized memory and
+    /// trigger MemorySanitizer reports (see issue #100469, STID 1499-4a82).
+    if (dagContainsNonDeterministicFunction(filter_dag))
         return FilterResult::UNKNOWN;
 
     ActionsDAG::IntermediateExecutionResult filter_input;

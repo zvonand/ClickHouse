@@ -23,6 +23,11 @@ FilterResult filterResultForMatchedRows(ActionsDAG pre_actions_dag, const Action
     if (dagContainsNonReadySet(filter_dag) || dagContainsNonReadySet(pre_actions_dag))
         return FilterResult::UNKNOWN;
 
+    /// If either DAG contains non-deterministic functions (e.g. `rand`, `now`, `rowNumberInAllBlocks`),
+    /// we cannot soundly predict the filter result. See the matching note in `Utils.cpp` and issue #100469.
+    if (dagContainsNonDeterministicFunction(filter_dag) || dagContainsNonDeterministicFunction(pre_actions_dag))
+        return FilterResult::UNKNOWN;
+
     auto combined_dag = ActionsDAG::merge(std::move(pre_actions_dag), filter_dag.clone());
     ActionsDAG::IntermediateExecutionResult combined_dag_input;
 

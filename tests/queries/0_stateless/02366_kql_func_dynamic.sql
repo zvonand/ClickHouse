@@ -12,9 +12,8 @@ print '-- array_length()';
 print array_length(dynamic(['John', 'Denver', 'Bob', 'Marley'])) == 4;
 print array_length(dynamic([1, 2, 3])) == 3;
 print '-- array_sum()';
--- FIXME: arraySum does not support Array(Dynamic) type
--- print array_sum(dynamic([2, 5, 3])) == 10;
--- print array_sum(dynamic([2.5, 5.5, 3])) == 11;
+print array_sum(dynamic([2, 5, 3])) == 10;
+print array_sum(dynamic([2.5, 5.5, 3])) == 11;
 print '-- array_index_of()';
 print array_index_of(dynamic(['John', 'Denver', 'Bob', 'Marley']), 'Marley');
 print array_index_of(dynamic([1, 2, 3]), 2);

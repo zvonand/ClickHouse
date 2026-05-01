@@ -68,8 +68,7 @@ print dynamic(null);
 print dynamic(1);
 print dynamic(timespan(1d));
 print dynamic([1,2,3]);
--- FIXME: CAST AS Array cannot be performed between same-dimensional array types for nested arrays to Dynamic
--- print dynamic([[1], [2], [3]]);
+print dynamic([[1], [2], [3]]);
 print dynamic(['a', "b", 'c']);
 print '-- cast functions'
 print '--tobool("true")'; -- == true

@@ -56,5 +56,4 @@ print '-- extend #10 --';
 Ledger | extend PriceInCents = * Price | sort by PriceInCents asc | project Fruit, PriceInCents | summarize AveragePrice = avg(PriceInCents), Purchases = count() by Fruit | extend Sentence = strcat(Fruit, ' cost ', tostring(AveragePrice), ' on average based on ', tostring(Purchases), ' samples.') | project Sentence; -- { clientError SYNTAX_ERROR }
 
 print '-- extend #11 --';
--- TODO: should ideally return 5\t[2,1] in the future because of the alias ex
--- print x = 5 | extend ex = array_sort_desc(dynamic([1, 2]), dynamic([3, 4]));
+print x = 5 | extend ex = array_sort_desc(dynamic([1, 2]), dynamic([3, 4]));

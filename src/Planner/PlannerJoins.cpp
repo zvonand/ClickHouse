@@ -1327,7 +1327,7 @@ JoinAlgorithmParams::JoinAlgorithmParams(
     max_size_to_preallocate_for_joins = join_settings.max_size_to_preallocate_for_joins;
     max_threads = max_threads_;
 
-    max_bytes_before_external_join = join_settings.max_bytes_before_external_join;
+    max_bytes_before_external_join = join_settings.getEffectiveMaxBytesBeforeExternalJoin();
 
     initial_query_id = std::move(initial_query_id_);
     lock_acquire_timeout = lock_acquire_timeout_;

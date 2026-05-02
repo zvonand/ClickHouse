@@ -74,11 +74,6 @@ enum class FilterResult
 
 [[nodiscard]] bool dagContainsNonReadySet(const ActionsDAG & dag);
 
-/// Returns true if the DAG contains any function that is non-deterministic (e.g. `rand`, `now`, `rowNumberInAllBlocks`).
-/// Such functions cannot be soundly evaluated in the partial-evaluation context used by the JOIN-conversion optimizers,
-/// because their results do not depend only on the input columns.
-[[nodiscard]] bool dagContainsNonDeterministicFunction(const ActionsDAG & dag);
-
 [[nodiscard]] FilterResult filterResultForNotMatchedRows(
     const ActionsDAG & filter_dag,
     const String & filter_column_name,

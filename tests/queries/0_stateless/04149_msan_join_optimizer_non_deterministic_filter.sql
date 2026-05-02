@@ -5,17 +5,17 @@
 -- `filterResultForNotMatchedRows` / `filterResultForMatchedRows` (in
 -- `Processors/QueryPlan/Optimizations/Utils.cpp` and `convertAnyJoinToSemiOrAntiJoin.cpp`)
 -- to evaluate the filter against synthetic default-input rows via `ActionsDAG::evaluatePartialResult`
--- with `skip_materialize=true, allow_unknown_function_arguments=true`.
+-- with `skip_materialize=true, allow_unknown_function_arguments=true`. Internally this calls
+-- `IFunction::executeImplDryRun` for every function in the filter DAG.
 --
--- The dry-run path (`IFunction::executeImplDryRun`) of stateful / non-deterministic functions like
--- `rowNumberInAllBlocks` returns a column allocated but never filled (`ColumnUInt64::create(input_rows_count)`
--- with no `data[i] = ...`). When the result is then read via `getFilterResult` -> `getBool(0)`,
--- MemorySanitizer reports a use-of-uninitialized-value. Independently, the optimizer makes a
--- JOIN-conversion decision based on the garbage byte, which can silently convert ANY OUTER JOIN to
--- INNER JOIN (or ANY JOIN to SEMI/ANTI JOIN) and drop rows that should have been kept.
+-- The dry-run override of `rowNumberInAllBlocks` previously returned `ColumnUInt64::create(input_rows_count)`
+-- without filling the buffer, so when the optimizer read the result via `getFilterResult` -> `getBool(0)`
+-- MemorySanitizer reported a use-of-uninitialized-value. The fix initializes the dry-run output column
+-- with zeros at the source (`Functions/rowNumberInAllBlocks.cpp`) so the column produced by the function
+-- is fully initialized, which is the contract callers of `executeImplDryRun` rely on.
 --
--- The fix adds `dagContainsNonDeterministicFunction` to both partial-evaluation entry points and
--- bails out with `FilterResult::UNKNOWN`, leaving the JOIN unchanged.
+-- The queries below exercise the partial-evaluation chain with `rowNumberInAllBlocks` and `rand` in the
+-- filter and must run cleanly under MemorySanitizer.
 
 DROP TABLE IF EXISTS t_l;
 DROP TABLE IF EXISTS t_r;
@@ -26,10 +26,10 @@ CREATE TABLE t_r (id UInt32) ENGINE = MergeTree ORDER BY id;
 INSERT INTO t_l VALUES (1), (2);
 INSERT INTO t_r VALUES (1);
 
--- ANY LEFT JOIN with a filter that contains `rowNumberInAllBlocks` (non-deterministic).
+-- ANY LEFT JOIN with a filter that contains `rowNumberInAllBlocks` (stateful, non-deterministic).
 -- Both rows from t_l must be returned; the unmatched row gets default 0 from t_r.
--- Without the fix, the optimizer reads uninitialized memory while deciding whether to convert
--- ANY OUTER JOIN to INNER JOIN -- depending on garbage, it may drop the (2, 0) row.
+-- Without the fix, the optimizer reads uninitialized memory from the dry-run output of
+-- `rowNumberInAllBlocks` while deciding whether to convert ANY OUTER JOIN to INNER JOIN.
 SELECT t_l.id, t_r.id
 FROM t_l ANY LEFT JOIN t_r ON t_l.id = t_r.id
 WHERE rowNumberInAllBlocks() < 100
@@ -49,9 +49,9 @@ FROM t_l ANY RIGHT JOIN t_r ON t_l.id = t_r.id
 WHERE rowNumberInAllBlocks() < 100
 ORDER BY t_r.id;
 
--- ANY LEFT JOIN with `rand` in the filter -- another non-deterministic function. The filter is
--- always true (the modulus is non-negative), so both rows from t_l must be kept; without the fix,
--- the optimizer may incorrectly convert to SEMI JOIN and drop the unmatched (2, 0) row.
+-- ANY LEFT JOIN with `rand` in the filter -- another non-deterministic function whose dry-run
+-- output flows into the same partial-evaluation chain. The filter is always true (the modulus is
+-- non-negative), so both rows from t_l must be kept.
 DROP TABLE t_l;
 DROP TABLE t_r;
 CREATE TABLE t_l (id UInt32) ENGINE = MergeTree ORDER BY id;

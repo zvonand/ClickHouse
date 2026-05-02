@@ -132,8 +132,6 @@ namespace
         return result;
     }
 
-
-
     /// Converts binary data to a ClickHouse SQL expression using unhex().
     /// This ensures the column name in the result schema is valid UTF-8
     /// (e.g. "unhex('AABB')"), because ClickHouse uses the expression text as the column name

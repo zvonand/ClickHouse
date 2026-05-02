@@ -392,14 +392,15 @@ ArrowFlightServer::ArrowFlightServer(IServer & server_, const Poco::Net::SocketA
     , poll_descriptors_lifetime_seconds(server.config().getUInt("arrowflight.poll_descriptors_lifetime_seconds", 600))
     , cancel_poll_descriptor_after_poll_flight_info(server.config().getBool("arrowflight.cancel_flight_descriptor_after_poll_flight_info", false))
     , max_prepared_statements_per_user(server.config().getUInt("arrowflight.max_prepared_statements_per_user", 100))
-    , prepared_statements_lifetime_seconds(server.config().getUInt("arrowflight.prepared_statements_lifetime_seconds", 0))
+    , prepared_statements_lifetime_seconds(server.config().getInt("arrowflight.prepared_statements_lifetime_seconds", -1))
     , calls_data(
           std::make_unique<CallsData>(
               tickets_lifetime_seconds ? std::make_optional(std::chrono::seconds{tickets_lifetime_seconds}) : std::optional<Duration>{},
               poll_descriptors_lifetime_seconds ? std::make_optional(std::chrono::seconds{poll_descriptors_lifetime_seconds})
                                                 : std::optional<Duration>{},
-              prepared_statements_lifetime_seconds ? std::make_optional(std::chrono::seconds{prepared_statements_lifetime_seconds})
-                                                   : std::optional<Duration>{},
+              prepared_statements_lifetime_seconds > 0 ? std::make_optional(std::chrono::seconds{prepared_statements_lifetime_seconds})
+                                                       : std::optional<Duration>{},
+              prepared_statements_lifetime_seconds == -1,
               max_prepared_statements_per_user,
               log))
 {
@@ -453,7 +454,7 @@ void ArrowFlightServer::start()
         }
     });
 
-    if (tickets_lifetime_seconds || poll_descriptors_lifetime_seconds || prepared_statements_lifetime_seconds)
+    if (tickets_lifetime_seconds || poll_descriptors_lifetime_seconds || prepared_statements_lifetime_seconds != 0)
     {
         cleanup_thread.emplace([this]
         {
@@ -1540,7 +1541,11 @@ arrow::Status ArrowFlightServer::DoAction(
                 }
             }
 
-            ARROW_ASSIGN_OR_RAISE(auto handle, calls_data->createPreparedStatement(std::move(info), auth.getSessionId()))
+            std::optional<ArrowFlight::Duration> session_timeout_for_ps;
+            if (calls_data->usesSessionTimeoutForPsLifetime() && auth.getSessionTimeout().count() > 0)
+                session_timeout_for_ps = std::chrono::duration_cast<ArrowFlight::Duration>(auth.getSessionTimeout());
+
+            ARROW_ASSIGN_OR_RAISE(auto handle, calls_data->createPreparedStatement(std::move(info), auth.getSessionId(), session_timeout_for_ps))
 
             /// Build the protobuf result.
             arrow::flight::protocol::sql::ActionCreatePreparedStatementResult result;

@@ -147,7 +147,7 @@ struct PreparedStatementInfo
 class CallsData
 {
 public:
-    CallsData(std::optional<Duration> tickets_lifetime_, std::optional<Duration> poll_descriptors_lifetime_, std::optional<Duration> prepared_statements_lifetime_, size_t max_prepared_statements_per_user_, LoggerPtr log_);
+    CallsData(std::optional<Duration> tickets_lifetime_, std::optional<Duration> poll_descriptors_lifetime_, std::optional<Duration> prepared_statements_lifetime_, bool use_session_timeout_for_ps_lifetime_, size_t max_prepared_statements_per_user_, LoggerPtr log_);
 
     /// Creates a flight ticket which allows to download a specified block.
     std::shared_ptr<const TicketInfo> createTicket(std::shared_ptr<arrow::Table> arrow_table);
@@ -209,7 +209,9 @@ public:
     /// Creates a prepared statement and returns its opaque handle.
     /// If session_id is non-empty, the prepared statement is associated with
     /// that session and will be cleaned up when the session closes.
-    [[nodiscard]] arrow::Result<String> createPreparedStatement(PreparedStatementInfo info, const String & session_id = {});
+    /// If session_timeout is provided and use_session_timeout_for_ps_lifetime is true,
+    /// it overrides prepared_statements_lifetime for expiration.
+    [[nodiscard]] arrow::Result<String> createPreparedStatement(PreparedStatementInfo info, const String & session_id = {}, std::optional<Duration> session_timeout = {});
 
     /// Returns a snapshot copy of a prepared statement's info by handle.
     /// Checks that the caller's username matches the owner.
@@ -231,6 +233,12 @@ public:
 
     /// Closes all prepared statements associated with a session and user.
     void closeSessionPreparedStatements(const String & session_id, const String & username);
+
+    /// Refreshes expiration time of all prepared statements in a session.
+    /// Called on each request when use_session_timeout_for_ps_lifetime is true.
+    void refreshSessionPreparedStatements(const String & session_id, const String & username, Duration session_timeout);
+
+    bool usesSessionTimeoutForPsLifetime() const { return use_session_timeout_for_ps_lifetime; }
 
 private:
     static String generateTicketName();
@@ -257,6 +265,7 @@ private:
     const std::optional<Duration> tickets_lifetime;
     const std::optional<Duration> poll_descriptors_lifetime;
     const std::optional<Duration> prepared_statements_lifetime;
+    const bool use_session_timeout_for_ps_lifetime;
     const size_t max_prepared_statements_per_user;
     const LoggerPtr log;
     mutable std::mutex mutex;

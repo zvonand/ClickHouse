@@ -24,13 +24,15 @@ class AuthMiddleware : public arrow::flight::ServerMiddleware
 public:
     explicit AuthMiddleware(std::shared_ptr<Session> session_, const std::string & token_, const std::string & username_,
                             ArrowFlight::CallsData & calls_data_,
-                            const std::string & session_id_ = "", bool session_close_ = false)
+                            const std::string & session_id_ = "", bool session_close_ = false,
+                            std::chrono::steady_clock::duration session_timeout_ = std::chrono::steady_clock::duration{0})
         : session(session_)
         , token(token_)
         , username(username_)
         , calls_data(calls_data_)
         , session_id(session_id_)
         , session_close(session_close_)
+        , session_timeout(session_timeout_)
     {
     }
 
@@ -42,6 +44,7 @@ public:
     const std::string & getUsername() const { return username; }
     const std::shared_ptr<Session> & getSession() const { return session; }
     const std::string & getSessionId() const { return session_id; }
+    std::chrono::steady_clock::duration getSessionTimeout() const { return session_timeout; }
 
     void SendingHeaders(arrow::flight::AddCallHeaders * outgoing_headers) override;
     void CallCompleted(const arrow::Status & /*status*/) override;
@@ -55,6 +58,7 @@ private:
     ArrowFlight::CallsData & calls_data;
     const std::string session_id;
     const bool session_close;
+    const std::chrono::steady_clock::duration session_timeout;
 };
 
 class AuthMiddlewareFactory : public arrow::flight::ServerMiddlewareFactory

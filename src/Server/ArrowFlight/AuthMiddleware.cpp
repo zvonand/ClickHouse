@@ -37,7 +37,11 @@ void AuthMiddleware::CallCompleted(const arrow::Status & /*status*/)
             session->closeSession(session_id);
         }
         else
+        {
+            if (calls_data.usesSessionTimeoutForPsLifetime() && session_timeout.count() > 0)
+                calls_data.refreshSessionPreparedStatements(session_id, username, std::chrono::duration_cast<ArrowFlight::Duration>(session_timeout));
             session->releaseSessionID();
+        }
     }
 }
 
@@ -247,7 +251,11 @@ arrow::Status AuthMiddlewareFactory::StartCall(
         if (auth)
             token = token_storage.getToken(username, password);
 
-        *middleware = std::make_unique<AuthMiddleware>(session, token, username, calls_data, session_id, session_close == "1" && server.config().getBool("enable_arrow_close_session", true));
+        auto parsed_session_timeout = session_id.empty()
+            ? std::chrono::steady_clock::duration{0}
+            : parseSessionTimeout(server.context()->getConfigRef(), session_timeout);
+
+        *middleware = std::make_unique<AuthMiddleware>(session, token, username, calls_data, session_id, session_close == "1" && server.config().getBool("enable_arrow_close_session", true), parsed_session_timeout);
     }
     catch (DB::Exception & e)
     {

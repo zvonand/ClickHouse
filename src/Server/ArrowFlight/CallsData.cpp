@@ -24,10 +24,11 @@ Timestamp CallsData::now()
     return std::chrono::system_clock::now();
 }
 
-CallsData::CallsData(std::optional<Duration> tickets_lifetime_, std::optional<Duration> poll_descriptors_lifetime_, std::optional<Duration> prepared_statements_lifetime_, size_t max_prepared_statements_per_user_, LoggerPtr log_)
+CallsData::CallsData(std::optional<Duration> tickets_lifetime_, std::optional<Duration> poll_descriptors_lifetime_, std::optional<Duration> prepared_statements_lifetime_, bool use_session_timeout_for_ps_lifetime_, size_t max_prepared_statements_per_user_, LoggerPtr log_)
     : tickets_lifetime(tickets_lifetime_)
     , poll_descriptors_lifetime(poll_descriptors_lifetime_)
     , prepared_statements_lifetime(prepared_statements_lifetime_)
+    , use_session_timeout_for_ps_lifetime(use_session_timeout_for_ps_lifetime_)
     , max_prepared_statements_per_user(max_prepared_statements_per_user_)
     , log(log_)
 {
@@ -549,12 +550,16 @@ String CallsData::generatePreparedStatementHandle()
     return PREPARED_STATEMENT_HANDLE_PREFIX + toString(UUIDHelpers::generateV4());
 }
 
-arrow::Result<String> CallsData::createPreparedStatement(PreparedStatementInfo info, const String & session_id)
+arrow::Result<String> CallsData::createPreparedStatement(PreparedStatementInfo info, const String & session_id, std::optional<Duration> session_timeout)
 {
     String handle = generatePreparedStatementHandle();
     LOG_DEBUG(log, "Creating prepared statement {} for user {}", handle, info.username);
     auto shared_info = std::make_shared<PreparedStatementInfo>(std::move(info));
-    auto expiration_time = calculatePreparedStatementExpirationTime(now());
+    std::optional<Timestamp> expiration_time;
+    if (use_session_timeout_for_ps_lifetime && session_timeout)
+        expiration_time = now() + *session_timeout;
+    else
+        expiration_time = calculatePreparedStatementExpirationTime(now());
     shared_info->expiration_time = expiration_time;
     Timestamp entry_expiration = expiration_time.value_or(Timestamp::max());
     std::lock_guard lock{mutex};
@@ -684,6 +689,28 @@ void CallsData::closeSessionPreparedStatements(const String & session_id, const 
             ++it;
     }
     updateNextExpirationTime();
+}
+
+void CallsData::refreshSessionPreparedStatements(const String & session_id, const String & username, Duration session_timeout)
+{
+    std::lock_guard lock{mutex};
+    auto & by_session = prep_statements.get<BySessionId>();
+    auto [first, last] = by_session.equal_range(session_id);
+    auto new_expiration = now() + session_timeout;
+    bool any_modified = false;
+    for (auto it = first; it != last; ++it)
+    {
+        if (it->username == username)
+        {
+            by_session.modify(it, [&](PreparedStatementEntry & entry)
+            {
+                entry.expiration_time = new_expiration;
+            });
+            any_modified = true;
+        }
+    }
+    if (any_modified)
+        updateNextExpirationTime();
 }
 
 std::optional<Timestamp> CallsData::calculateTicketExpirationTime(Timestamp current_time) const

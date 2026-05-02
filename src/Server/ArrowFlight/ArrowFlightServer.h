@@ -86,7 +86,7 @@ private:
     const UInt64 poll_descriptors_lifetime_seconds;
     const bool cancel_poll_descriptor_after_poll_flight_info;
     const UInt64 max_prepared_statements_per_user;
-    const UInt64 prepared_statements_lifetime_seconds;
+    const Int64 prepared_statements_lifetime_seconds;
 
     std::unique_ptr<ArrowFlight::CallsData> calls_data;
 };

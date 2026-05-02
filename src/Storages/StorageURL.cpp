@@ -1880,6 +1880,17 @@ void StorageURL::addInferredEngineArgsToCreateQuery(ASTs & args, const ContextPt
     }
 
     /// Named-collection or key-value form: `URL(nc)`, `URL(nc, url='...')`, or `URL(url='...', ...)`.
+    /// Only materialize when `url_base` actually changed the URL — otherwise we would copy
+    /// fields from the named collection (e.g. credentials in `user:pass@host`) into the
+    /// stored CREATE TABLE query, which is visible via `SHOW CREATE TABLE`.
+    if (auto named_collection = tryGetNamedCollectionWithOverrides(args, context, /*throw_unknown_collection=*/false))
+    {
+        Configuration unresolved;
+        StorageURL::processNamedCollectionResult(unresolved, *named_collection);
+        if (unresolved.url == uri)
+            return;
+    }
+
     /// If a `url='...'` key-value override is already present, update its literal in place.
     /// Otherwise, append a `url='<resolved>'` override so that named-collection resolution
     /// picks up the resolved URL at restart time.

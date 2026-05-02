@@ -129,5 +129,21 @@ DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_persist;
 DROP NAMED COLLECTION IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_nc;
 " 2>&1 | grep -oF "url = 'http://base.invalid/dir/persist.csv'" | head -1
 
+# URL engine: when the named collection's URL is already absolute, materialization
+# must NOT copy fields from the named collection into the CREATE TABLE query.
+# Otherwise contents of the named collection (e.g. credentials in `user:pass@host`)
+# would leak into table metadata visible via `SHOW CREATE TABLE`.
+# The URL stays inside the named collection; SHOW CREATE TABLE shows only `URL(nc_name)`.
+$CLICKHOUSE_CLIENT -n -q "
+DROP NAMED COLLECTION IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_nc_secret;
+CREATE NAMED COLLECTION ${CLICKHOUSE_TEST_UNIQUE_NAME}_nc_secret AS url='http://abs.invalid/data.csv', format='CSV';
+SET url_base = 'http://base.invalid/dir/';
+DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_secret;
+CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_secret (c String) ENGINE = URL(${CLICKHOUSE_TEST_UNIQUE_NAME}_nc_secret);
+SHOW CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_secret FORMAT TabSeparatedRaw;
+DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_secret;
+DROP NAMED COLLECTION IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_nc_secret;
+" 2>&1 | grep -cF 'abs.invalid'
+
 # Invalid url_base (no scheme) should produce an error
 $CLICKHOUSE_CLIENT --query "SELECT * FROM url('data.csv', CSV, 'c String') SETTINGS url_base = 'example.invalid/def/', $FAST" 2>&1 | grep -oF 'must contain a scheme' | head -1

@@ -24,4 +24,5 @@ URL('http://base.invalid/dir/persist.csv'
 http://base.invalid/b.csv
 http://other.invalid/b.csv
 url = 'http://base.invalid/dir/persist.csv'
+0
 must contain a scheme

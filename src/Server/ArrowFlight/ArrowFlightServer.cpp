@@ -132,24 +132,7 @@ namespace
         return result;
     }
 
-    /// Escapes a string value for use as a ClickHouse SQL literal: wraps in single quotes,
-    /// escapes embedded quotes and backslashes.
-    String escapeForSQL(const String & value)
-    {
-        String escaped;
-        escaped.reserve(value.size() + 2);
-        escaped.push_back('\'');
-        for (char c : value)
-        {
-            if (c == '\'')
-                escaped.push_back('\'');
-            else if (c == '\\')
-                escaped.push_back('\\');
-            escaped.push_back(c);
-        }
-        escaped.push_back('\'');
-        return escaped;
-    }
+
 
     /// Converts binary data to a ClickHouse SQL expression using unhex().
     /// This ensures the column name in the result schema is valid UTF-8
@@ -208,9 +191,9 @@ namespace
 
             /// String types: extract raw content from the buffer and escape.
             case arrow::Type::STRING:
-                return escapeForSQL(buffer_value(std::static_pointer_cast<arrow::StringScalar>(scalar)->value));
+                return quoteString(buffer_value(std::static_pointer_cast<arrow::StringScalar>(scalar)->value));
             case arrow::Type::LARGE_STRING:
-                return escapeForSQL(buffer_value(std::static_pointer_cast<arrow::LargeStringScalar>(scalar)->value));
+                return quoteString(buffer_value(std::static_pointer_cast<arrow::LargeStringScalar>(scalar)->value));
 
             /// Binary types: use unhex() so the column name in the result stays valid UTF-8.
             case arrow::Type::BINARY:
@@ -231,7 +214,7 @@ namespace
             default:
                 /// For any remaining types (LIST, STRUCT, MAP, DICTIONARY, etc.),
                 /// quote the string representation as a best-effort fallback.
-                return escapeForSQL(scalar->ToString());
+                return quoteString(scalar->ToString());
         }
     }
 

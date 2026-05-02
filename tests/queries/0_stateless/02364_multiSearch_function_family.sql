@@ -455,10 +455,8 @@ select 2 = multiSearchFirstPositionCaseInsensitiveUTF8(materialize('аБвгДе
 select 6 = multiSearchFirstPositionCaseInsensitiveUTF8(materialize('аБвгДежЗ'), ['З', 'бвгЯ', 'ЕЖз', 'з']) from system.numbers limit 10;
 
 -- Regression for UTF-8 case-insensitive MultiVolnitsky fallback handling.
--- The assertion checks deterministic behavior without relying on locale-specific positions.
-SELECT
-    multiSearchAnyCaseInsensitiveUTF8('i̇i', ['İI', 'ii', 'I']) =
-    multiSearchAnyCaseInsensitiveUTF8('i̇i', ['İI', 'ii', 'I']) FROM system.numbers LIMIT 10;
+-- Use a concrete expected value instead of self-comparison.
+SELECT 1 = multiSearchAnyCaseInsensitiveUTF8('fooİABCbar', ['İABC', 'zzzz']) FROM system.numbers LIMIT 10;
 
 select
 [

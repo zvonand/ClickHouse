@@ -45,6 +45,10 @@ void AuthMiddleware::CallCompleted(const arrow::Status & /*status*/)
             session->releaseSessionID();
         }
     }
+    else if (auto ps_lifetime = calls_data.getPreparedStatementsLifetime())
+    {
+        calls_data.refreshSessionPreparedStatements("", username, *ps_lifetime);
+    }
 }
 
 

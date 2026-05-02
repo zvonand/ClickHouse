@@ -559,7 +559,7 @@ public:
             {
                 /// put all bigrams
                 std::vector<size_t> inserted_cells;
-                auto callback = [this](const VolnitskyTraits::Ngram ngram, const int offset)
+                auto callback = [this, &inserted_cells](const VolnitskyTraits::Ngram ngram, const int offset)
                 {
                     return this->putNGramBase(ngram, offset, this->last, &inserted_cells);
                 };

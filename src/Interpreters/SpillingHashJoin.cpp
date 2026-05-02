@@ -219,25 +219,35 @@ void SpillingHashJoin::onBuildPhaseFinish()
 {
     if (state.load(std::memory_order_acquire) == State::COLLECTING)
     {
-        if (concurrent_join)
+        /// Safety net for the terminal block: the proactive pre-insert check in `addBlockToJoin`
+        /// fires only on subsequent calls. If the very last block pushed total bytes past
+        /// `max_bytes_before_external_join` without a follow-up insert to trigger the switch,
+        /// promote it to `GraceHashJoin` here so the configured cap is honored.
+        const size_t total_bytes = concurrent_join ? concurrent_join->getTotalByteCount() : hash_join->getTotalByteCount();
+        if (total_bytes >= max_bytes_before_external_join)
+        {
+            switchToGraceHashJoin();
+        }
+        else if (concurrent_join)
         {
             LOG_DEBUG(
                 log,
                 "All blocks fit in memory ({} bytes, {} rows), promoting ConcurrentHashJoin",
-                concurrent_join->getTotalByteCount(),
+                total_bytes,
                 concurrent_join->getTotalRowCount());
             chosen_join = concurrent_join;
+            state.store(State::IN_MEMORY_JOIN, std::memory_order_release);
         }
         else
         {
             LOG_DEBUG(
                 log,
                 "All blocks fit in memory ({} bytes, {} rows), promoting HashJoin",
-                hash_join->getTotalByteCount(),
+                total_bytes,
                 hash_join->getTotalRowCount());
             chosen_join = hash_join;
+            state.store(State::IN_MEMORY_JOIN, std::memory_order_release);
         }
-        state.store(State::IN_MEMORY_JOIN, std::memory_order_release);
     }
 
     chosen_join->onBuildPhaseFinish();

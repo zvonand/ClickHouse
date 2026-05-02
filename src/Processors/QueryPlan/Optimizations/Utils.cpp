@@ -92,11 +92,19 @@ bool dagContainsNonReadySet(const ActionsDAG & dag)
 
 bool dagContainsNonDeterministicFunction(const ActionsDAG & dag)
 {
+    /// We are interested in functions that are non-deterministic *within* a single query --
+    /// i.e. functions whose per-row output cannot be predicted from a single plan-time
+    /// evaluation. `rand`, `rowNumberInAllBlocks`, `blockNumber`, `nowInBlock` etc. fall in
+    /// this group. Functions like `now`/`today`/`yesterday`/`currentUser` are not
+    /// deterministic across queries (`isDeterministic() == false`) but they return the same
+    /// value for all rows in a single query (`isDeterministicInScopeOfQuery() == true`), so
+    /// the optimizer can soundly use their plan-time value and they should NOT block the
+    /// JOIN-conversion rewrite.
     for (const auto & node : dag.getNodes())
     {
         if (node.type == ActionsDAG::ActionType::FUNCTION && node.function_base)
         {
-            if (!node.function_base->isDeterministic())
+            if (!node.function_base->isDeterministicInScopeOfQuery())
                 return true;
         }
     }

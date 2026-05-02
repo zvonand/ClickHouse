@@ -582,15 +582,12 @@ arrow::Result<String> CallsData::createPreparedStatement(PreparedStatementInfo i
     auto expiration_time = calculatePreparedStatementExpirationTime(now());
     shared_info->expiration_time = expiration_time;
     std::lock_guard lock{mutex};
-    if (max_prepared_statements_per_user > 0)
-    {
-        auto & user_handles = user_to_prepared_statements[shared_info->username];
-        if (user_handles.size() >= max_prepared_statements_per_user)
-            return arrow::Status::CapacityError(
-                "Too many prepared statements for user ", shared_info->username,
-                " (limit: ", std::to_string(max_prepared_statements_per_user), ")");
-        user_handles.insert(handle);
-    }
+    auto & user_handles = user_to_prepared_statements[shared_info->username];
+    if (max_prepared_statements_per_user > 0 && user_handles.size() >= max_prepared_statements_per_user)
+        return arrow::Status::CapacityError(
+            "Too many prepared statements for user ", shared_info->username,
+            " (limit: ", std::to_string(max_prepared_statements_per_user), ")");
+    user_handles.insert(handle);
     prepared_statements.emplace(handle, std::move(shared_info));
     if (expiration_time)
     {

@@ -28,18 +28,32 @@ void ASTWithAlias::formatImpl(WriteBuffer & ostr, const FormatSettings & setting
     {
         settings.writeIdentifier(ostr, alias, /*ambiguous=*/false);
     }
+    else if (frame.parenthesize_alias_inner_only && !alias.empty())
+    {
+        /// `IAST::format` deferred parens emission to us so we can produce `(expr) AS alias`
+        /// instead of `(expr AS alias)`. Both parse to the same AST (the parser sets
+        /// `parenthesized=true` on the aliased node either way), but only `(expr) AS alias`
+        /// re-formats to itself, which is required by the format-parse-format consistency check
+        /// in debug builds. The deferral fires only at the top level of an expression / SELECT
+        /// element / WHERE clause; inside an operator chain `IAST::format` keeps the parens
+        /// itself, producing `(expr AS alias)` so the alias does not terminate the SELECT
+        /// element parser early.
+        ostr.write('(');
+        FormatStateStacked inner = frame;
+        inner.parenthesize_alias_inner_only = false;
+        inner.need_parens = false;
+        formatImplWithoutAlias(ostr, settings, state, inner);
+        ostr.write(')');
+        writeAlias(alias, ostr, settings);
+    }
     else
     {
         /// When the parent operator requires parentheses around this expression and the
         /// expression has an alias, wrap the entire `expr AS alias` in parentheses.
-        /// This is required for two reasons:
-        ///   * Without the wrap, `a AND b AS x AND c` would re-parse with the alias
-        ///     attached to `b` only instead of to `(a AND b)`.
-        ///   * After re-parsing, the parser sets `parenthesized=true` on the inner node
-        ///     because of the surrounding parens. `IAST::format` then emits the parens
-        ///     itself (around the entire `formatImpl` output, including the alias),
-        ///     producing `(expr AS alias)`. Emitting `(expr AS alias)` here on the first
-        ///     pass keeps the format-parse-format consistency.
+        /// Without the wrap, `a AND b AS x AND c` would re-parse with the alias attached
+        /// to `b` only instead of to `(a AND b)`. After re-parsing, the parser sets
+        /// `parenthesized=true` on the aliased node; the next format goes through the
+        /// `parenthesize_alias_inner_only` branch above.
         const bool wrap_around_alias = frame.need_parens && !alias.empty();
         if (wrap_around_alias)
         {

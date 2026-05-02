@@ -3,6 +3,8 @@
 #include <IO/Operators.h>
 #include <IO/WriteBufferFromString.h>
 #include <IO/WriteHelpers.h>
+#include <Parsers/ASTSubquery.h>
+#include <Parsers/ASTWithAlias.h>
 #include <Parsers/CommonParsers.h>
 #include <Parsers/IdentifierQuotingStyle.h>
 #include <Poco/String.h>
@@ -361,22 +363,51 @@ std::string IAST::dumpTree(size_t indent) const
     return wb.str();
 }
 
+/// Decide how to emit `parenthesized` parens. When the node has an alias and we are not in an
+/// operator-chain context (`frame.need_parens == false`), defer to `ASTWithAlias::formatImpl` so
+/// it can emit `(expr) AS alias` instead of `(expr AS alias)` — only the former re-formats to
+/// itself and keeps the format-parse-format round-trip stable.
+///
+/// In operator-chain context (`frame.need_parens == true`) we keep the parens here so the output
+/// is `(expr AS alias)`, because the parser would not accept `(expr) AS alias OP rhs` at the top
+/// level of a SELECT element / WHERE clause (the alias terminates the SELECT element parser).
+static bool decideParensEmission(const IAST & node, IAST::FormatStateStacked & frame)
+{
+    const bool parens = node.isParenthesized() && !frame.wrapped_in_parens;
+    frame.wrapped_in_parens = false;
+    if (!parens)
+        return false;
+
+    if (!frame.need_parens)
+    {
+        if (const auto * with_alias = dynamic_cast<const ASTWithAlias *>(&node);
+            with_alias && !with_alias->alias.empty() && !dynamic_cast<const ASTSubquery *>(&node))
+        {
+            /// Skip the deferral for `ASTSubquery`: its `formatImplWithoutAlias` already emits
+            /// `(SELECT ...)` itself, so deferring would produce `((SELECT ...)) AS alias`,
+            /// and the parser collapses `((SELECT ...))` to a non-parenthesized subquery,
+            /// breaking the round-trip. The default `(formatImpl-output)` wrapping in
+            /// `IAST::format` produces `((SELECT ...) AS alias)` which round-trips cleanly.
+            frame.parenthesize_alias_inner_only = true;
+            frame.current_function = nullptr;
+            frame.list_element_index = 0;
+            return false;
+        }
+    }
+
+    frame.need_parens = false;
+    frame.current_function = nullptr;
+    frame.list_element_index = 0;
+    return true;
+}
+
 void IAST::format(WriteBuffer & ostr, const FormatSettings & settings) const
 {
     FormatState state;
     FormatStateStacked frame;
-    const bool parens = isParenthesized() && !frame.wrapped_in_parens;
-    frame.wrapped_in_parens = false;
+    const bool parens = decideParensEmission(*this, frame);
     if (parens)
-    {
         ostr.write('(');
-        frame.need_parens = false;
-        /// We are now inside our own parens, so the parser-ambiguity checks that fire when
-        /// formatting directly as a multi-argument function argument or as a non-first list
-        /// element no longer apply.
-        frame.current_function = nullptr;
-        frame.list_element_index = 0;
-    }
     formatImpl(ostr, settings, state, std::move(frame));
     if (parens)
         ostr.write(')');
@@ -384,15 +415,9 @@ void IAST::format(WriteBuffer & ostr, const FormatSettings & settings) const
 
 void IAST::format(WriteBuffer & ostr, const FormatSettings & settings, FormatState & state, FormatStateStacked frame) const
 {
-    const bool parens = isParenthesized() && !frame.wrapped_in_parens;
-    frame.wrapped_in_parens = false;
+    const bool parens = decideParensEmission(*this, frame);
     if (parens)
-    {
         ostr.write('(');
-        frame.need_parens = false;
-        frame.current_function = nullptr;
-        frame.list_element_index = 0;
-    }
     formatImpl(ostr, settings, state, std::move(frame));
     if (parens)
         ostr.write(')');
@@ -400,15 +425,9 @@ void IAST::format(WriteBuffer & ostr, const FormatSettings & settings, FormatSta
 
 void IAST::format(FormattingBuffer out) const
 {
-    const bool parens = isParenthesized() && !out.frame.wrapped_in_parens;
-    out.frame.wrapped_in_parens = false;
+    const bool parens = decideParensEmission(*this, out.frame);
     if (parens)
-    {
         out.ostr.write('(');
-        out.frame.need_parens = false;
-        out.frame.current_function = nullptr;
-        out.frame.list_element_index = 0;
-    }
     formatImpl(out.ostr, out.settings, out.state, out.frame);
     if (parens)
         out.ostr.write(')');

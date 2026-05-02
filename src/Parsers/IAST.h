@@ -384,6 +384,11 @@ public:
         /// that the child should not emit its own `parenthesized` parens (which would duplicate the parent's).
         /// Consumed (cleared) by `IAST::format` so it only applies one level deep.
         bool wrapped_in_parens = false;
+        /// Set by `IAST::format` when the node has both `isParenthesized()` and a non-empty alias,
+        /// to tell `ASTWithAlias::formatImpl` to emit `(expr) AS alias` instead of `(expr AS alias)`.
+        /// This keeps the format-parse-format round-trip stable: `(expr) AS alias` re-parses with
+        /// `parenthesized=true` on the aliased node, which formats back to `(expr) AS alias`.
+        bool parenthesize_alias_inner_only = false;
     };
 
     void format(WriteBuffer & ostr, const FormatSettings & settings) const;

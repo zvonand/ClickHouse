@@ -1,10 +1,10 @@
 Original:          SELECT ([1] AS foo), [1] IN ([1] AS foo)
-format(original):  SELECT ([1] AS foo), [1] IN ([1] AS foo)
-format(formatted): SELECT ([1] AS foo), [1] IN ([1] AS foo)
+format(original):  SELECT ([1]) AS foo, [1] IN ([1] AS foo)
+format(formatted): SELECT ([1]) AS foo, [1] IN ([1] AS foo)
 
 Original:          SELECT ([isNaN(1)] AS foo), [1] IN ([isNaN(1)] AS foo)
-format(original):  SELECT ([isNaN(1)] AS foo), [1] IN ([isNaN(1)] AS foo)
-format(formatted): SELECT ([isNaN(1)] AS foo), [1] IN ([isNaN(1)] AS foo)
+format(original):  SELECT ([isNaN(1)]) AS foo, [1] IN ([isNaN(1)] AS foo)
+format(formatted): SELECT ([isNaN(1)]) AS foo, [1] IN ([isNaN(1)] AS foo)
 
 Original:          SELECT (-((-`c1`) AS `a2`)), NOT (-((-`c1`) AS `a2`)) from tab
 format(original):  SELECT (-(-c1 AS a2)), NOT (-(-c1 AS a2)) FROM tab
@@ -59,8 +59,8 @@ format(original):  (SELECT 1, 2, 3) EXCEPT (SELECT 1, 2, 3)
 format(formatted): (SELECT 1, 2, 3) EXCEPT (SELECT 1, 2, 3)
 
 Original:          ALTER TABLE `t55` (MODIFY ORDER BY ((`c0` AS `a0`)));
-format(original):  ALTER TABLE t55 (MODIFY ORDER BY (c0 AS a0))
-format(formatted): ALTER TABLE t55 (MODIFY ORDER BY (c0 AS a0))
+format(original):  ALTER TABLE t55 (MODIFY ORDER BY (c0) AS a0)
+format(formatted): ALTER TABLE t55 (MODIFY ORDER BY (c0) AS a0)
 
 Original:          select (tab.*).2 from tab;
 format(original):  SELECT (tab.*).2 FROM tab

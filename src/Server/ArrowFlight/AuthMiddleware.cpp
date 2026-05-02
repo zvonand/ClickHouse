@@ -40,6 +40,8 @@ void AuthMiddleware::CallCompleted(const arrow::Status & /*status*/)
         {
             if (calls_data.usesSessionTimeoutForPsLifetime() && session_timeout.count() > 0)
                 calls_data.refreshSessionPreparedStatements(session_id, username, std::chrono::duration_cast<ArrowFlight::Duration>(session_timeout));
+            else if (auto ps_lifetime = calls_data.getPreparedStatementsLifetime())
+                calls_data.refreshSessionPreparedStatements(session_id, username, *ps_lifetime);
             session->releaseSessionID();
         }
     }

@@ -239,6 +239,7 @@ public:
     void refreshSessionPreparedStatements(const String & session_id, const String & username, Duration session_timeout);
 
     bool usesSessionTimeoutForPsLifetime() const { return use_session_timeout_for_ps_lifetime; }
+    std::optional<Duration> getPreparedStatementsLifetime() const { return prepared_statements_lifetime; }
 
 private:
     static String generateTicketName();

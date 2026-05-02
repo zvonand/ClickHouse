@@ -131,6 +131,8 @@ struct PreparedStatementInfo
     /// Bound parameter values (set via DoPut with CommandPreparedStatementQuery).
     /// Contains one row with one column per '?' placeholder.
     std::shared_ptr<arrow::RecordBatch> bound_parameters;
+    /// When this prepared statement expires (std::nullopt means no expiration).
+    std::optional<Timestamp> expiration_time;
 
     size_t numParams() const { return query_parts.empty() ? 0 : query_parts.size() - 1; }
 };
@@ -139,7 +141,7 @@ struct PreparedStatementInfo
 class CallsData
 {
 public:
-    CallsData(std::optional<Duration> tickets_lifetime_, std::optional<Duration> poll_descriptors_lifetime_, size_t max_prepared_statements_per_user_, LoggerPtr log_);
+    CallsData(std::optional<Duration> tickets_lifetime_, std::optional<Duration> poll_descriptors_lifetime_, std::optional<Duration> prepared_statements_lifetime_, size_t max_prepared_statements_per_user_, LoggerPtr log_);
 
     /// Creates a flight ticket which allows to download a specified block.
     std::shared_ptr<const TicketInfo> createTicket(std::shared_ptr<arrow::Table> arrow_table);
@@ -230,6 +232,7 @@ private:
 
     std::optional<Timestamp> calculateTicketExpirationTime(Timestamp current_time) const;
     std::optional<Timestamp> calculatePollDescriptorExpirationTime(Timestamp current_time) const;
+    std::optional<Timestamp> calculatePreparedStatementExpirationTime(Timestamp current_time) const;
 
     void updateNextExpirationTime() TSA_REQUIRES(mutex);
 
@@ -246,6 +249,7 @@ private:
 
     const std::optional<Duration> tickets_lifetime;
     const std::optional<Duration> poll_descriptors_lifetime;
+    const std::optional<Duration> prepared_statements_lifetime;
     const size_t max_prepared_statements_per_user;
     const LoggerPtr log;
     mutable std::mutex mutex;
@@ -259,6 +263,7 @@ private:
     /// `tickets_by_expiration_time` and `poll_descriptors_by_expiration_time` are sorted by `expiration_time` so `std::set` is used.
     std::set<std::pair<Timestamp, String>> tickets_by_expiration_time TSA_GUARDED_BY(mutex);
     std::set<std::pair<Timestamp, String>> poll_descriptors_by_expiration_time TSA_GUARDED_BY(mutex);
+    std::set<std::pair<Timestamp, String>> prepared_statements_by_expiration_time TSA_GUARDED_BY(mutex);
     std::unordered_map<String, std::shared_ptr<PreparedStatementInfo>> prepared_statements TSA_GUARDED_BY(mutex);
     std::unordered_map<String, std::unordered_set<String>> session_to_prepared_statements TSA_GUARDED_BY(mutex);
     std::unordered_map<String, String> prepared_statement_to_session TSA_GUARDED_BY(mutex);

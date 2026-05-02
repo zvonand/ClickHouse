@@ -1469,7 +1469,6 @@ arrow::Status ArrowFlightServer::DoAction(
                 return arrow::Status::Invalid("Could not deserialize ActionCreatePreparedStatementRequest.");
 
             const auto & query = request.query();
-            LOG_DEBUG(log, "CreatePreparedStatement request: query={}", query);
 
             if (query.empty())
                 return arrow::Status::Invalid("CreatePreparedStatement: query must not be empty");
@@ -1500,6 +1499,8 @@ arrow::Status ArrowFlightServer::DoAction(
                 query_context->getSettingsRef()[Setting::max_parser_depth],
                 query_context->getSettingsRef()[Setting::max_parser_backtracks]);
             ARROW_RETURN_NOT_OK(checkNoCustomFormat(ast));
+
+            LOG_DEBUG(log, "CreatePreparedStatement request: query={}", ast->formatForLogging());
 
             if (dynamic_cast<const ASTQueryWithOutput *>(ast.get()))
             {
@@ -1535,7 +1536,7 @@ arrow::Status ArrowFlightServer::DoAction(
                 {
                     LOG_DEBUG(log, "CreatePreparedStatement: schema inference failed for query '{}', "
                         "the prepared statement will be created without dataset_schema: {}",
-                        query, getCurrentExceptionMessage(/* with_stacktrace = */ false));
+                        ast->formatForLogging(), getCurrentExceptionMessage(/* with_stacktrace = */ false));
                 }
             }
 

@@ -19,6 +19,7 @@
 #include <Parsers/ASTIdentifier_fwd.h>
 #include <Parsers/ASTInsertQuery.h>
 #include <Parsers/ASTQueryWithOutput.h>
+#include <Parsers/ASTSelectWithUnionQuery.h>
 #include <Parsers/Lexer.h>
 #include <Parsers/ParserQuery.h>
 #include <Parsers/parseQuery.h>
@@ -1503,7 +1504,7 @@ arrow::Status ArrowFlightServer::DoAction(
 
             LOG_DEBUG(log, "CreatePreparedStatement request: query={}", ast->formatForLogging());
 
-            if (dynamic_cast<const ASTQueryWithOutput *>(ast.get()))
+            if (dynamic_cast<const ASTSelectWithUnionQuery *>(ast.get()))
             {
                 /// Try to infer the result schema by executing the NULL-substituted query.
                 /// This may fail for queries where NULL is not a valid substitute (e.g. table

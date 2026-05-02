@@ -700,7 +700,7 @@ void CallsData::closeAllPreparedStatements(const String & username, const String
             return;
         for (const auto & handle : user_it->second)
         {
-            if (prepared_statement_to_session.find(handle) == prepared_statement_to_session.end())
+            if (!prepared_statement_to_session.contains(handle))
                 handles_to_close.insert(handle);
         }
     }

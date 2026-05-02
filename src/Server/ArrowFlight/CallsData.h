@@ -219,7 +219,8 @@ public:
 
     /// Closes all prepared statements owned by a user.
     /// If session_id is non-empty, only closes statements associated with that session.
-    /// If session_id is empty, closes all statements for the user regardless of session.
+    /// If session_id is empty, only closes session-less statements (statements
+    /// created with a session are left intact).
     void closeAllPreparedStatements(const String & username, const String & session_id = {});
 
     /// Closes all prepared statements associated with a session.

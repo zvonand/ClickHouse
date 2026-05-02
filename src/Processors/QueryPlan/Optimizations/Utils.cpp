@@ -123,9 +123,13 @@ FilterResult filterResultForNotMatchedRows(
         return FilterResult::UNKNOWN;
 
     /// `ActionsDAG::evaluatePartialResult` (called below) routes every function node through
-    /// `IFunction::executeImplDryRun` with `input_rows_count=1`. For non-deterministic functions
-    /// (`rand`, `now`, `rowNumberInAllBlocks`, ...) this single dry-run row is not representative
-    /// of the runtime behaviour: at runtime each row may produce a different value.
+    /// `IFunction::executeImplDryRun` with `input_rows_count=1`. For functions that are not
+    /// deterministic within a single query (`rand`, `nowInBlock`, `rowNumberInAllBlocks`,
+    /// `blockNumber`, ...) this single dry-run row is not representative of the runtime
+    /// behaviour: at runtime each row may produce a different value. Functions like `now` /
+    /// `today` / `currentUser` are not deterministic across queries but ARE deterministic
+    /// within a single query (`isDeterministicInScopeOfQuery() == true`), so their plan-time
+    /// value is faithful for all rows and they do NOT trip the guard below.
     ///
     /// Even with a fully-initialized dry-run output (e.g. `rowNumberInAllBlocks::executeImplDryRun`
     /// returning `[0]`), a filter such as `rowNumberInAllBlocks() = 1` evaluates to FALSE on the

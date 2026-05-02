@@ -479,6 +479,15 @@ Float64 ConditionSelectivityEstimator::ColumnEstimator::estimateRanges(const Pla
     return std::max(0.0, std::min(1.0, selectivity));
 }
 
+Float64 ConditionSelectivityEstimator::ColumnEstimator::estimateNotRanges(const PlainRanges & ranges) const
+{
+    if (stats->getNumRows() == 0)
+        return 0;
+    Float64 null_selectivity = 1.0 - static_cast<Float64>(stats->getNonNullRowCount()) / static_cast<Float64>(stats->getNumRows());
+    Float64 ranges_selectivity = estimateRanges(ranges);
+    return std::max(0.0, std::min(1.0, 1.0 - ranges_selectivity - null_selectivity));
+}
+
 UInt64 ConditionSelectivityEstimator::ColumnEstimator::estimateCardinality() const
 {
     return stats->estimateCardinality();
@@ -665,21 +674,21 @@ void ConditionSelectivityEstimator::RPNElement::finalize(const ColumnEstimators 
         return &it->second;
     };
 
-    std::vector<Float64> estimate_results;
+    std::unordered_map<String, Float64> estimate_results;
     for (const auto & [column_name, ranges] : column_ranges)
     {
         if (const auto * est = get_estimator(column_name))
-            estimate_results.emplace_back(est->estimateRanges(ranges));
+            estimate_results.emplace(column_name, est->estimateRanges(ranges));
         else
-            estimate_results.emplace_back(estimate_unknown_ranges(ranges));
+            estimate_results.emplace(column_name, estimate_unknown_ranges(ranges));
     }
 
     for (const auto & [column_name, ranges] : column_not_ranges)
     {
         if (const auto * est = get_estimator(column_name))
-            estimate_results.emplace_back(1.0 - est->estimateRanges(ranges));
+            estimate_results.emplace(column_name, est->estimateNotRanges(ranges));
         else
-            estimate_results.emplace_back(1.0 - estimate_unknown_ranges(ranges));
+            estimate_results.emplace(column_name, 1.0 - estimate_unknown_ranges(ranges));
     }
 
     if (function == FUNCTION_AND)
@@ -719,31 +728,34 @@ void ConditionSelectivityEstimator::RPNElement::finalize(const ColumnEstimators 
 
     for (const auto & column_name : null_check_columns)
     {
+        Float64 cur_selectivity;
         if (const auto * est = get_estimator(column_name))
-            estimate_results.emplace_back(est->stats->estimateIsNull());
+            cur_selectivity = est->stats->estimateIsNull();
         else
-            estimate_results.emplace_back(default_cond_equal_factor);
+            cur_selectivity = default_cond_equal_factor;
+
+        estimate_results[column_name] += cur_selectivity;
     }
 
     for (const auto & column_name : not_null_check_columns)
     {
         if (function == FUNCTION_AND
-            && (column_ranges.contains(column_name) || column_not_ranges.contains(column_name)))
+            && (estimate_results.contains(column_name)))
             continue;
 
         if (const auto * est = get_estimator(column_name))
-            estimate_results.emplace_back(est->stats->estimateIsNotNull());
+            estimate_results[column_name] = est->stats->estimateIsNotNull();
         else
-            estimate_results.emplace_back(1.0 - default_cond_equal_factor);
+            estimate_results[column_name] = 1.0 - default_cond_equal_factor;
     }
 
     selectivity = 1.0;
     for (const auto & estimate_result : estimate_results)
     {
         if (function == FUNCTION_OR)
-            selectivity *= 1 - estimate_result;
+            selectivity *= 1 - estimate_result.second;
         else
-            selectivity *= estimate_result;
+            selectivity *= estimate_result.second;
     }
     if (function == FUNCTION_OR)
         selectivity = 1 - selectivity;

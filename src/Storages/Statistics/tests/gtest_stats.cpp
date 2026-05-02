@@ -436,22 +436,11 @@ TEST(Statistics, NullPredicateEstimates)
     /// 50 non-NULL values in [1, 99]; estimateLess(50) ≈ 50 * 49 / 98 = 25.
     check("x IS NOT NULL AND x > 50",         25.0, 2.0);
     check("x IS NOT NULL AND x < 50",         25.0, 2.0);
-
-    /// IS NULL OR range — NULL rows plus range over non-NULL rows.
-    /// Selectivity estimator combines OR via independence approximation
-    /// (1 - (1-p_null)*(1-p_range)) ≈ 1 - 0.5 * 0.75 = 0.625, giving ~62 rows.
-    /// We do not assert an exact value here; just that the estimate sits between
-    /// the range-only count and the row total.
-    {
-        Float64 r = estimateRows(estimator, "x IS NULL OR x > 50");
-        EXPECT_GT(r, 25.0);
-        EXPECT_LE(r, 100.0);
-    }
-    {
-        Float64 r = estimateRows(estimator, "x IS NULL OR x < 50");
-        EXPECT_GT(r, 25.0);
-        EXPECT_LE(r, 100.0);
-    }
+    check("x IS NULL OR x < 50",         75.0, 2.0);
+    check("x IS NOT NULL",         50.0, 2.0);
+    check("x IS NOT NULL OR x < 50",         50.0, 2.0);
+    check("not x < 50",         25.0, 2.0);
+    check("x IS NULL OR not x < 50",         75.0, 2.0);
 
     /// Plain range — must not include NULL rows.
     check("x > 50",                           25.0, 2.0);

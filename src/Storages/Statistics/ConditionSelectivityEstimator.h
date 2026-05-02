@@ -91,6 +91,7 @@ private:
         ColumnStatisticsPtr stats;
 
         Float64 estimateRanges(const PlainRanges & ranges) const;
+        Float64 estimateNotRanges(const PlainRanges & ranges) const;
         UInt64 estimateCardinality() const;
     };
 

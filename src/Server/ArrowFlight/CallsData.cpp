@@ -668,15 +668,20 @@ void CallsData::closeAllPreparedStatements(const String & username, const String
         updateNextExpirationTime();
 }
 
-void CallsData::closeSessionPreparedStatements(const String & session_id)
+void CallsData::closeSessionPreparedStatements(const String & session_id, const String & username)
 {
     std::lock_guard lock{mutex};
     auto & by_session = prep_statements.get<BySessionId>();
     auto [first, last] = by_session.equal_range(session_id);
     for (auto it = first; it != last;)
     {
-        LOG_DEBUG(log, "Closing prepared statement {} (session {} closed)", it->handle, session_id);
-        it = by_session.erase(it);
+        if (it->username == username)
+        {
+            LOG_DEBUG(log, "Closing prepared statement {} (session {} closed)", it->handle, session_id);
+            it = by_session.erase(it);
+        }
+        else
+            ++it;
     }
     updateNextExpirationTime();
 }

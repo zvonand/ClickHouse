@@ -229,8 +229,8 @@ public:
     /// created with a session are left intact).
     void closeAllPreparedStatements(const String & username, const String & session_id = {});
 
-    /// Closes all prepared statements associated with a session.
-    void closeSessionPreparedStatements(const String & session_id);
+    /// Closes all prepared statements associated with a session and user.
+    void closeSessionPreparedStatements(const String & session_id, const String & username);
 
 private:
     static String generateTicketName();

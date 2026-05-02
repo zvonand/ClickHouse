@@ -377,3 +377,60 @@ def test_close_all_sessionless():
     result = session_client.execute(stmt_session)
     assert result.column(0).to_pylist() == [1]
     stmt_session.close()
+
+
+def test_session_close_does_not_affect_other_user_same_session_id():
+    """When two users share the same session_id, closing one user's session
+    must not delete the other user's prepared statements."""
+    shared_session_id = 'shared_session_' + ''.join(random.choices(string.ascii_letters, k=8))
+
+    client1 = FlightSQLClient(
+        host=node.ip_address,
+        port=8888,
+        insecure=True,
+        disable_server_verification=True,
+        username="user_ps1",
+        password="pass1",
+        metadata={'x-clickhouse-session-id': shared_session_id},
+        features={'metadata-reflection': 'true'},
+    )
+    client2 = FlightSQLClient(
+        host=node.ip_address,
+        port=8888,
+        insecure=True,
+        disable_server_verification=True,
+        username="user_ps2",
+        password="pass2",
+        metadata={'x-clickhouse-session-id': shared_session_id},
+        features={'metadata-reflection': 'true'},
+    )
+
+    # Both users create a prepared statement in the same-named session.
+    stmt1 = client1.prepare("SELECT 1")
+    stmt2 = client2.prepare("SELECT 2")
+
+    # User 1 closes their session by issuing a request with session-close header.
+    close_client = FlightSQLClient(
+        host=node.ip_address,
+        port=8888,
+        insecure=True,
+        disable_server_verification=True,
+        username="user_ps1",
+        password="pass1",
+        metadata={
+            'x-clickhouse-session-id': shared_session_id,
+            'x-clickhouse-session-close': '1',
+        },
+        features={'metadata-reflection': 'true'},
+    )
+    # Any call triggers the session close in CallCompleted.
+    close_client.execute_update("SELECT 1")
+
+    # User 1's prepared statement should be gone (session closed).
+    with pytest.raises(pa.lib.ArrowKeyError, match="Prepared statement handle not found"):
+        client1.execute(stmt1)
+
+    # User 2's prepared statement must still be alive.
+    result = client2.execute(stmt2)
+    assert result.column(0).to_pylist() == [2]
+    stmt2.close()

@@ -412,6 +412,7 @@ rg -Fav -e "Code: 236. DB::Exception: Cancelled merging parts" \
            -e "This engine is deprecated and is not supported in transactions" \
            -e "Prevent converting Nullable type to non-Nullable type inside mutation" \
            -e "e.what() = failed to parse response body" \
+           -e "Tuple element name 'null' is reserved" \
     /test_output/clickhouse-server.upgrade.log \
     | grep -av -e "_repl_01111_.*Mapping for table with UUID" \
     | grep -av -e "Azure::Storage::StorageException.*Not found address of host" \

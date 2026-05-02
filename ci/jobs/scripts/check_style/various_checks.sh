@@ -116,6 +116,7 @@ FUNCTIONS_CONTEXT_PTR_EXCEPTIONS=(
     -e /FunctionUnaryArithmetic.h
     -e /ITupleFunction.h
     -e /LeastGreatestGeneric.h
+    -e /midpoint.h
     -e /formatRow.cpp
     -e /structureToFormatSchema.cpp
     -e /UserDefined/
@@ -127,7 +128,6 @@ FUNCTIONS_WITH_CONTEXT_EXCEPTIONS=(
     # It is OK to have WithContext for derived classes from IFunctionOverloadResolver
     -e /FunctionJoinGet.cpp
     -e /CastOverloadResolver.cpp
-    -e /midpoint.h
     -e /reverse.cpp
     -e /formatRow.cpp
     # Store global context

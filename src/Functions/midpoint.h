@@ -451,7 +451,7 @@ struct MidpointImpl
 };
 
 template <typename SpecializedFunction>
-class MidpointResolver : public IFunctionOverloadResolver, WithContext
+class MidpointResolver : public IFunctionOverloadResolver
 {
 public:
     static constexpr auto name = "midpoint";
@@ -461,7 +461,7 @@ public:
     }
 
     explicit MidpointResolver(ContextPtr context_)
-        : WithContext(context_)
+        : context(context_)
     {
     }
 
@@ -496,11 +496,11 @@ public:
                 /// combinations correctly by casting arguments to the result type first.
                 if (a0->equals(*a1) && isNumber(a0) && !isDecimal(a0))
                     return std::make_unique<FunctionToFunctionBaseAdaptor>(
-                        SpecializedFunction::create(getContext()), argument_types, return_type);
+                        SpecializedFunction::create(context), argument_types, return_type);
             }
         }
 
-        return std::make_unique<FunctionToFunctionBaseAdaptor>(FunctionMidpoint::create(getContext()), argument_types, return_type);
+        return std::make_unique<FunctionToFunctionBaseAdaptor>(FunctionMidpoint::create(context), argument_types, return_type);
     }
 
     DataTypePtr getReturnTypeImpl(const DataTypes & types) const override
@@ -511,6 +511,8 @@ public:
         return getLeastSupertype(types);
     }
 
+private:
+    ContextPtr context;
 };
 
 }

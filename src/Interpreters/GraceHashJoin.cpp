@@ -333,12 +333,16 @@ bool GraceHashJoin::hasMemoryOverflow(size_t total_rows, size_t total_bytes) con
     /// doubles its buffer in power-of-two steps, transiently holding 3X the previous size, so
     /// rehashing buckets early prevents that doubling from exceeding the cap.
     ///
-    /// Only kicks in for non-trivial thresholds. With a very small threshold (set explicitly low,
-    /// e.g. by tests) this would force one rehash per added block and quickly exhaust
-    /// `grace_hash_join_max_buckets`, even when the data could otherwise fit in a single bucket.
+    /// We require a minimum threshold of 1 MiB before this check kicks in. Each rehash only
+    /// halves the in-memory bucket, so for total data D and threshold T we need ~log2(D / T)
+    /// rehashes per bucket (capped by `grace_hash_join_max_buckets`). With smaller thresholds
+    /// the hash-table cell overhead alone (~32 bytes per row) can already exceed `T/2` before
+    /// any rehash can help, forcing one rehash per added block and quickly hitting the bucket
+    /// cap. 1 MiB is small enough to enforce the contract for any practical configuration while
+    /// still leaving low test thresholds (e.g. 1 KiB in `03915_spilling_hash_join`) unaffected.
     if (!has_overflow)
     {
-        static constexpr size_t MIN_THRESHOLD_FOR_AUTOMATIC_SPILL = 64 * 1024 * 1024;
+        static constexpr size_t MIN_THRESHOLD_FOR_AUTOMATIC_SPILL = 1024 * 1024;
         const auto external_join_threshold = table_join->maxBytesBeforeExternalJoin();
         if (external_join_threshold >= MIN_THRESHOLD_FOR_AUTOMATIC_SPILL && total_bytes * 2 >= external_join_threshold)
             has_overflow = true;

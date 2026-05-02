@@ -14,7 +14,7 @@ Generate a good PR description and apply it, with optional confirmation based on
 
 Plain description of what changed. No prefix conventions like `fix():` or `feat():`.
 
-**Exception — `.claude/` changes:** when the PR only touches files under `.claude/` (settings, tools, skills, instructions, etc.), prefix the title with `claude: `. Example: `claude: add fetch_ci_report.js to allowed commands`.
+**Exception — `.claude/` changes:** when the PR only touches files under `.claude/` (settings, tools, skills, instructions, etc.), prefix the title with `claude: ` and use the `Documentation (changelog entry is not required)` changelog category. Example: `claude: add fetch_ci_report.js to allowed commands`.
 
 - Good: `Change default stderr_reaction to log_last for executable UDFs`
 - Good: `Fix exception when inserting NULL into non-nullable column via CAST`

@@ -91,8 +91,6 @@ namespace
         return buf;
     }
 
-    /// Replaces '?' placeholders in a SQL query with NULL using the ClickHouse Lexer,
-    /// so the resulting query can be parsed for syntax validation and schema inference.
     /// Splits a SQL query at '?' placeholder positions using the ClickHouse Lexer.
     /// Returns a vector of query parts: for "SELECT ? + ?" it returns ["SELECT ", " + ", ""].
     /// The number of parameters equals parts.size() - 1.

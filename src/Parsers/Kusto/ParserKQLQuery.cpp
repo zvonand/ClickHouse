@@ -633,22 +633,23 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
             return false;
         String col_name(pos->begin, pos->end);
         ++pos;
-        if (!isValidKQLPos(pos) || String(pos->begin, pos->end) != "from")
+        /// KQL keywords are case-insensitive, so `range x FROM 1 TO 10 STEP 1` must parse.
+        if (!isValidKQLPos(pos) || Poco::toLower(String(pos->begin, pos->end)) != "from")
             return false;
         ++pos;
         String start_raw(pos->begin, pos->end);
         String start_val = IParserKQLFunction::getExpression(pos);
         /// getExpression may or may not advance pos past the token
         /// Check if we're already at 'to', if not advance
-        if (isValidKQLPos(pos) && String(pos->begin, pos->end) != "to")
+        if (isValidKQLPos(pos) && Poco::toLower(String(pos->begin, pos->end)) != "to")
             ++pos;
-        if (!isValidKQLPos(pos) || String(pos->begin, pos->end) != "to")
+        if (!isValidKQLPos(pos) || Poco::toLower(String(pos->begin, pos->end)) != "to")
             return false;
         ++pos;
         String end_val = IParserKQLFunction::getExpression(pos);
-        if (isValidKQLPos(pos) && String(pos->begin, pos->end) != "step")
+        if (isValidKQLPos(pos) && Poco::toLower(String(pos->begin, pos->end)) != "step")
             ++pos;
-        if (!isValidKQLPos(pos) || String(pos->begin, pos->end) != "step")
+        if (!isValidKQLPos(pos) || Poco::toLower(String(pos->begin, pos->end)) != "step")
             return false;
         ++pos;
         /// Handle negative step: -N (may be single ErrorWrongNumber token or Minus + Number)

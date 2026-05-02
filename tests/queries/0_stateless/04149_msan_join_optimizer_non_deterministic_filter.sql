@@ -22,7 +22,14 @@
 --      optimizer then concludes that filter is FALSE for all not-matched rows and converts
 --      `ANY LEFT JOIN` to `SEMI JOIN`, silently dropping unmatched rows that would have
 --      satisfied the filter at runtime. Fixed by bailing out to `FilterResult::UNKNOWN`
---      when the filter DAG contains any function whose `isDeterministic` returns false.
+--      when the filter DAG contains any function whose `isDeterministicInScopeOfQuery` returns false.
+--
+-- Both bugs are in the planner-based path (`Processors/QueryPlan/Optimizations/`). The old
+-- analyzer does not run these JOIN-conversion optimizers, and it also rejects the scalar
+-- subquery shape `(SELECT p = 1)` from `PedroTadim`'s reproducer with `UNKNOWN_IDENTIFIER`
+-- in `TreeRewriter::collectUsedColumns`. So we force the new analyzer for this whole test;
+-- this matches sibling JOIN-conversion regression tests (03130, 03210, 03595, 03623, 04003).
+SET enable_analyzer = 1;
 
 DROP TABLE IF EXISTS t_l;
 DROP TABLE IF EXISTS t_r;

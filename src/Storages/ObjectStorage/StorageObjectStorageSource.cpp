@@ -89,7 +89,6 @@ namespace Setting
     extern const SettingsUInt64 s3_path_filter_limit;
     extern const SettingsBool use_parquet_metadata_cache;
     extern const SettingsBool input_format_parquet_use_native_reader_v3;
-    extern const SettingsBool use_query_condition_cache;
 }
 
 namespace ErrorCodes
@@ -538,6 +537,14 @@ Chunk StorageObjectStorageSource::generate()
                             }
                         }
 
+                        size_t unmatched_count = total_groups - matched_groups.size();
+                        LOG_DEBUG(log,
+                            "Query condition cache: storing {}/{} unmatched row groups for condition {} in file {}.",
+                            unmatched_count,
+                            total_groups,
+                            format_filter_info->filter_actions_dag->dumpNames(),
+                            object_info->getFileName());
+
                         if (!unmatched_ranges.empty())
                         {
                             auto query_condition_cache = Context::getGlobalContextInstance()->getQueryConditionCache();
@@ -632,8 +639,7 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
     auto query_settings = configuration->getQuerySettings(context_);
 
     QueryConditionCachePtr query_condition_cache;
-    if (format_filter_info && format_filter_info->condition_hash
-        && context_->getSettingsRef()[Setting::use_query_condition_cache])
+    if (format_filter_info && format_filter_info->condition_hash)
         query_condition_cache = Context::getGlobalContextInstance()->getQueryConditionCache();
 
     while (true)
@@ -669,10 +675,19 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
             if (matching_marks.has_value())
             {
                 const auto & marks = *matching_marks;
+                size_t total_row_groups = marks.size();
                 std::vector<size_t> matching_row_groups;
-                for (size_t i = 0; i < marks.size(); ++i)
+                for (size_t i = 0; i < total_row_groups; ++i)
                     if (marks[i])
                         matching_row_groups.push_back(i);
+
+                size_t dropped_row_groups = total_row_groups - matching_row_groups.size();
+                LOG_DEBUG(log,
+                    "Query condition cache has dropped {}/{} row groups for condition {} in file {}.",
+                    dropped_row_groups,
+                    total_row_groups,
+                    format_filter_info->filter_actions_dag->dumpNames(),
+                    object_info->getFileName());
 
                 if (matching_row_groups.empty())
                     continue;

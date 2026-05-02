@@ -26,7 +26,6 @@ namespace DB
 namespace Setting
 {
     extern const SettingsUInt64 cluster_table_function_buckets_batch_size;
-    extern const SettingsBool use_query_condition_cache;
 }
 
 static ExpressionActionsPtr getExpressionActions(
@@ -121,8 +120,7 @@ ObjectIteratorSplitByBuckets::ObjectIteratorSplitByBuckets(
     , storage_id(storage_id_)
     , format_filter_info(std::move(format_filter_info_))
 {
-    if (format_filter_info && format_filter_info->condition_hash
-        && context_->getSettingsRef()[Setting::use_query_condition_cache])
+    if (format_filter_info && format_filter_info->condition_hash)
         query_condition_cache = context_->getQueryConditionCache();
 }
 

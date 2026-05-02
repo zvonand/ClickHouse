@@ -1,6 +1,7 @@
 #include <Formats/FormatFilterInfo.h>
 #include <Core/Settings.h>
 #include <Storages/MergeTree/KeyCondition.h>
+#include <Storages/VirtualColumnUtils.h>
 #include <Interpreters/ExpressionActions.h>
 
 #include <DataTypes/DataTypeTuple.h>
@@ -69,7 +70,11 @@ FormatFilterInfo::FormatFilterInfo(
 {
     bool use_query_condition_cache = context_->getSettingsRef()[Setting::use_query_condition_cache];
     if (use_query_condition_cache && filter_actions_dag)
-        condition_hash = filter_actions_dag->getHash();
+    {
+        const auto & outputs = filter_actions_dag->getOutputs();
+        if (outputs.size() == 1 && VirtualColumnUtils::isDeterministic(outputs[0]))
+            condition_hash = filter_actions_dag->getHash();
+    }
 }
 
 FormatFilterInfo::FormatFilterInfo() = default;

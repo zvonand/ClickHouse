@@ -1,5 +1,6 @@
 #include <atomic>
 #include <memory>
+#include <unordered_set>
 #include <fmt/format.h>
 #include <Core/Settings.h>
 #include <mutex>
@@ -1372,9 +1373,10 @@ std::shared_ptr<FileBucketInfo> ParquetFileBucketInfo::filterByMatchingRowGroups
     /// Prototype with no row group restriction: use matching_row_groups directly.
     if (row_group_ids.empty())
         return std::make_shared<ParquetFileBucketInfo>(matching_row_groups);
+    std::unordered_set<size_t> matching_set(matching_row_groups.begin(), matching_row_groups.end());
     std::vector<size_t> filtered;
     for (size_t rg : row_group_ids)
-        if (std::find(matching_row_groups.begin(), matching_row_groups.end(), rg) != matching_row_groups.end())
+        if (matching_set.contains(rg))
             filtered.push_back(rg);
     if (filtered.empty())
         return nullptr;

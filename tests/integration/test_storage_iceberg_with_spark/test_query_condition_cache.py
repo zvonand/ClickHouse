@@ -113,3 +113,58 @@ def test_query_condition_cache(started_cluster_iceberg_with_spark, storage_type)
     assert hits_after_drop == 0
 
     instance.query(f"DROP TABLE IF EXISTS {TABLE_NAME}")
+
+
+@pytest.mark.parametrize("storage_type", ["s3", "azure", "local"])
+def test_query_condition_cache_nondeterministic_functions(
+    started_cluster_iceberg_with_spark, storage_type
+):
+    instance = started_cluster_iceberg_with_spark.instances["node1"]
+    spark = started_cluster_iceberg_with_spark.spark_session
+    TABLE_NAME = (
+        "test_qcc_nondeterministic_" + storage_type + "_" + get_uuid_str()
+    )
+
+    def execute_spark_query(query: str):
+        return execute_spark_query_general(
+            spark,
+            started_cluster_iceberg_with_spark,
+            storage_type,
+            TABLE_NAME,
+            query,
+        )
+
+    execute_spark_query(
+        f"""
+        CREATE TABLE {TABLE_NAME} (id INT, val STRING)
+        USING iceberg
+        OPTIONS('format-version'='2')
+        """
+    )
+
+    for i in range(1, 10):
+        execute_spark_query(f"INSERT INTO {TABLE_NAME} VALUES ({i}, 'value_{i}')")
+
+    instance.query(
+        get_creation_expression(
+            storage_type,
+            TABLE_NAME,
+            started_cluster_iceberg_with_spark,
+            table_function=False,
+        )
+    )
+
+    instance.query("SYSTEM DROP QUERY CONDITION CACHE")
+
+    select_query = f"SELECT * FROM {TABLE_NAME} WHERE id = rand() FORMAT Null"
+    settings = {
+        "use_query_condition_cache": 1,
+        "allow_experimental_analyzer": 1,
+    }
+
+    instance.query(select_query, settings=settings)
+
+    cache_size = int(instance.query("SELECT count() FROM system.query_condition_cache"))
+    assert cache_size == 0
+
+    instance.query(f"DROP TABLE IF EXISTS {TABLE_NAME}")

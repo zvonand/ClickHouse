@@ -1167,7 +1167,7 @@ arrow::Status ArrowFlightServer::DoPut(
                         continue;
                     if (chunk.data->num_rows() > 1)
                         return arrow::Status::NotImplemented(
-                            "Multiple parameter sets are not supported (got ", chunk.data->num_rows(), "+ rows)");
+                            "Multiple parameter sets are not supported (got ", chunk.data->num_rows(), " rows)");
 
                     params = std::move(chunk.data);
 

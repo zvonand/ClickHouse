@@ -700,21 +700,36 @@ std::expected<void, PreformattedMessage> MergeTreeDataSelectExecutor::canUseInde
     if (all_updated_columns.empty())
         return {};
 
+    /// Two dotted column names overlap when they are equal, or when one is an ancestor
+    /// of the other in the subcolumn hierarchy (a `.`-separated prefix). For example,
+    /// `document` overlaps `document.country` (parent/child), but `document.city` and
+    /// `document.country` do not (sibling subcolumns are independent).
+    auto overlaps = [](std::string_view updated, std::string_view required)
+    {
+        if (updated.size() > required.size())
+            std::swap(updated, required);
+        return required.starts_with(updated)
+            && (updated.size() == required.size() || required[updated.size()] == '.');
+    };
+
     auto options = GetColumnsOptions(GetColumnsOptions::Kind::All).withSubcolumns();
     auto required_columns_names = index->getColumnsRequiredForIndexCalc();
     auto required_columns_list = metadata_snapshot->getColumns().getByNames(options, required_columns_names);
 
-    auto it = std::ranges::find_if(required_columns_list, [&](const auto & column)
+    for (const auto & required_column : required_columns_list)
     {
-        return all_updated_columns.contains(column.getNameInStorage());
-    });
+        for (const auto & updated_column : all_updated_columns)
+        {
+            if (overlaps(updated_column, required_column.name))
+            {
+                return std::unexpected(PreformattedMessage::create(
+                    "Index {} depends on column `{}` which will be updated on the fly (by update of `{}`)",
+                    index->index.name, required_column.name, updated_column));
+            }
+        }
+    }
 
-    if (it == required_columns_list.end())
-        return {};
-
-    return std::unexpected(PreformattedMessage::create(
-        "Index {} depends on column `{}` which will be updated on the fly",
-        index->index.name, it->getNameInStorage()));
+    return {};
 }
 
 

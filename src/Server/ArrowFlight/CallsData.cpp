@@ -463,38 +463,13 @@ void CallsData::cancelExpired()
             it = poll_descriptors_by_expiration_time.erase(it);
         }
 
-        while (!prepared_statements_by_expiration_time.empty())
         {
-            auto it = prepared_statements_by_expiration_time.begin();
-            if (current_time <= it->first)
-                break;
-            const auto & handle = it->second;
-            LOG_DEBUG(log, "Cancelling expired prepared statement {}", handle);
-            auto ps_it = prepared_statements.find(handle);
-            if (ps_it != prepared_statements.end())
+            auto & by_exp = prep_statements.get<ByExpirationTime>();
+            for (auto it = by_exp.begin(); it != by_exp.end() && it->expiration_time < current_time;)
             {
-                auto user_it = user_to_prepared_statements.find(ps_it->second->username);
-                if (user_it != user_to_prepared_statements.end())
-                {
-                    user_it->second.erase(handle);
-                    if (user_it->second.empty())
-                        user_to_prepared_statements.erase(user_it);
-                }
-                prepared_statements.erase(ps_it);
+                LOG_DEBUG(log, "Cancelling expired prepared statement {}", it->handle);
+                it = by_exp.erase(it);
             }
-            auto session_it = prepared_statement_to_session.find(handle);
-            if (session_it != prepared_statement_to_session.end())
-            {
-                auto s_it = session_to_prepared_statements.find(session_it->second);
-                if (s_it != session_to_prepared_statements.end())
-                {
-                    s_it->second.erase(handle);
-                    if (s_it->second.empty())
-                        session_to_prepared_statements.erase(s_it);
-                }
-                prepared_statement_to_session.erase(session_it);
-            }
-            prepared_statements_by_expiration_time.erase(it);
         }
 
         updateNextExpirationTime();
@@ -581,48 +556,45 @@ arrow::Result<String> CallsData::createPreparedStatement(PreparedStatementInfo i
     auto shared_info = std::make_shared<PreparedStatementInfo>(std::move(info));
     auto expiration_time = calculatePreparedStatementExpirationTime(now());
     shared_info->expiration_time = expiration_time;
+    Timestamp entry_expiration = expiration_time.value_or(Timestamp::max());
     std::lock_guard lock{mutex};
-    auto & user_handles = user_to_prepared_statements[shared_info->username];
-    if (max_prepared_statements_per_user > 0 && user_handles.size() >= max_prepared_statements_per_user)
-        return arrow::Status::CapacityError(
-            "Too many prepared statements for user ", shared_info->username,
-            " (limit: ", std::to_string(max_prepared_statements_per_user), ")");
-    user_handles.insert(handle);
-    prepared_statements.emplace(handle, std::move(shared_info));
+    if (max_prepared_statements_per_user > 0)
+    {
+        auto & by_user = prep_statements.get<ByUsername>();
+        if (by_user.count(shared_info->username) >= max_prepared_statements_per_user)
+            return arrow::Status::CapacityError(
+                "Too many prepared statements for user ", shared_info->username,
+                " (limit: ", std::to_string(max_prepared_statements_per_user), ")");
+    }
+    prep_statements.emplace(PreparedStatementEntry{handle, session_id, shared_info->username, entry_expiration, std::move(shared_info)});
     if (expiration_time)
-    {
-        prepared_statements_by_expiration_time.emplace(*expiration_time, handle);
         updateNextExpirationTime();
-    }
-    if (!session_id.empty())
-    {
-        session_to_prepared_statements[session_id].insert(handle);
-        prepared_statement_to_session[handle] = session_id;
-    }
     return handle;
 }
 
 arrow::Result<PreparedStatementInfo> CallsData::getPreparedStatement(const String & handle, const String & username) const
 {
     std::lock_guard lock{mutex};
-    auto it = prepared_statements.find(handle);
-    if (it == prepared_statements.end())
+    auto & by_handle = prep_statements.get<ByHandle>();
+    auto it = by_handle.find(handle);
+    if (it == by_handle.end())
         return arrow::Status::KeyError("Prepared statement handle not found");
-    if (it->second->username != username)
+    if (it->username != username)
         return arrow::Status::KeyError("Prepared statement handle not found");
-    return *it->second;
+    return *it->info;
 }
 
 arrow::Status CallsData::bindParameters(const String & handle, const String & username, std::shared_ptr<arrow::RecordBatch> params)
 {
     std::lock_guard lock{mutex};
-    auto it = prepared_statements.find(handle);
-    if (it == prepared_statements.end())
+    auto & by_handle = prep_statements.get<ByHandle>();
+    auto it = by_handle.find(handle);
+    if (it == by_handle.end())
         return arrow::Status::KeyError("Prepared statement handle not found");
-    if (it->second->username != username)
+    if (it->username != username)
         return arrow::Status::KeyError("Prepared statement handle not found");
 
-    const auto & ps_info = it->second;
+    const auto & ps_info = it->info;
     size_t num_params = ps_info->numParams();
 
     if (params && params->num_rows() > 1)
@@ -633,141 +605,79 @@ arrow::Status CallsData::bindParameters(const String & handle, const String & us
             "Parameter count mismatch: query has ", num_params,
             " '?' placeholders but ", params->num_columns(), " columns were bound");
 
-    it->second->bound_parameters = std::move(params);
+    it->info->bound_parameters = std::move(params);
     return arrow::Status::OK();
 }
 
 void CallsData::closePreparedStatement(const String & handle, const String & username)
 {
     std::lock_guard lock{mutex};
-    auto it = prepared_statements.find(handle);
-    if (it == prepared_statements.end())
+    auto & by_handle = prep_statements.get<ByHandle>();
+    auto it = by_handle.find(handle);
+    if (it == by_handle.end())
         return;
-    if (it->second->username != username)
+    if (it->username != username)
         return;
-    auto ps_username = it->second->username;
-    if (it->second->expiration_time)
-    {
-        prepared_statements_by_expiration_time.erase(std::make_pair(*it->second->expiration_time, handle));
+    bool had_expiration = (it->expiration_time != Timestamp::max());
+    by_handle.erase(it);
+    if (had_expiration)
         updateNextExpirationTime();
-    }
-    prepared_statements.erase(it);
-    auto user_it = user_to_prepared_statements.find(ps_username);
-    if (user_it != user_to_prepared_statements.end())
-    {
-        user_it->second.erase(handle);
-        if (user_it->second.empty())
-            user_to_prepared_statements.erase(user_it);
-    }
-    auto session_it = prepared_statement_to_session.find(handle);
-    if (session_it != prepared_statement_to_session.end())
-    {
-        auto s_it = session_to_prepared_statements.find(session_it->second);
-        if (s_it != session_to_prepared_statements.end())
-        {
-            s_it->second.erase(handle);
-            if (s_it->second.empty())
-                session_to_prepared_statements.erase(s_it);
-        }
-        prepared_statement_to_session.erase(session_it);
-    }
 }
 
 void CallsData::closeAllPreparedStatements(const String & username, const String & session_id)
 {
     std::lock_guard lock{mutex};
+    bool any_erased = false;
 
-    /// Determine which handles to close.
-    std::unordered_set<String> handles_to_close;
     if (!session_id.empty())
     {
         /// Session-scoped: close only statements in this session that belong to this user.
-        auto s_it = session_to_prepared_statements.find(session_id);
-        if (s_it == session_to_prepared_statements.end())
-            return;
-        for (const auto & handle : s_it->second)
+        auto & by_session = prep_statements.get<BySessionId>();
+        auto [first, last] = by_session.equal_range(session_id);
+        for (auto it = first; it != last;)
         {
-            auto ps_it = prepared_statements.find(handle);
-            if (ps_it != prepared_statements.end() && ps_it->second->username == username)
-                handles_to_close.insert(handle);
+            if (it->username == username)
+            {
+                LOG_DEBUG(log, "Closing prepared statement {} (close-all for user={}, session={})", it->handle, username, session_id);
+                it = by_session.erase(it);
+                any_erased = true;
+            }
+            else
+                ++it;
         }
     }
     else
     {
         /// Session-less: close only statements for this user that have no session association.
-        auto user_it = user_to_prepared_statements.find(username);
-        if (user_it == user_to_prepared_statements.end())
-            return;
-        for (const auto & handle : user_it->second)
+        auto & by_user = prep_statements.get<ByUsername>();
+        auto [first, last] = by_user.equal_range(username);
+        for (auto it = first; it != last;)
         {
-            if (!prepared_statement_to_session.contains(handle))
-                handles_to_close.insert(handle);
-        }
-    }
-
-    for (const auto & handle : handles_to_close)
-    {
-        LOG_DEBUG(log, "Closing prepared statement {} (close-all for user={}, session={})", handle, username, session_id);
-
-        auto ps_it = prepared_statements.find(handle);
-        if (ps_it != prepared_statements.end())
-        {
-            if (ps_it->second->expiration_time)
-                prepared_statements_by_expiration_time.erase(std::make_pair(*ps_it->second->expiration_time, handle));
-            prepared_statements.erase(ps_it);
-        }
-
-        auto user_it = user_to_prepared_statements.find(username);
-        if (user_it != user_to_prepared_statements.end())
-        {
-            user_it->second.erase(handle);
-            if (user_it->second.empty())
-                user_to_prepared_statements.erase(user_it);
-        }
-
-        auto ps_session_it = prepared_statement_to_session.find(handle);
-        if (ps_session_it != prepared_statement_to_session.end())
-        {
-            auto s_it = session_to_prepared_statements.find(ps_session_it->second);
-            if (s_it != session_to_prepared_statements.end())
+            if (it->session_id.empty())
             {
-                s_it->second.erase(handle);
-                if (s_it->second.empty())
-                    session_to_prepared_statements.erase(s_it);
+                LOG_DEBUG(log, "Closing prepared statement {} (close-all for user={}, session={})", it->handle, username, session_id);
+                it = by_user.erase(it);
+                any_erased = true;
             }
-            prepared_statement_to_session.erase(ps_session_it);
+            else
+                ++it;
         }
     }
-    if (!handles_to_close.empty())
+
+    if (any_erased)
         updateNextExpirationTime();
 }
 
 void CallsData::closeSessionPreparedStatements(const String & session_id)
 {
     std::lock_guard lock{mutex};
-    auto it = session_to_prepared_statements.find(session_id);
-    if (it == session_to_prepared_statements.end())
-        return;
-    for (const auto & handle : it->second)
+    auto & by_session = prep_statements.get<BySessionId>();
+    auto [first, last] = by_session.equal_range(session_id);
+    for (auto it = first; it != last;)
     {
-        LOG_DEBUG(log, "Closing prepared statement {} (session {} closed)", handle, session_id);
-        auto ps_it = prepared_statements.find(handle);
-        if (ps_it != prepared_statements.end())
-        {
-            auto user_it = user_to_prepared_statements.find(ps_it->second->username);
-            if (user_it != user_to_prepared_statements.end())
-            {
-                user_it->second.erase(handle);
-                if (user_it->second.empty())
-                    user_to_prepared_statements.erase(user_it);
-            }
-            if (ps_it->second->expiration_time)
-                prepared_statements_by_expiration_time.erase(std::make_pair(*ps_it->second->expiration_time, handle));
-            prepared_statements.erase(ps_it);
-        }
-        prepared_statement_to_session.erase(handle);
+        LOG_DEBUG(log, "Closing prepared statement {} (session {} closed)", it->handle, session_id);
+        it = by_session.erase(it);
     }
-    session_to_prepared_statements.erase(it);
     updateNextExpirationTime();
 }
 
@@ -803,10 +713,13 @@ void CallsData::updateNextExpirationTime()
         auto other_expiration_time = poll_descriptors_by_expiration_time.begin()->first;
         next_expiration_time = next_expiration_time ? std::min(*next_expiration_time, other_expiration_time) : other_expiration_time;
     }
-    if (!prepared_statements_by_expiration_time.empty())
     {
-        auto other_expiration_time = prepared_statements_by_expiration_time.begin()->first;
-        next_expiration_time = next_expiration_time ? std::min(*next_expiration_time, other_expiration_time) : other_expiration_time;
+        auto & by_exp = prep_statements.get<ByExpirationTime>();
+        if (!by_exp.empty() && by_exp.begin()->expiration_time != Timestamp::max())
+        {
+            auto other_expiration_time = by_exp.begin()->expiration_time;
+            next_expiration_time = next_expiration_time ? std::min(*next_expiration_time, other_expiration_time) : other_expiration_time;
+        }
     }
     if (next_expiration_time != expiration_time)
         next_expiration_time_updated.notify_all();

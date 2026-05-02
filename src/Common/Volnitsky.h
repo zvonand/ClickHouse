@@ -195,6 +195,9 @@ namespace VolnitskyTraits
                         if (length_l < 2 || length_r < 2)
                             return false;  /// Some part of the given ngram contains an invalid UTF-8 sequence.
 
+                        if (length_l <= seq_ngram_offset + 1 || length_r <= seq_ngram_offset + 1)
+                            return false;
+
                         chars.c0 = seq_l[seq_ngram_offset];
                         chars.c1 = seq_l[seq_ngram_offset + 1];
                         putNGramBase(n, offset);
@@ -555,26 +558,41 @@ public:
             else
             {
                 /// put all bigrams
+                std::vector<size_t> inserted_cells;
                 auto callback = [this](const VolnitskyTraits::Ngram ngram, const int offset)
                 {
-                    return this->putNGramBase(ngram, offset, this->last);
+                    return this->putNGramBase(ngram, offset, this->last, &inserted_cells);
                 };
 
-                buf += cur_needle_size - sizeof(VolnitskyTraits::Ngram) + 1;
+                const size_t needle_ngrams = cur_needle_size - sizeof(VolnitskyTraits::Ngram) + 1;
 
                 /// this is the condition when we actually need to stop and start searching with known needles
-                if (buf > small_limit)
+                if (buf + needle_ngrams > small_limit)
                     break;
 
-                step = std::min(step, cur_needle_size - sizeof(VolnitskyTraits::Ngram) + 1);
+                bool ok = true;
                 for (auto i = static_cast<int>(cur_needle_size - sizeof(VolnitskyTraits::Ngram)); i >= 0; --i)
                 {
-                    VolnitskyTraits::putNGram<CaseSensitive, ASCII>(
+                    ok = VolnitskyTraits::putNGram<CaseSensitive, ASCII>(
                         reinterpret_cast<const UInt8 *>(cur_needle_data) + i,
                         i + 1,
                         reinterpret_cast<const UInt8 *>(cur_needle_data),
                         cur_needle_size,
                         callback);
+                    if (!ok)
+                        break;
+                }
+
+                if (!ok)
+                {
+                    for (const auto cell_num : inserted_cells)
+                        hash[cell_num].off = 0;
+                    fallback_needles.push_back(last);
+                }
+                else
+                {
+                    buf += needle_ngrams;
+                    step = std::min(step, needle_ngrams);
                 }
             }
             fallback_searchers.emplace_back(reinterpret_cast<const UInt8 *>(cur_needle_data), cur_needle_size);
@@ -717,12 +735,15 @@ public:
         }
     }
 
-    void putNGramBase(const VolnitskyTraits::Ngram ngram, const int offset, const size_t num)
+    void putNGramBase(const VolnitskyTraits::Ngram ngram, const int offset, const size_t num, std::vector<size_t> * inserted_cells = nullptr)
     {
         size_t cell_num = ngram % VolnitskyTraits::hash_size;
 
         while (hash[cell_num].off)
             cell_num = (cell_num + 1) % VolnitskyTraits::hash_size;
+
+        if (inserted_cells)
+            inserted_cells->push_back(cell_num);
 
         hash[cell_num] = {static_cast<VolnitskyTraits::Id>(num), static_cast<VolnitskyTraits::Offset>(offset)};
     }

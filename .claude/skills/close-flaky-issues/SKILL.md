@@ -71,7 +71,7 @@ FORMAT TabSeparatedWithNames
 ```
 
 **Important:**
-- `pull_request_number = 0 OR base_ref = 'master'` filters to master commits and PRs targeting master — fork-PR noise is dropped.
+- `pull_request_number = 0 OR base_ref IN ('master','')` filters to master commits and PRs targeting master — fork-PR noise is dropped. The empty-string case covers older rows where `base_ref` was not populated for direct-master runs.
 - Tests with 0 rows returned have **never** failed on master in the lookback window — those are also closeable.
 - `last_fail` defaults to `1970-01-01` if the test never failed.
 

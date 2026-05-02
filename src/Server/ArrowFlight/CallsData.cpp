@@ -580,7 +580,7 @@ arrow::Result<String> CallsData::createPreparedStatement(PreparedStatementInfo i
 arrow::Result<PreparedStatementInfo> CallsData::getPreparedStatement(const String & handle, const String & username) const
 {
     std::lock_guard lock{mutex};
-    auto & by_handle = prep_statements.get<ByHandle>();
+    const auto & by_handle = prep_statements.get<ByHandle>();
     auto it = by_handle.find(handle);
     if (it == by_handle.end())
         return arrow::Status::KeyError("Prepared statement handle not found");
@@ -624,6 +624,7 @@ void CallsData::closePreparedStatement(const String & handle, const String & use
     if (it->username != username)
         return;
     bool had_expiration = (it->expiration_time != Timestamp::max());
+    LOG_DEBUG(log, "Closing prepared statement {} for user {}", handle, username);
     by_handle.erase(it);
     if (had_expiration)
         updateNextExpirationTime();

@@ -23,6 +23,12 @@ FilterResult filterResultForMatchedRows(ActionsDAG pre_actions_dag, const Action
     if (dagContainsNonReadySet(filter_dag) || dagContainsNonReadySet(pre_actions_dag))
         return FilterResult::UNKNOWN;
 
+    /// Bail out for non-deterministic functions for the same reason as in `filterResultForNotMatchedRows`:
+    /// a single plan-time evaluation of `rand`, `now`, `rowNumberInAllBlocks`, etc. cannot stand in
+    /// for the runtime per-row behaviour, and acting on it would silently change the result of the JOIN.
+    if (dagContainsNonDeterministicFunction(filter_dag) || dagContainsNonDeterministicFunction(pre_actions_dag))
+        return FilterResult::UNKNOWN;
+
     auto combined_dag = ActionsDAG::merge(std::move(pre_actions_dag), filter_dag.clone());
     ActionsDAG::IntermediateExecutionResult combined_dag_input;
 

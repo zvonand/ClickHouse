@@ -3,6 +3,7 @@
 #include <Columns/ColumnSet.h>
 #include <Columns/IColumn.h>
 #include <Functions/FunctionHelpers.h>
+#include <Functions/IFunction.h>
 #include <Processors/QueryPlan/ExpressionStep.h>
 #include <Processors/QueryPlan/FilterStep.h>
 
@@ -89,6 +90,19 @@ bool dagContainsNonReadySet(const ActionsDAG & dag)
     return false;
 }
 
+bool dagContainsNonDeterministicFunction(const ActionsDAG & dag)
+{
+    for (const auto & node : dag.getNodes())
+    {
+        if (node.type == ActionsDAG::ActionType::FUNCTION && node.function_base)
+        {
+            if (!node.function_base->isDeterministic())
+                return true;
+        }
+    }
+    return false;
+}
+
 FilterResult filterResultForNotMatchedRows(
     const ActionsDAG & filter_dag,
     const String & filter_column_name,
@@ -98,6 +112,21 @@ FilterResult filterResultForNotMatchedRows(
 {
     /// If the filter DAG contains IN subquery sets that are not yet built - we cannot evaluate the filter result
     if (dagContainsNonReadySet(filter_dag))
+        return FilterResult::UNKNOWN;
+
+    /// `ActionsDAG::evaluatePartialResult` (called below) routes every function node through
+    /// `IFunction::executeImplDryRun` with `input_rows_count=1`. For non-deterministic functions
+    /// (`rand`, `now`, `rowNumberInAllBlocks`, ...) this single dry-run row is not representative
+    /// of the runtime behaviour: at runtime each row may produce a different value.
+    ///
+    /// Even with a fully-initialized dry-run output (e.g. `rowNumberInAllBlocks::executeImplDryRun`
+    /// returning `[0]`), a filter such as `rowNumberInAllBlocks() = 1` evaluates to FALSE on the
+    /// dry-run row but TRUE for the second runtime row. Without this guard the JOIN-conversion
+    /// optimizer (`tryConvertAnyOuterJoinToInnerJoin` /
+    /// `tryConvertAnyJoinToSemiOrAntiJoin`) concludes the filter is always FALSE for not-matched
+    /// rows and silently converts `ANY OUTER JOIN` to `INNER`/`SEMI`/`ANTI`, dropping rows that
+    /// would have survived. Bail out to `UNKNOWN` so the JOIN is left unchanged.
+    if (dagContainsNonDeterministicFunction(filter_dag))
         return FilterResult::UNKNOWN;
 
     ActionsDAG::IntermediateExecutionResult filter_input;

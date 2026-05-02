@@ -8,14 +8,21 @@
 -- with `skip_materialize=true, allow_unknown_function_arguments=true`. Internally this calls
 -- `IFunction::executeImplDryRun` for every function in the filter DAG.
 --
--- The dry-run override of `rowNumberInAllBlocks` previously returned `ColumnUInt64::create(input_rows_count)`
--- without filling the buffer, so when the optimizer read the result via `getFilterResult` -> `getBool(0)`
--- MemorySanitizer reported a use-of-uninitialized-value. The fix initializes the dry-run output column
--- with zeros at the source (`Functions/rowNumberInAllBlocks.cpp`) so the column produced by the function
--- is fully initialized, which is the contract callers of `executeImplDryRun` rely on.
+-- Two related bugs are covered here:
 --
--- The queries below exercise the partial-evaluation chain with `rowNumberInAllBlocks` and `rand` in the
--- filter and must run cleanly under MemorySanitizer.
+--   1. `MemorySanitizer` `use-of-uninitialized-value`: the previous dry-run override of
+--      `rowNumberInAllBlocks` returned `ColumnUInt64::create(input_rows_count)` without filling
+--      the buffer, so when the optimizer read the result via `getFilterResult` -> `getBool(0)`
+--      MSan reported a use-of-uninitialized-value. Fixed at the source by initializing the
+--      dry-run output column with zeros (`Functions/rowNumberInAllBlocks.cpp`).
+--
+--   2. Soundness: even with an initialized `[0]` output, the optimizer cannot soundly predict
+--      the filter result for non-deterministic functions. For a filter such as
+--      `rowNumberInAllBlocks() = 1`, the dry-run row evaluates to `0 = 1` -> FALSE; the
+--      optimizer then concludes that filter is FALSE for all not-matched rows and converts
+--      `ANY LEFT JOIN` to `SEMI JOIN`, silently dropping unmatched rows that would have
+--      satisfied the filter at runtime. Fixed by bailing out to `FilterResult::UNKNOWN`
+--      when the filter DAG contains any function whose `isDeterministic` returns false.
 
 DROP TABLE IF EXISTS t_l;
 DROP TABLE IF EXISTS t_r;
@@ -35,6 +42,19 @@ FROM t_l ANY LEFT JOIN t_r ON t_l.id = t_r.id
 WHERE rowNumberInAllBlocks() < 100
 ORDER BY t_l.id;
 
+-- ANY LEFT JOIN where the filter is FALSE on the dry-run row (`rowNumberInAllBlocks()` is 0
+-- in dry-run, so `0 = 1` -> FALSE) but TRUE for some row at runtime. The unmatched row must
+-- not be silently dropped by `tryConvertAnyOuterJoinToInnerJoin` /
+-- `tryConvertAnyJoinToSemiOrAntiJoin`. Without the optimizer guard the optimizer converts
+-- the JOIN to SEMI/INNER and the count drops to 0 (silent data loss); with the guard the
+-- JOIN is left as ANY LEFT and exactly one row passes the `rowNumberInAllBlocks() = 1`
+-- filter. We assert the row count rather than the specific row to stay robust under
+-- randomized thread settings (the value of `rowNumberInAllBlocks` depends on per-stream
+-- block ordering).
+SELECT count()
+FROM t_l ANY LEFT JOIN t_r ON t_l.id = t_r.id
+WHERE rowNumberInAllBlocks() = 1;
+
 -- Symmetric ANY RIGHT JOIN -- exercises the right-stream branch of `tryConvertAnyOuterJoinToInnerJoin`.
 DROP TABLE t_l;
 DROP TABLE t_r;
@@ -48,6 +68,13 @@ SELECT t_l.id, t_r.id
 FROM t_l ANY RIGHT JOIN t_r ON t_l.id = t_r.id
 WHERE rowNumberInAllBlocks() < 100
 ORDER BY t_r.id;
+
+-- ANY RIGHT JOIN soundness companion: filter is FALSE on dry-run row (`0 = 1`) but TRUE for
+-- some runtime row. Same reasoning as above; assert the row count rather than the specific
+-- row to remain robust under randomized thread settings.
+SELECT count()
+FROM t_l ANY RIGHT JOIN t_r ON t_l.id = t_r.id
+WHERE rowNumberInAllBlocks() = 1;
 
 -- ANY LEFT JOIN with `rand` in the filter -- another non-deterministic function whose dry-run
 -- output flows into the same partial-evaluation chain. The filter is always true (the modulus is

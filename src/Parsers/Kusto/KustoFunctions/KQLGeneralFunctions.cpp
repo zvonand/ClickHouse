@@ -27,6 +27,11 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+extern const int NOT_IMPLEMENTED;
+}
+
 bool Bin::convertImpl(String & out, IParser::Pos & pos)
 {
     double bin_size;
@@ -591,9 +596,13 @@ bool RowNumber::convertImpl(String & out, IParser::Pos & pos)
     if (start_arg)
         start = std::stoll(*start_arg);
 
-    /// Optional second arg: reset flag (ignored for now - ClickHouse doesn't easily support reset)
-    auto reset_arg = getOptionalArgument(fn_name, pos);
-    (void)reset_arg;
+    /// KQL `row_number(start, restart)` resets the counter when `restart` evaluates to true.
+    /// ClickHouse window functions don't have a corresponding reset construct, so we reject
+    /// this form rather than silently returning a value that ignores the predicate.
+    if (auto reset_arg = getOptionalArgument(fn_name, pos))
+        throw Exception(
+            ErrorCodes::NOT_IMPLEMENTED,
+            "KQL function `row_number` with the optional `restart` predicate is not supported");
 
     out = fmt::format("(row_number() OVER () + {} - 1)", start);
     return true;

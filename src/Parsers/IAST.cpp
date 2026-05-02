@@ -372,8 +372,10 @@ void IAST::format(WriteBuffer & ostr, const FormatSettings & settings) const
         ostr.write('(');
         frame.need_parens = false;
         /// We are now inside our own parens, so the parser-ambiguity checks that fire when
-        /// formatting directly as a multi-argument function argument no longer apply.
+        /// formatting directly as a multi-argument function argument or as a non-first list
+        /// element no longer apply.
         frame.current_function = nullptr;
+        frame.list_element_index = 0;
     }
     formatImpl(ostr, settings, state, std::move(frame));
     if (parens)
@@ -389,6 +391,7 @@ void IAST::format(WriteBuffer & ostr, const FormatSettings & settings, FormatSta
         ostr.write('(');
         frame.need_parens = false;
         frame.current_function = nullptr;
+        frame.list_element_index = 0;
     }
     formatImpl(ostr, settings, state, std::move(frame));
     if (parens)
@@ -404,6 +407,7 @@ void IAST::format(FormattingBuffer out) const
         out.ostr.write('(');
         out.frame.need_parens = false;
         out.frame.current_function = nullptr;
+        out.frame.list_element_index = 0;
     }
     formatImpl(out.ostr, out.settings, out.state, out.frame);
     if (parens)

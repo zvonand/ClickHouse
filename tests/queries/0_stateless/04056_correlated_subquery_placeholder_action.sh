@@ -63,7 +63,8 @@ fi
 # Without the fix, `buildSetInplace` / `buildOrderedSetInplace` would attempt to execute
 # this plan and throw `Trying to execute PLACEHOLDER action`.
 # With the fix, in-place set construction is skipped for correlated plans, so the query
-# must either succeed or fail with a clear `NOT_IMPLEMENTED` decorrelation error.
+# must either succeed (with the expected empty result for this data set, since no `t2.y`
+# matches any `t1.b`) or fail with a clear `NOT_IMPLEMENTED` decorrelation error.
 # Any other outcome must fail the test.
 OUTPUT=$($CLICKHOUSE_CLIENT -q "
     SET enable_analyzer = 1;
@@ -76,7 +77,18 @@ if echo "$OUTPUT" | grep -q "Trying to execute PLACEHOLDER action"; then
     echo "FAIL: correlated IN subquery triggered PLACEHOLDER execution"
     echo "$OUTPUT" >&2
     exit 1
-elif [ "$RC" -eq 0 ] || echo "$OUTPUT" | grep -qE "Code: 48|NOT_IMPLEMENTED|Cannot decorrelate"; then
+elif [ "$RC" -eq 0 ]; then
+    # Success path: for this data set no row of t1.b matches any t2.y, so the result
+    # must be empty. A non-empty result here would be a semantic regression.
+    TRIMMED=$(echo "$OUTPUT" | tr -d '[:space:]')
+    if [ -z "$TRIMMED" ]; then
+        echo "OK: correlated IN subquery did not trigger PLACEHOLDER execution"
+    else
+        echo "FAIL: correlated IN subquery returned unexpected rows"
+        echo "$OUTPUT" >&2
+        exit 1
+    fi
+elif echo "$OUTPUT" | grep -qE "Code: 48|NOT_IMPLEMENTED|Cannot decorrelate"; then
     echo "OK: correlated IN subquery did not trigger PLACEHOLDER execution"
 else
     echo "FAIL: unexpected output (rc=$RC)"

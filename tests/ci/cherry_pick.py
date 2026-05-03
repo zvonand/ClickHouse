@@ -52,9 +52,11 @@ from ssh import SSHKey
 from synchronizer_utils import SYNC_PR_PREFIX
 
 
-# Login prefixes (lowercased) of ClickHouse machine accounts. They are typed as
-# regular users by GitHub, not "Bot", so we have to match them by login.
-_AUTOMATED_LOGIN_PREFIXES = ("robot-clickhouse", "clickhouse-gh")
+# Login prefixes (lowercased) of automated accounts. They are typed as regular
+# users by GitHub, not "Bot", so we have to match them by login. `robot-` is
+# broad on purpose — it covers `robot-clickhouse`, `robot-clickhouse-ci-1`,
+# and any other `robot-…` machine account.
+_AUTOMATED_LOGIN_PREFIXES = ("robot-", "clickhouse-gh")
 
 
 def _is_bot_actor(actor) -> bool:

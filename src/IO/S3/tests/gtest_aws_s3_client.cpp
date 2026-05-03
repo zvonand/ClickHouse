@@ -54,9 +54,13 @@ namespace DB::S3RequestSetting
 static void restoreEnvVarForAwsS3ClientTests(const char * name, bool had_value, const std::string & saved_value)
 {
     if (had_value)
+    {
         (void)::setenv(name, saved_value.c_str(), 1); // NOLINT(concurrency-mt-unsafe)
+    }
     else
-        (void)::setenv(name, "", 1); // NOLINT(concurrency-mt-unsafe)
+    {
+        (void)::unsetenv(name); // NOLINT(concurrency-mt-unsafe)
+    }
 }
 
 String getSSEAndSignedHeaders(const Poco::Net::MessageHeader & message_header)
@@ -606,8 +610,8 @@ TEST(IOTestAwsS3Client, WebIdentityConfiguredFromEnvironment)
 
     const char * prev_role = std::getenv(k_role); // NOLINT(concurrency-mt-unsafe)
     const char * prev_token = std::getenv(k_token); // NOLINT(concurrency-mt-unsafe)
-    const bool had_role = prev_role && *prev_role;
-    const bool had_token = prev_token && *prev_token;
+    const bool had_role = prev_role != nullptr;
+    const bool had_token = prev_token != nullptr;
     const std::string saved_role = had_role ? std::string(prev_role) : std::string();
     const std::string saved_token = had_token ? std::string(prev_token) : std::string();
 
@@ -627,8 +631,8 @@ TEST(IOTestAwsS3Client, WebIdentityConfiguredFromKmsRoleOverrideAndTokenFile)
 
     const char * prev_role = std::getenv(k_role); // NOLINT(concurrency-mt-unsafe)
     const char * prev_token = std::getenv(k_token); // NOLINT(concurrency-mt-unsafe)
-    const bool had_role = prev_role && *prev_role;
-    const bool had_token = prev_token && *prev_token;
+    const bool had_role = prev_role != nullptr;
+    const bool had_token = prev_token != nullptr;
     const std::string saved_role = had_role ? std::string(prev_role) : std::string();
     const std::string saved_token = had_token ? std::string(prev_token) : std::string();
 

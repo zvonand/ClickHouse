@@ -42,6 +42,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         addSettingsChanges(settings_changes_history, "26.5",
         {
             {"predicate_statistics_sample_rate", 0, 0, "New setting to collect predicate selectivity statistics into system.predicate_statistics_log"},
+            {"refreshable_materialized_view_keeper_grace_period", 0, 40'000, "New setting controlling how long coordinated refreshable materialized view replicas wait for a peer to reconnect to keeper before assuming it crashed and starting another refresh."},
         });
         addSettingsChanges(settings_changes_history, "26.4",
         {

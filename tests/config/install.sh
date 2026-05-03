@@ -353,6 +353,7 @@ elif [[ "$USE_AZURE_STORAGE_FOR_MERGE_TREE" == "1" ]]; then
     else
         ln -sf $SRC_PATH/config.d/azure_storage_policy_by_default.xml $DEST_SERVER_PATH/config.d/
     fi
+    ln -sf $SRC_PATH/config.d/azure_storage_connection_limits.xml $DEST_SERVER_PATH/config.d/
 fi
 
 if [[ "$EXPORT_S3_STORAGE_POLICIES" == "1" ]]; then

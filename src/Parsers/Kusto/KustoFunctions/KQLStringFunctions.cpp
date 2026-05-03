@@ -189,10 +189,15 @@ bool Extract::convertImpl(String & out, IParser::Pos & pos)
     }
     else
     {
-        /// Use extractAllGroupsHorizontal to get specific capture group
-        /// Wrap source in ifNull to handle Nullable inputs
+        /// Use extractAllGroupsHorizontal to get specific capture group.
+        /// `extractAllGroupsHorizontal` returns Array(Array(String)) shaped as [group][match],
+        /// so the outer length is the number of groups and the inner length is the number of
+        /// matches for that group. Both must be checked: a regex may contain group `n` yet the
+        /// input may produce zero matches for it, in which case `g[n][1]` would index an empty array.
         out = fmt::format(
-            "if(length(extractAllGroupsHorizontal(ifNull(toString({0}), ''), {1})) >= {2}, extractAllGroupsHorizontal(ifNull(toString({0}), ''), {1})[{2}][1], '')",
+            "if(length(extractAllGroupsHorizontal(ifNull(toString({0}), ''), {1})) >= {2} "
+            "AND length(extractAllGroupsHorizontal(ifNull(toString({0}), ''), {1})[{2}]) >= 1, "
+            "extractAllGroupsHorizontal(ifNull(toString({0}), ''), {1})[{2}][1], '')",
             source, regex, capture_group);
     }
 

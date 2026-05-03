@@ -82,6 +82,59 @@ FROM (
 )
 WHERE explain LIKE '%Algorithm:%';
 
+-- The remaining cases lock in the `LEFT JOIN ... USING (key)` strictness paths
+-- (`allowed_left` accepts `ANY`/`ALL`/`SEMI`/`ANTI` in `tryDirectJoin`). Each case
+-- triggers the same `tryDirectJoin` -> `StorageEmbeddedRocksDB::getByKeys` path
+-- that crashed for the `INNER JOIN` cases above; without the fix they all abort
+-- with the "Primary key type mismatch" exception.
+
+-- Case 5: LEFT JOIN (default `ALL` strictness) with mismatched type.
+SELECT 'case 5 LEFT JOIN legacy planner';
+SELECT key, value FROM (SELECT k AS key FROM t_uint64_nullable) AS t
+LEFT JOIN rdb_pk_type USING (key)
+ORDER BY key ASC NULLS FIRST
+SETTINGS query_plan_use_new_logical_join_step = 0;
+
+-- Case 6: LEFT ANY JOIN with mismatched type — exercises the `Any` strictness path
+-- (the canonical strictness for direct key-value lookups).
+SELECT 'case 6 LEFT ANY JOIN legacy planner';
+SELECT key, value FROM (SELECT k AS key FROM t_uint64_nullable) AS t
+LEFT ANY JOIN rdb_pk_type USING (key)
+ORDER BY key ASC NULLS FIRST
+SETTINGS query_plan_use_new_logical_join_step = 0;
+
+-- Case 7: LEFT SEMI JOIN with mismatched type — exercises the `Semi` strictness path.
+SELECT 'case 7 LEFT SEMI JOIN legacy planner';
+SELECT key FROM (SELECT k AS key FROM t_uint64_nullable) AS t
+LEFT SEMI JOIN rdb_pk_type USING (key)
+ORDER BY key ASC NULLS FIRST
+SETTINGS query_plan_use_new_logical_join_step = 0;
+
+-- Case 8: LEFT ANTI JOIN with mismatched type — exercises the `Anti` strictness path.
+SELECT 'case 8 LEFT ANTI JOIN legacy planner';
+SELECT key FROM (SELECT k AS key FROM t_uint64_nullable) AS t
+LEFT ANTI JOIN rdb_pk_type USING (key)
+ORDER BY key ASC NULLS FIRST
+SETTINGS query_plan_use_new_logical_join_step = 0;
+
+-- Case 9: matching types LEFT JOIN — `DirectKeyValueJoin` must still be picked
+-- so the type check is not overly aggressive on the LEFT path either.
+SELECT 'case 9 LEFT JOIN legacy planner (matching types, direct join still picked)';
+SELECT key, value FROM (SELECT k AS key FROM t_uint32) AS t
+LEFT JOIN rdb_pk_type USING (key)
+ORDER BY key
+SETTINGS query_plan_use_new_logical_join_step = 0;
+
+SELECT 'case 9 explain shows DirectKeyValueJoin';
+SELECT trim(explain)
+FROM (
+    EXPLAIN actions = 1
+    SELECT * FROM (SELECT k AS key FROM t_uint32) AS t
+    LEFT JOIN rdb_pk_type USING (key)
+    SETTINGS query_plan_use_new_logical_join_step = 0
+)
+WHERE explain LIKE '%Algorithm:%';
+
 DROP TABLE rdb_pk_type;
 DROP TABLE t_uint64_nullable;
 DROP TABLE t_int64;

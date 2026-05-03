@@ -1,8 +1,14 @@
+-- Tags: no-random-settings, no-random-merge-tree-settings
 -- Regression test: `max_bytes_before_external_join` must be enforced for
 -- thresholds below the value that was previously hardcoded as a floor in
 -- `GraceHashJoin::hasMemoryOverflow`. With a low threshold the build-side
 -- bucket of the in-memory join inside `GraceHashJoin` would otherwise grow
 -- past `max_memory_usage` until allocation tracking aborts the query.
+--
+-- The `max_memory_usage` budget is tight (160 MiB), so unrelated random
+-- per-test settings (filesystem prefetch, parallel marshalling, etc.) can
+-- inflate the baseline above the cap and trigger `MEMORY_LIMIT_EXCEEDED`
+-- spuriously. Pin settings to keep this regression deterministic.
 
 SET max_memory_usage = '160Mi';
 SET max_bytes_before_external_join = '16Mi';

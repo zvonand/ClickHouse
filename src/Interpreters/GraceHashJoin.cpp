@@ -782,14 +782,34 @@ void GraceHashJoin::addBlockToJoinImpl(Block block)
                 return;
         }
         auto prev_keys_num = hash_join->getTotalRowCount();
+        size_t pre_total_bytes = hash_join->getTotalByteCount();
 
-        hash_join->addBlockToJoin(current_block, /* check_limits = */ false);
-        size_t hash_join_total_keys = hash_join->getAndSetRightTableKeys();
-        size_t hash_join_total_bytes = hash_join->getTotalByteCount();
-        if (!hasMemoryOverflow(hash_join_total_keys, hash_join_total_bytes))
-            return;
+        /// Pre-check: predict whether adding this block would push us past the threshold.
+        /// The inner `HashJoin::addBlockToJoin` grows its hash buffer in power-of-two steps.
+        /// Doubling from X to 2X transiently holds 3X (old buffer + new buffer being filled),
+        /// so a post-add check can race with that doubling and observe the OOM only as an
+        /// allocator exception. By rehashing buckets BEFORE the inner add when the projected
+        /// size already triggers `hasMemoryOverflow`, we avoid the doubling altogether for
+        /// the doomed call. `block.allocatedBytes()` is a lower bound on what the hash table
+        /// will actually hold (which adds cell overhead and load-factor padding), but it is
+        /// enough for the pre-check to fire one rehash earlier than the post-check would.
+        const size_t projected_keys = prev_keys_num + current_block.rows();
+        const size_t projected_bytes = pre_total_bytes + current_block.allocatedBytes();
 
-        current_block = {};
+        bool block_added = false;
+        if (!hasMemoryOverflow(projected_keys, projected_bytes))
+        {
+            hash_join->addBlockToJoin(current_block, /* check_limits = */ false);
+            block_added = true;
+            size_t hash_join_total_keys = hash_join->getAndSetRightTableKeys();
+            size_t hash_join_total_bytes = hash_join->getTotalByteCount();
+            if (!hasMemoryOverflow(hash_join_total_keys, hash_join_total_bytes))
+                return;
+        }
+
+        if (block_added)
+            current_block = {};
+        /// else: we did not add the block, so we must include it when re-scattering after rehash.
 
         // Must use the latest buckets snapshot in case that it has been rehashed by other threads.
         buckets_snapshot = rehashBuckets();
@@ -799,7 +819,15 @@ void GraceHashJoin::addBlockToJoinImpl(Block block)
 
         {
             Blocks current_blocks;
-            current_blocks.reserve(right_blocks.size());
+            current_blocks.reserve(right_blocks.size() + 1);
+
+            if (current_block.rows() > 0)
+            {
+                Blocks blocks = JoinCommon::scatterBlockByHash(right_key_names, current_block, buckets_snapshot.size());
+                flushBlocksToBuckets<JoinTableSide::Right>(blocks, buckets_snapshot, bucket_index);
+                current_blocks.emplace_back(std::move(blocks[bucket_index]));
+            }
+
             for (const auto & right_block : right_blocks)
             {
                 Blocks blocks = JoinCommon::scatterBlockByHash(right_key_names, right_block, buckets_snapshot.size());

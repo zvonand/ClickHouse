@@ -275,7 +275,7 @@ UInt64 ColumnStatistics::getNullCount() const
 {
     auto it = stats.find(StatisticsType::NullCount);
     if (it == stats.end())
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "getNullCount called but NullCount statistics not present");
+        return 0;
     return assert_cast<const StatisticsNullCount &>(*it->second).getNullCount();
 }
 

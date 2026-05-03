@@ -422,12 +422,18 @@ static bool preprocessUnionJoin(IParser::Pos & pos, ASTPtr & node, Expected & ex
     ++scan_pos; /// skip union/join keyword
 
     /// For join: parse kind=X. KQL keywords are case-insensitive.
+    /// Validate every token before reading: malformed inputs like `| join kind`
+    /// or `| join kind =` must fail cleanly instead of dereferencing past end-of-stream.
     String join_kind;
     if (op_type == "join" && isValidKQLPos(scan_pos)
         && Poco::toLower(String(scan_pos->begin, scan_pos->end)) == "kind")
     {
         ++scan_pos; /// skip kind
+        if (!isValidKQLPos(scan_pos) || scan_pos->type != TokenType::Equals)
+            return false;
         ++scan_pos; /// skip =
+        if (!isValidKQLPos(scan_pos))
+            return false;
         join_kind = Poco::toLower(String(scan_pos->begin, scan_pos->end));
         ++scan_pos; /// skip kind value
     }

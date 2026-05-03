@@ -58,14 +58,15 @@ from synchronizer_utils import SYNC_PR_PREFIX
 # and any other `robot-…` machine account.
 _AUTOMATED_LOGIN_PREFIXES = ("robot-", "clickhouse-gh")
 
+# Explicit allowlist of automated AI agent accounts that register as regular
+# GitHub users (no `[bot]` suffix and `type` != "Bot"). Add new accounts here
+# as they appear; do not match by suffix because that would treat human
+# usernames such as `kai` as bots and silently skip required backports.
+_AUTOMATED_LOGINS = frozenset({"groeneai", "clickgapai"})
+
 
 def _is_bot_actor(actor) -> bool:
-    """Return True if `actor` is a GitHub App or a known automated account.
-
-    AI agents that operate on the repo (e.g. `groeneai`, `clickgapai`) register
-    as regular GitHub users, so we additionally treat any login ending in `ai`
-    as automated.
-    """
+    """Return True if `actor` is a GitHub App or a known automated account."""
     if actor is None:
         return False
     if getattr(actor, "type", None) == "Bot":
@@ -73,7 +74,7 @@ def _is_bot_actor(actor) -> bool:
     login = (getattr(actor, "login", "") or "").lower()
     if login.endswith("[bot]"):
         return True
-    if login.endswith("ai"):
+    if login in _AUTOMATED_LOGINS:
         return True
     return any(login.startswith(prefix) for prefix in _AUTOMATED_LOGIN_PREFIXES)
 

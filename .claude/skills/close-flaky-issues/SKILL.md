@@ -52,6 +52,10 @@ The trailing `?` after `capture` is required: without it, an issue with a `null`
 
 Run **one** batch query against `play.clickhouse.com` for all extracted test names. The `checks` table is public-readable via the `play` user.
 
+**Before running the query, guard against an empty list.** If `jq` extracted no non-empty test names (zero open `flaky test` issues, or all bodies missing `Test name:`), `test_name IN ()` is invalid SQL and aborts the sweep. Skip the query in that case and report "nothing to close".
+
+**Escape single quotes in test names before interpolation.** Per ClickHouse SQL rules, a literal `'` inside a string literal is written as `''`. Names that contain a quote (e.g. parametrized integration tests like `test_foo[a'b]`) will otherwise produce invalid SQL or, worse, parse as a different list. Apply `s/'/''/g` to each extracted name before joining them with `, `.
+
 ```bash
 curl -sS 'https://play.clickhouse.com/?user=play' --data-binary "
 SELECT test_name,

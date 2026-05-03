@@ -538,6 +538,15 @@ public:
             file_path = fs::path(path_info->user_files_absolute_path_string) / file_path;
         file_path = fs::absolute(file_path).lexically_normal();
 
+        /// Strip trailing separator(s) so `filename()` and `parent_path()` split correctly for the root row.
+        /// E.g. `/foo/bar/` → `/foo/bar`, but keep `/` as-is.
+        {
+            String s = file_path.string();
+            while (s.size() > 1 && s.back() == fs::path::preferred_separator)
+                s.pop_back();
+            file_path = fs::path(s);
+        }
+
         if (path_info->need_check && !fileOrSymlinkPathStartsWith(file_path.string(), path_info->user_files_absolute_path_string))
             throw Exception(ErrorCodes::DATABASE_ACCESS_DENIED, "Path {} is not inside user_files {}",
                 file_path.string(), path_info->user_files_absolute_path_string);

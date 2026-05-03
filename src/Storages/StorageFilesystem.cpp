@@ -73,6 +73,9 @@ struct QueueEntry
 {
     fs::directory_entry entry;
     UInt16 depth;
+    /// If false, the entry is reported as a row but not traversed.
+    /// Used for directory symlinks whose canonicalization fails (e.g. cycles).
+    bool expand = true;
 };
 
 /// Compute the output depth from internal traversal depth.
@@ -273,6 +276,9 @@ private:
     /// (a single thread cannot both push and pop simultaneously).
     void expandDirectory(const QueueEntry & queue_entry)
     {
+        if (!queue_entry.expand)
+            return;
+
         const auto & file = queue_entry.entry;
         std::error_code ec;
 
@@ -297,27 +303,38 @@ private:
                     continue;
                 }
 
+                bool expand = true;
                 if (child.is_directory(ec) && child.is_symlink(ec))
                 {
                     std::error_code canon_ec;
                     auto canonical = fs::canonical(child_path, canon_ec);
 
-                    /// Use canonical path if available, otherwise fall back to the
-                    /// lexically-normalized path. Without this fallback, symlink cycles
-                    /// that cause canonical() to fail (ELOOP) would never be added to
-                    /// `visited`, leading to infinite traversal.
-                    String visited_key = canon_ec ? child_path.string() : canonical.string();
-
-                    std::lock_guard lock(path_info->visited_mutex);
-                    if (!path_info->visited.emplace(std::move(visited_key)).second)
-                        continue;
+                    if (canon_ec)
+                    {
+                        /// Cannot resolve the symlink target (e.g. cycle, ELOOP, broken target).
+                        /// Report the symlink as a row but do not traverse into it; otherwise
+                        /// `directory_iterator` would keep producing fresh paths inside the
+                        /// cycle (`a/a/a/...`) and the visited check on lexically-normal paths
+                        /// would never converge.
+                        LOG_DEBUG(getLogger("StorageFilesystem"),
+                            "Cannot canonicalize symlink {}: {}, not traversing",
+                            child_path.string(), canon_ec.message());
+                        expand = false;
+                    }
+                    else
+                    {
+                        std::lock_guard lock(path_info->visited_mutex);
+                        if (!path_info->visited.emplace(canonical.string()).second)
+                            continue;
+                    }
                 }
 
                 path_info->in_flight.fetch_add(1);
-                if (!path_info->queue.tryPush(QueueEntry{child, static_cast<UInt16>(queue_entry.depth + 1)}))
+                QueueEntry new_entry{child, static_cast<UInt16>(queue_entry.depth + 1), expand};
+                if (!path_info->queue.tryPush(new_entry))
                 {
                     /// Queue full — store locally to avoid deadlock.
-                    local_overflow.emplace_back(QueueEntry{child, static_cast<UInt16>(queue_entry.depth + 1)});
+                    local_overflow.emplace_back(std::move(new_entry));
                 }
             }
         }

@@ -58,7 +58,12 @@ _AUTOMATED_LOGIN_PREFIXES = ("robot-clickhouse", "clickhouse-gh")
 
 
 def _is_bot_actor(actor) -> bool:
-    """Return True if `actor` is a GitHub App or a known automated account."""
+    """Return True if `actor` is a GitHub App or a known automated account.
+
+    AI agents that operate on the repo (e.g. `groeneai`, `clickgapai`) register
+    as regular GitHub users, so we additionally treat any login ending in `ai`
+    as automated.
+    """
     if actor is None:
         return False
     if getattr(actor, "type", None) == "Bot":
@@ -66,35 +71,28 @@ def _is_bot_actor(actor) -> bool:
     login = (getattr(actor, "login", "") or "").lower()
     if login.endswith("[bot]"):
         return True
+    if login.endswith("ai"):
+        return True
     return any(login.startswith(prefix) for prefix in _AUTOMATED_LOGIN_PREFIXES)
 
 
 def _bot_added_labels(pr: PullRequest, labels_of_interest: Iterable[str]) -> set:
     """Return the subset of `labels_of_interest` whose most recent `labeled`
-    event on `pr` was performed by a bot. Labels we cannot attribute (e.g.
-    because the events API is unreachable) are not returned, so they keep
-    their default human-added treatment.
+    event on `pr` was performed by a bot. Errors fetching events are not
+    swallowed: the caller must fail closed (skip backporting this PR) rather
+    than silently treat labels as human-added.
     """
     labels_of_interest = set(labels_of_interest)
     if not labels_of_interest:
         return set()
     last_actor = {}
-    try:
-        for event in pr.as_issue().get_events():
-            if event.event != "labeled":
-                continue
-            label = getattr(event, "label", None)
-            if label is None or label.name not in labels_of_interest:
-                continue
-            last_actor[label.name] = event.actor
-    except Exception as exc:  # pylint: disable=broad-except
-        logging.warning(
-            "Could not fetch label events for PR #%s, treating must-backport "
-            "labels as human-added: %s",
-            pr.number,
-            exc,
-        )
-        return set()
+    for event in pr.as_issue().get_events():
+        if event.event != "labeled":
+            continue
+        label = getattr(event, "label", None)
+        if label is None or label.name not in labels_of_interest:
+            continue
+        last_actor[label.name] = event.actor
     return {name for name, actor in last_actor.items() if _is_bot_actor(actor)}
 
 

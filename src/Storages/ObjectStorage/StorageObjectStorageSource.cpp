@@ -88,7 +88,6 @@ namespace Setting
     extern const SettingsBool table_engine_read_through_distributed_cache;
     extern const SettingsUInt64 s3_path_filter_limit;
     extern const SettingsBool use_parquet_metadata_cache;
-    extern const SettingsBool input_format_parquet_use_native_reader_v3;
 }
 
 namespace ErrorCodes
@@ -665,7 +664,8 @@ StorageObjectStorageSource::ReaderHolder StorageObjectStorageSource::createReade
                 object_info->setObjectMetadata(object_storage->getObjectMetadata(path, with_tags));
         }
 
-        if (query_settings.skip_empty_files && object_info->getObjectMetadata()->size_bytes == 0)
+        if (query_settings.skip_empty_files && object_info->getObjectMetadata()->size_bytes == 0
+            && object_info->getObjectMetadata()->is_size_known)
             continue;
 
         if (query_condition_cache && !object_info->file_bucket_info)

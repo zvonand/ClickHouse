@@ -685,10 +685,25 @@ void ConditionSelectivityEstimator::RPNElement::finalize(const ColumnEstimators 
 
     for (const auto & [column_name, ranges] : column_not_ranges)
     {
+        Float64 not_ranges_selectivity;
         if (const auto * est = get_estimator(column_name))
-            estimate_results.emplace(column_name, est->estimateNotRanges(ranges));
+            not_ranges_selectivity = est->estimateNotRanges(ranges);
         else
-            estimate_results.emplace(column_name, 1.0 - estimate_unknown_ranges(ranges));
+            not_ranges_selectivity = 1.0 - estimate_unknown_ranges(ranges);
+
+        auto it = estimate_results.find(column_name);
+        if (it == estimate_results.end())
+        {
+            estimate_results.emplace(column_name, not_ranges_selectivity);
+        }
+        else if (function == FUNCTION_AND)
+        {
+            it->second *= not_ranges_selectivity;
+        }
+        else /// FUNCTION_OR or FUNCTION_IN_RANGE
+        {
+            it->second = 1.0 - (1.0 - it->second) * (1.0 - not_ranges_selectivity);
+        }
     }
 
     if (function == FUNCTION_AND)

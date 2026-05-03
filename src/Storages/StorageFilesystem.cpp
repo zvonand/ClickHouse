@@ -402,12 +402,23 @@ private:
         /// Modification time.
         if (columns_map.contains("modification_time"))
         {
-            auto file_time = fs::last_write_time(file.path(), ec);
-            if (!ec)
+            /// Don't follow symlinks: a symlink entry has `type='symlink'` and should report NULL,
+            /// matching how `size` and `content` are filled.
+            auto status = file.symlink_status(ec);
+            if (!ec && status.type() != fs::file_type::symlink)
             {
-                auto sys_time = std::chrono::file_clock::to_sys(file_time);
-                auto us = std::chrono::duration_cast<std::chrono::microseconds>(sys_time.time_since_epoch()).count();
-                columns_map["modification_time"]->insert(DecimalField<DateTime64>(us, 6));
+                auto file_time = fs::last_write_time(file.path(), ec);
+                if (!ec)
+                {
+                    auto sys_time = std::chrono::file_clock::to_sys(file_time);
+                    auto us = std::chrono::duration_cast<std::chrono::microseconds>(sys_time.time_since_epoch()).count();
+                    columns_map["modification_time"]->insert(DecimalField<DateTime64>(us, 6));
+                }
+                else
+                {
+                    columns_map["modification_time"]->insertDefault();
+                    ec.clear();
+                }
             }
             else
             {
@@ -444,8 +455,10 @@ private:
                 continue;
             if (!cached_status)
             {
-                cached_status = file.status(ec);
-                if (ec)
+                /// Use `symlink_status` so we don't follow symlinks: a symlink entry should report NULL,
+                /// matching how `size`, `content`, and `modification_time` are filled.
+                cached_status = file.symlink_status(ec);
+                if (ec || cached_status->type() == fs::file_type::symlink)
                 {
                     for (const auto & [cn, _] : permissions_columns)
                         if (columns_map.contains(cn))

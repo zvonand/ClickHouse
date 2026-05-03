@@ -402,23 +402,12 @@ private:
         /// Modification time.
         if (columns_map.contains("modification_time"))
         {
-            /// Don't follow symlinks: a symlink entry has `type='symlink'` and should report NULL,
-            /// matching how `size` and `content` are filled.
-            auto status = file.symlink_status(ec);
-            if (!ec && status.type() != fs::file_type::symlink)
+            auto file_time = fs::last_write_time(file.path(), ec);
+            if (!ec)
             {
-                auto file_time = fs::last_write_time(file.path(), ec);
-                if (!ec)
-                {
-                    auto sys_time = std::chrono::file_clock::to_sys(file_time);
-                    auto us = std::chrono::duration_cast<std::chrono::microseconds>(sys_time.time_since_epoch()).count();
-                    columns_map["modification_time"]->insert(DecimalField<DateTime64>(us, 6));
-                }
-                else
-                {
-                    columns_map["modification_time"]->insertDefault();
-                    ec.clear();
-                }
+                auto sys_time = std::chrono::file_clock::to_sys(file_time);
+                auto us = std::chrono::duration_cast<std::chrono::microseconds>(sys_time.time_since_epoch()).count();
+                columns_map["modification_time"]->insert(DecimalField<DateTime64>(us, 6));
             }
             else
             {
@@ -455,10 +444,8 @@ private:
                 continue;
             if (!cached_status)
             {
-                /// Use `symlink_status` so we don't follow symlinks: a symlink entry should report NULL,
-                /// matching how `size`, `content`, and `modification_time` are filled.
-                cached_status = file.symlink_status(ec);
-                if (ec || cached_status->type() == fs::file_type::symlink)
+                cached_status = file.status(ec);
+                if (ec)
                 {
                     for (const auto & [cn, _] : permissions_columns)
                         if (columns_map.contains(cn))
@@ -537,15 +524,6 @@ public:
         if (file_path.is_relative())
             file_path = fs::path(path_info->user_files_absolute_path_string) / file_path;
         file_path = fs::absolute(file_path).lexically_normal();
-
-        /// Strip trailing separator(s) so `filename()` and `parent_path()` split correctly for the root row.
-        /// E.g. `/foo/bar/` → `/foo/bar`, but keep `/` as-is.
-        {
-            String s = file_path.string();
-            while (s.size() > 1 && s.back() == fs::path::preferred_separator)
-                s.pop_back();
-            file_path = fs::path(s);
-        }
 
         if (path_info->need_check && !fileOrSymlinkPathStartsWith(file_path.string(), path_info->user_files_absolute_path_string))
             throw Exception(ErrorCodes::DATABASE_ACCESS_DENIED, "Path {} is not inside user_files {}",

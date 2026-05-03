@@ -35,13 +35,15 @@ json_escape() {
 
 # Write result on any exit to ensure logs are always uploaded as artifacts
 write_result() {
-    local status="${OVERALL_STATUS:-error}"
+    # Praktika's Result.Status uses uppercase tokens (OK / FAIL / ERROR);
+    # any other value is rendered as "completed but unknown" in the report.
+    local status="${OVERALL_STATUS:-ERROR}"
     local info
     if [ -n "${RESULT_INFO:-}" ]; then
         info="$RESULT_INFO"
-    elif [ "$status" = "success" ]; then
+    elif [ "$status" = "OK" ]; then
         info=""
-    elif [ "$status" = "failure" ]; then
+    elif [ "$status" = "FAIL" ]; then
         info="Some SQLancer tests failed"
     else
         info="Script terminated unexpectedly"
@@ -97,7 +99,7 @@ write_result() {
 # Initialize variables used by the trap handler
 TEST_RESULTS=()
 ATTACHED_FILES_ARRAY=()
-OVERALL_STATUS="error"
+OVERALL_STATUS="ERROR"
 RESULT_INFO=""
 
 trap write_result EXIT
@@ -124,7 +126,7 @@ NUM_THREADS=10
 TESTS=( "TLPGroupBy" "TLPHaving" "TLPWhere" "TLPDistinct" "TLPAggregate" "NoREC" )
 echo "${TESTS[@]}"
 
-OVERALL_STATUS=success
+OVERALL_STATUS=OK
 
 for TEST in "${TESTS[@]}"; do
     echo "$TEST"
@@ -139,7 +141,7 @@ for TEST in "${TESTS[@]}"; do
         if [[ $(wget -q 'localhost:8123' -O- 2>/dev/null) != 'Ok.' ]]; then
             echo "Server crashed during $TEST"
             TEST_RESULTS+=("${TEST},ERROR,Server crashed during test")
-            OVERALL_STATUS="failure"
+            OVERALL_STATUS="FAIL"
             RESULT_INFO="Server crashed during $TEST"
             break
         fi
@@ -150,16 +152,16 @@ for TEST in "${TESTS[@]}"; do
             # Collapse to single line; full JSON escaping is done in write_result
             assertion_error_clean="$(printf '%s' "$assertion_error" | tr '\n' ' ')"
             TEST_RESULTS+=("${TEST},FAIL,${assertion_error_clean}")
-            OVERALL_STATUS="failure"
+            OVERALL_STATUS="FAIL"
         elif [ "$java_exit" -ne 0 ]; then
             TEST_RESULTS+=("${TEST},ERROR,SQLancer exited with code $java_exit")
-            OVERALL_STATUS="failure"
+            OVERALL_STATUS="FAIL"
         else
             TEST_RESULTS+=("${TEST},OK,")
         fi
     else
         TEST_RESULTS+=("${TEST},ERROR,Server is not responding")
-        OVERALL_STATUS="failure"
+        OVERALL_STATUS="FAIL"
         RESULT_INFO="Server is not responding before $TEST"
         break
     fi

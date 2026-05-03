@@ -93,9 +93,26 @@ bool ParserKQLUnion::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     auto tables = make_intrusive<ASTTablesInSelectQuery>();
     tables->children.emplace_back(table_element);
 
-    /// Reset the select query
+    /// Reset the select query.
+    /// We rebuild the outer query as `SELECT * FROM (left UNION ALL right)`, where
+    /// the original left-side clauses are already serialized into `left_sql`.
+    /// Therefore any clauses still attached to `current_select` from earlier pipe
+    /// operators (`WHERE`, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT`, ...) would be
+    /// applied a second time *after* the union, changing semantics. Clear them so
+    /// only the new `SELECT *` / `FROM (...)` shape remains.
     current_select->setExpression(ASTSelectQuery::Expression::SELECT, nullptr);
     current_select->setExpression(ASTSelectQuery::Expression::TABLES, std::move(tables));
+    current_select->setExpression(ASTSelectQuery::Expression::PREWHERE, nullptr);
+    current_select->setExpression(ASTSelectQuery::Expression::WHERE, nullptr);
+    current_select->setExpression(ASTSelectQuery::Expression::GROUP_BY, nullptr);
+    current_select->setExpression(ASTSelectQuery::Expression::HAVING, nullptr);
+    current_select->setExpression(ASTSelectQuery::Expression::WINDOW, nullptr);
+    current_select->setExpression(ASTSelectQuery::Expression::ORDER_BY, nullptr);
+    current_select->setExpression(ASTSelectQuery::Expression::LIMIT_BY_OFFSET, nullptr);
+    current_select->setExpression(ASTSelectQuery::Expression::LIMIT_BY_LENGTH, nullptr);
+    current_select->setExpression(ASTSelectQuery::Expression::LIMIT_BY, nullptr);
+    current_select->setExpression(ASTSelectQuery::Expression::LIMIT_OFFSET, nullptr);
+    current_select->setExpression(ASTSelectQuery::Expression::LIMIT_LENGTH, nullptr);
 
     /// Set project to *
     String star = "*";

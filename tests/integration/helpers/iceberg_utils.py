@@ -425,14 +425,9 @@ def create_iceberg_table(
     settings=None,
     **kwargs,
 ):
-    base_settings = {}
-    if 'output_format_parquet_use_custom_encoder' in kwargs:
-        base_settings = {"output_format_parquet_use_custom_encoder": 0, "output_format_parquet_parallel_encoding": 0}
-    if settings:
-        base_settings.update(settings)
     node.query(
         get_creation_expression(storage_type, table_name, cluster, schema, format_version, partition_by, if_not_exists, compression_method, format, order_by, run_on_cluster=run_on_cluster, **kwargs),
-        settings=base_settings if base_settings else None,
+        settings=settings,
     )
 
 

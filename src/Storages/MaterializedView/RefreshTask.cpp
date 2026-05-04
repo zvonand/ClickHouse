@@ -1239,7 +1239,6 @@ bool RefreshTask::updateCoordinationState(CoordinationZnode root, bool running, 
         else
             version = dynamic_cast<Coordination::SetResponse &>(*responses[0]).stat.version;
     }
-    LOG_INFO(getLogger(), "asdqwe updated from {} to {}", coordination.root_znode.version, version);
     coordination.root_znode = root;
     coordination.root_znode.version = version;
     coordination.running_znode_exists = running;

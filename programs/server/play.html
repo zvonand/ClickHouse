@@ -328,6 +328,17 @@
             transition: opacity 0s 0.1s;
         }
 
+        /* While suppress-balloons is set on the body (set on scroll, cleared on the
+           next mousemove), no balloon may appear from a :hover state. This prevents
+           a different table button from scrolling under a stationary cursor and
+           revealing its balloon without `mouseenter` having fired to position it. */
+        body.suppress-balloons .table button:hover + .table-addendum,
+        body.suppress-balloons .table .table-addendum:hover
+        {
+            opacity: 0;
+            pointer-events: none;
+        }
+
         .table-addendum-elem
         {
             display: block;
@@ -2577,14 +2588,26 @@ let menu_elem = document.getElementById('menu');
 /// listener fires regardless of which element scrolls (scroll events do not
 /// bubble). Only one balloon can be open at a time (the one the cursor most
 /// recently entered), so we track that reference instead of scanning the DOM.
+///
+/// Also set `suppress-balloons` on the body until the next mousemove, so a
+/// different table button scrolled under a stationary cursor cannot reveal its
+/// balloon at an unset position via the CSS `:hover` rule (`mouseenter` does
+/// not fire without actual mouse movement, so JS positioning would be skipped).
 let visible_balloon = null;
 function hideTableBalloons() {
     if (visible_balloon) {
         visible_balloon.style.visibility = 'hidden';
         visible_balloon = null;
     }
+    document.body.classList.add('suppress-balloons');
 }
 document.addEventListener('scroll', hideTableBalloons, { capture: true, passive: true });
+document.addEventListener('mousemove', () => {
+    /// Guard so the no-op case does not touch classList on every mouse pixel.
+    if (document.body.classList.contains('suppress-balloons')) {
+        document.body.classList.remove('suppress-balloons');
+    }
+}, { passive: true });
 
 function toggleDatabases() {
     if (!databases_toggle.dataset['opened']) {

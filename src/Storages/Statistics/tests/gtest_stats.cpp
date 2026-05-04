@@ -653,7 +653,7 @@ TEST(Statistics, DeserializeV3ThrowsOnOversizedStat)
     EXPECT_THROW(ColumnStatistics::deserialize(mod_read_buf, data_type), DB::Exception);
 }
 
-TEST(Statistics, NullableEstimator)
+TEST(Statistics, NullableEstimatorWithMinMax)
 {
     /// Two nullable columns with range, IS NULL, and IS NOT NULL predicates.
     ///
@@ -666,8 +666,8 @@ TEST(Statistics, NullableEstimator)
     ///   b: estimateLess/Greater(500) = 450.0 exactly
     tryRegisterFunctions();
 
-    auto stats_a = buildNullableInt32Stats({StatisticsType::NullCount, StatisticsType::MinMax}, 1000, 5);
-    auto stats_b = buildNullableInt32Stats({StatisticsType::NullCount, StatisticsType::MinMax}, 1000, 10);
+    auto stats_a = buildNullableInt32Stats({StatisticsType::MinMax}, 1000, 5);
+    auto stats_b = buildNullableInt32Stats({StatisticsType::MinMax}, 1000, 10);
     ASSERT_EQ(stats_a->getNonNullRowCount(), 800u);
     ASSERT_EQ(stats_b->getNonNullRowCount(), 900u);
 

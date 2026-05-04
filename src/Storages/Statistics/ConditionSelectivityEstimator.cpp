@@ -706,7 +706,7 @@ void ConditionSelectivityEstimator::RPNElement::finalize(const ColumnEstimators 
         if (const auto * est = get_estimator(column_name))
             not_ranges_selectivity = est->estimateRanges(ranges).applyNot();
         else
-            not_ranges_selectivity = estimate_unknown_ranges(ranges);
+            not_ranges_selectivity = estimate_unknown_ranges(ranges).applyNot();
 
         auto it = estimate_results.find(column_name);
         if (it == estimate_results.end())

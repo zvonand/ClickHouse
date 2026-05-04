@@ -46,6 +46,17 @@ SELECT JSON_QUERY('{"a":[1,2], "b":{"c":3}}', tuple('$.a', '$.b'));
 SELECT '--JSON_QUERY with Array--';
 SELECT JSON_QUERY('{"a":[1,2]}', array('$.a', '$.missing'));
 
+SELECT '--Named tuple preserves element names--';
+-- Field-name access on the result must work when the path argument is a named tuple.
+SELECT tupleElement(JSON_VALUE('{"a":1, "b":"hello"}', CAST(tuple('$.a', '$.b') AS Tuple(x String, y String))), 'x');
+SELECT tupleElement(JSON_VALUE('{"a":1, "b":"hello"}', CAST(tuple('$.a', '$.b') AS Tuple(x String, y String))), 'y');
+SELECT tupleElement(JSON_EXISTS('{"a":1}', CAST(tuple('$.a', '$.missing') AS Tuple(found String, miss String))), 'found');
+SELECT tupleElement(JSON_EXISTS('{"a":1}', CAST(tuple('$.a', '$.missing') AS Tuple(found String, miss String))), 'miss');
+SELECT tupleElement(JSON_QUERY('{"a":[1,2], "b":{"c":3}}', CAST(tuple('$.a', '$.b') AS Tuple(arr String, obj String))), 'arr');
+SELECT tupleElement(JSON_QUERY('{"a":[1,2], "b":{"c":3}}', CAST(tuple('$.a', '$.b') AS Tuple(arr String, obj String))), 'obj');
+-- Nested named tuple: names are preserved at every level.
+SELECT tupleElement(tupleElement(JSON_VALUE('{"a":1, "b":2}', CAST(tuple(tuple('$.a', '$.b')) AS Tuple(inner Tuple(x String, y String)))), 'inner'), 'y');
+
 SELECT '--Error cases--';
 SELECT JSON_VALUE('{"a":1}', tuple('$..invalid')); -- { serverError BAD_ARGUMENTS }
 SELECT JSON_VALUE('{"a":1}', tuple('$.a', 1)); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }

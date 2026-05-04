@@ -424,6 +424,8 @@ public:
             element_types.reserve(tuple_type->getElements().size());
             for (const auto & elem : tuple_type->getElements())
                 element_types.push_back(buildReturnType(elem, leaf_type));
+            if (tuple_type->hasExplicitNames())
+                return std::make_shared<DataTypeTuple>(element_types, tuple_type->getElementNames());
             return std::make_shared<DataTypeTuple>(element_types);
         }
 

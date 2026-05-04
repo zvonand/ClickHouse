@@ -11,16 +11,13 @@
 #include <IO/ReadHelpers.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/ExpressionActions.h>
-#include <Parsers/ASTLiteral.h>
 #include <Processors/ISource.h>
 #include <Processors/QueryPlan/QueryPlan.h>
 #include <Processors/QueryPlan/SourceStepWithFilter.h>
 #include <QueryPipeline/Pipe.h>
 #include <QueryPipeline/QueryPipelineBuilder.h>
 #include <Storages/StorageFilesystem.h>
-#include <Storages/StorageFactory.h>
 #include <Storages/VirtualColumnUtils.h>
-#include <Storages/checkAndGetLiteralArgument.h>
 
 
 namespace fs = std::filesystem;
@@ -33,7 +30,6 @@ namespace ErrorCodes
     extern const int DATABASE_ACCESS_DENIED;
     extern const int FILE_DOESNT_EXIST;
     extern const int LOGICAL_ERROR;
-    extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
 }
 
 
@@ -651,42 +647,4 @@ Strings StorageFilesystem::getDataPaths() const
     return {path};
 }
 
-
-void registerStorageFilesystem(StorageFactory & factory)
-{
-    factory.registerStorage("Filesystem", [](const StorageFactory::Arguments & args)
-    {
-        ASTs & engine_args = args.engine_args;
-
-        if (engine_args.size() > 1)
-            throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
-                            "Storage Filesystem requires at most one argument: path.");
-
-        String path;
-        if (!engine_args.empty())
-        {
-            const auto & ast_literal = engine_args.front()->as<const ASTLiteral &>();
-            if (!ast_literal.value.isNull())
-                path = checkAndGetLiteralArgument<String>(ast_literal, "path");
-        }
-
-        bool local_mode = args.getContext()->getApplicationType() == Context::ApplicationType::LOCAL;
-
-        /// `fs::canonical` requires the path to exist. In `clickhouse-local` mode,
-        /// `user_files_path` may not exist, so fall back to a lexically-normalized absolute path.
-        fs::path user_files_path(args.getContext()->getUserFilesPath());
-        std::error_code ec;
-        auto canonical_user_files_path = fs::canonical(user_files_path, ec);
-        String user_files_absolute_path_string = ec
-            ? fs::absolute(user_files_path).lexically_normal().string()
-            : canonical_user_files_path.string();
-
-        return std::make_shared<StorageFilesystem>(
-            args.table_id, args.columns, args.constraints, args.comment, local_mode, path,
-            user_files_absolute_path_string);
-    },
-    {
-        .source_access_type = AccessTypeObjects::Source::FILE,
-    });
-}
 }

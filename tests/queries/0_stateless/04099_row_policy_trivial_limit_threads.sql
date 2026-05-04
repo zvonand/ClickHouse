@@ -1,6 +1,6 @@
 -- Tags: no-parallel-replicas, no-object-storage
 -- -no-parallel-replicas - PR changes the EXPLAIN output
--- -no-object-storage - parts on remote FS uses MergeTreeSelect(pool: ReadPool) over MergeTreeSelect(pool: ReadPoolInOrder)
+-- -no-object-storage - parts on remote FS use MergeTreeSelect(pool: ReadPool) over MergeTreeSelect(pool: ReadPoolInOrder)
 
 -- The trivial LIMIT optimization reduces max_streams to 1 for simple
 -- SELECT ... LIMIT N queries without WHERE.  When row policies or

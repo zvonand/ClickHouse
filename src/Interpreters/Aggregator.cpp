@@ -13,7 +13,6 @@
 #include <AggregateFunctions/Combinators/AggregateFunctionArray.h>
 #include <AggregateFunctions/Combinators/AggregateFunctionState.h>
 #include <Columns/ColumnAggregateFunction.h>
-#include <Columns/ColumnLowCardinality.h>
 #include <Columns/ColumnSparse.h>
 #include <Columns/ColumnTuple.h>
 #include <Compression/CompressedWriteBuffer.h>
@@ -1805,23 +1804,14 @@ bool Aggregator::executeOnBlock(Columns columns,
         }
 
 
-        /// After ALTER TABLE MODIFY COLUMN, old data parts may still have the
-        /// pre-ALTER column type. Normalize each key column to match the expected type:
-        ///   expected LC + actual plain => wrap via insertRangeFromFullColumn
-        ///   expected plain + actual LC => unwrap via recursiveRemoveLowCardinality
-        if (key_types[i]->lowCardinality() && !key_columns[i]->lowCardinality())
-        {
-            auto lc_col = key_types[i]->createColumn();
-            assert_cast<ColumnLowCardinality &>(*lc_col).insertRangeFromFullColumn(
-                *key_columns[i], 0, key_columns[i]->size());
-            materialized_columns.emplace_back(std::move(lc_col));
-            key_columns[i] = materialized_columns.back().get();
-        }
-        else if (!key_types[i]->lowCardinality() && key_columns[i]->lowCardinality())
+        if (!result.isLowCardinality())
         {
             auto column_no_lc = recursiveRemoveLowCardinality(key_columns[i]->getPtr());
-            materialized_columns.emplace_back(std::move(column_no_lc));
-            key_columns[i] = materialized_columns.back().get();
+            if (column_no_lc.get() != key_columns[i])
+            {
+                materialized_columns.emplace_back(std::move(column_no_lc));
+                key_columns[i] = materialized_columns.back().get();
+            }
         }
     }
 
@@ -3695,24 +3685,6 @@ bool Aggregator::mergeOnBlock(Columns columns, size_t rows, bool is_overflows, A
         AggregateDataPtr place = result.aggregates_pool->alignedAlloc(total_size_of_aggregate_states, align_aggregate_states);
         createAggregateStates(place);
         result.without_key = place;
-    }
-
-    /// After ALTER TABLE MODIFY COLUMN, data parts may still have the old column type.
-    /// Normalize each key column to match the expected type:
-    ///   expected LC + actual plain => wrap via insertRangeFromFullColumn
-    ///   expected plain + actual LC => unwrap via recursiveRemoveLowCardinality
-    for (size_t i = 0; i < params.keys_size; ++i)
-    {
-        if (key_types[i]->lowCardinality() && !columns[i]->lowCardinality())
-        {
-            auto lc_col = key_types[i]->createColumn();
-            assert_cast<ColumnLowCardinality &>(*lc_col).insertRangeFromFullColumn(*columns[i], 0, rows);
-            columns[i] = std::move(lc_col);
-        }
-        else if (!key_types[i]->lowCardinality() && columns[i]->lowCardinality())
-        {
-            columns[i] = recursiveRemoveLowCardinality(columns[i]);
-        }
     }
 
     if (result.type == AggregatedDataVariants::Type::without_key || is_overflows)

@@ -1,4 +1,4 @@
--- Tags: zookeeper, no-random-settings, no-random-merge-tree-settings
+-- Tags: zookeeper
 
 -- Regression test for https://github.com/ClickHouse/ClickHouse/issues/100175
 

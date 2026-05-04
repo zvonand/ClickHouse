@@ -40,6 +40,15 @@ namespace ErrorCodes
     extern const int NOT_IMPLEMENTED;
 }
 
+/// Floor for the automatic-spill check against `max_bytes_before_external_join`. Each rehash
+/// halves the in-memory bucket, so for total data D and threshold T we need ~log2(D / T)
+/// rehashes per bucket (capped by `grace_hash_join_max_buckets`). With smaller thresholds
+/// the hash-table cell overhead alone (~32 bytes per row) can already exceed `T/2` before
+/// any rehash can help, forcing one rehash per added block and quickly hitting the bucket
+/// cap. 1 MiB enforces the contract for any practical configuration while still leaving low
+/// test thresholds (e.g. 1 KiB in `03915_spilling_hash_join`) unaffected.
+static constexpr size_t MIN_THRESHOLD_FOR_AUTOMATIC_SPILL = 1024 * 1024;
+
 namespace
 {
     class AccumulatedBlockReader
@@ -331,18 +340,10 @@ bool GraceHashJoin::hasMemoryOverflow(size_t total_rows, size_t total_bytes) con
     /// the in-memory bucket would just keep growing and the wrapper's spill decision is meaningless.
     /// We use half the threshold for the same reason as the wrapper: the in-memory hash table
     /// doubles its buffer in power-of-two steps, transiently holding 3X the previous size, so
-    /// rehashing buckets early prevents that doubling from exceeding the cap.
-    ///
-    /// We require a minimum threshold of 1 MiB before this check kicks in. Each rehash only
-    /// halves the in-memory bucket, so for total data D and threshold T we need ~log2(D / T)
-    /// rehashes per bucket (capped by `grace_hash_join_max_buckets`). With smaller thresholds
-    /// the hash-table cell overhead alone (~32 bytes per row) can already exceed `T/2` before
-    /// any rehash can help, forcing one rehash per added block and quickly hitting the bucket
-    /// cap. 1 MiB is small enough to enforce the contract for any practical configuration while
-    /// still leaving low test thresholds (e.g. 1 KiB in `03915_spilling_hash_join`) unaffected.
+    /// rehashing buckets early prevents that doubling from exceeding the cap. See the comment
+    /// on `MIN_THRESHOLD_FOR_AUTOMATIC_SPILL` for why a small floor is required.
     if (!has_overflow)
     {
-        static constexpr size_t MIN_THRESHOLD_FOR_AUTOMATIC_SPILL = 1024 * 1024;
         const auto external_join_threshold = table_join->maxBytesBeforeExternalJoin();
         if (external_join_threshold >= MIN_THRESHOLD_FOR_AUTOMATIC_SPILL && total_bytes * 2 >= external_join_threshold)
             has_overflow = true;
@@ -784,20 +785,26 @@ void GraceHashJoin::addBlockToJoinImpl(Block block)
         auto prev_keys_num = hash_join->getTotalRowCount();
         size_t pre_total_bytes = hash_join->getTotalByteCount();
 
-        /// Pre-check: predict whether adding this block would push us past the threshold.
-        /// The inner `HashJoin::addBlockToJoin` grows its hash buffer in power-of-two steps.
-        /// Doubling from X to 2X transiently holds 3X (old buffer + new buffer being filled),
-        /// so a post-add check can race with that doubling and observe the OOM only as an
-        /// allocator exception. By rehashing buckets BEFORE the inner add when the projected
-        /// size already triggers `hasMemoryOverflow`, we avoid the doubling altogether for
-        /// the doomed call. `block.allocatedBytes()` is a lower bound on what the hash table
-        /// will actually hold (which adds cell overhead and load-factor padding), but it is
-        /// enough for the pre-check to fire one rehash earlier than the post-check would.
-        const size_t projected_keys = prev_keys_num + current_block.rows();
-        const size_t projected_bytes = pre_total_bytes + current_block.allocatedBytes();
+        /// Pre-check: rehash when the in-memory bucket alone is already past half of
+        /// `max_bytes_before_external_join`. The inner `HashJoin::addBlockToJoin` grows its
+        /// hash buffer in power-of-two steps. Doubling from X to 2X transiently holds 3X
+        /// (old buffer + new buffer being filled), so a post-add check can race with that
+        /// doubling and observe the OOM only as an allocator exception.
+        ///
+        /// We trigger the rehash on the existing table size and deliberately do NOT factor
+        /// in the incoming block: `block.allocatedBytes()` is a misleading lower bound on
+        /// the actual hash-table cost (cell overhead, load-factor padding, resize peaks),
+        /// so a tiny block could leave a near-full bucket bypassing the pre-check and OOM
+        /// during the resize. Mirrors `SpillingHashJoin::addBlockToJoin`. Gated on the
+        /// external-join threshold only (not on `max_rows_in_join` / `max_bytes_in_join`,
+        /// which are still enforced by the post-check below) so that very small soft
+        /// limits, common in tests, do not amplify into excessive rehashing.
+        const auto external_join_threshold = table_join->maxBytesBeforeExternalJoin();
+        const bool pre_threshold_overflow = external_join_threshold >= MIN_THRESHOLD_FOR_AUTOMATIC_SPILL
+            && pre_total_bytes * 2 >= external_join_threshold;
 
         bool block_added = false;
-        if (!hasMemoryOverflow(projected_keys, projected_bytes))
+        if (!pre_threshold_overflow)
         {
             hash_join->addBlockToJoin(current_block, /* check_limits = */ false);
             block_added = true;

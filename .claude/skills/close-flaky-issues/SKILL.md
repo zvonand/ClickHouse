@@ -1,7 +1,7 @@
 ---
 name: close-flaky-issues
 description: Audit open "flaky test" GitHub issues and close those whose tests are no longer failing on master. Cross-references CI history from play.clickhouse.com with git log to attribute fixes.
-argument-hint: "[threshold-days]"
+argument-hint: "[threshold-days] [dry-run]"
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep, Glob
 ---

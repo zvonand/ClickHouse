@@ -2149,13 +2149,28 @@ TEST(FunctionsStress, stress)
     }
     if (num_threads <= 0)
         num_threads = 1;
-    std::vector<FunctionsStressTestThread> threads(static_cast<size_t>(num_threads));
+    /// Use heap-allocated `FunctionsStressTestThread` (via `std::unique_ptr`) so that we can
+    /// intentionally leak the state of stuck workers. If a worker thread gets stuck in some
+    /// runaway operation (e.g. an infinite loop in a tested function), we cannot safely destroy
+    /// its `FunctionsStressTestThread` from the main thread:
+    ///   * The worker is still using `context`, `thread_group`, `function_stats`, `valid_args`,
+    ///     `result`, `mutex`, `operation`, etc. — destroying any of them would race with the
+    ///     worker (use-after-free).
+    ///   * `~ThreadStatus` would run on the main thread, fire `prev.thread_id == curr.thread_id`
+    ///     in `RUsageCounters::incrementProfileEvents`, and abort. See issue #103750.
+    ///   * `~std::thread` on a still-joinable `std::thread` calls `std::terminate`.
+    /// For stuck workers we instead `detach` the `std::thread` and `release` the `unique_ptr`,
+    /// leaving the heap-allocated state alive forever. The test is failing anyway, so this leak
+    /// only persists until the test process exits.
+    std::vector<std::unique_ptr<FunctionsStressTestThread>> threads(static_cast<size_t>(num_threads));
+    for (auto & t : threads)
+        t = std::make_unique<FunctionsStressTestThread>();
     const std::chrono::seconds stop_timeout(30);
 
     auto request_shutdown = [&]
         {
             for (auto & t : threads)
-                t.thread_should_stop.store(true);
+                t->thread_should_stop.store(true);
         };
 
     /// Print stack trace and function name on crash.
@@ -2175,14 +2190,14 @@ TEST(FunctionsStress, stress)
 
     for (size_t i = 0; i < threads.size(); ++i)
     {
-        threads[i].thread_idx = i;
-        threads[i].thread = std::thread([t = &threads[i]] { t->run(); });
+        threads[i]->thread_idx = i;
+        threads[i]->thread = std::thread([t = threads[i].get()] { t->run(); });
     }
 
     signal_listener.waitForTerminationRequest(std::chrono::seconds(options.duration_seconds));
 
     for (auto & t : threads)
-        t.thread_should_stop.store(true);
+        t->thread_should_stop.store(true);
 
     LOG_INFO(logger, "Waiting for threads to stop for up to {} seconds", stop_timeout.count());
 
@@ -2196,21 +2211,26 @@ TEST(FunctionsStress, stress)
     {
         std::optional<Operation> stuck_operation;
         {
-            std::unique_lock lock(t.mutex);
-            t.thread_stop_cv.wait_until(lock, deadline, [&] { return t.thread_stopped; });
-            if (!t.thread_stopped)
-                stuck_operation = t.operation;
+            std::unique_lock lock(t->mutex);
+            t->thread_stop_cv.wait_until(lock, deadline, [&] { return t->thread_stopped; });
+            if (!t->thread_stopped)
+                stuck_operation = t->operation;
         }
         if (stuck_operation.has_value())
         {
             LOG_ERROR(logger, "Thread is stuck while {}", stuck_operation->describe());
             ++stuck_threads;
+            /// Detach the still-joinable `std::thread` so its destructor doesn't `std::terminate`,
+            /// then leak the entire `FunctionsStressTestThread` so the worker can keep using
+            /// its state safely. See the comment near `threads` declaration above for details.
+            t->thread.detach();
+            (void)t.release();
         }
         else
         {
-            t.thread.join();
+            t->thread.join();
             for (size_t i = 0; i < testable_functions.size(); ++i)
-                total_stats[i].merge(t.function_stats[i]);
+                total_stats[i].merge(t->function_stats[i]);
         }
     }
 

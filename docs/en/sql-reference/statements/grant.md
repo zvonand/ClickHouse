@@ -776,6 +776,12 @@ however you can change this behaviour by setting [`table_engines_require_grant` 
 in config.xml.
 :::
 
+For Table engines with external sources may require READ/WRITE permissions on the respective source. See [here](../../sql-reference/statements/grant.md#sources)
+
+e.g For AzureBlobStorage Table engine, following grant may be required.
+
+- `GRANT READ,WRITE ON AZURE TO john`
+
 ### ALL {#all}
 
 <CloudNotSupportedBadge/>

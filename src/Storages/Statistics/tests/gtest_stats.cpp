@@ -413,6 +413,7 @@ TEST(Statistics, NullPredicateEstimates)
 
     auto check = [&](const String & expression, Float64 expected_rows, Float64 eps)
     {
+        std::cout << "check: " << expression << std::endl;
         Float64 actual = estimateRows(estimator, expression);
         EXPECT_NEAR(actual, expected_rows, eps)
             << "Expression: " << expression
@@ -440,6 +441,7 @@ TEST(Statistics, NullPredicateEstimates)
     check("x IS NOT NULL",         50.0, 2.0);
     check("x IS NOT NULL OR x < 50",         50.0, 2.0);
     check("not x < 50",         25.0, 2.0);
+    check("not (x IS NOT NULL AND x < 50)",         75.0, 2.0);
     check("x IS NULL OR not x < 50",         75.0, 2.0);
 
     /// Plain range — must not include NULL rows.

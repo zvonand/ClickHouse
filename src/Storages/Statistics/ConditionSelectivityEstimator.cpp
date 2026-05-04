@@ -789,6 +789,10 @@ void ConditionSelectivityEstimator::RPNElement::finalize(const ColumnEstimators 
         {
             estimate_results[column_name].true_sel = cur_selectivity;
         }
+        else
+        {
+            estimate_results[column_name].null_sel = 0;
+        }
     }
 
     if (function == FUNCTION_OR)

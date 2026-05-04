@@ -527,10 +527,15 @@ public:
             return;
 
         /// Build a sample block with cheap columns for filter extraction.
+        /// Skip cheap columns that the table's schema does not expose, so that direct
+        /// `ENGINE = Filesystem` use with a custom column subset still works
+        /// (filter pushdown is then limited to whichever cheap columns are present).
         Block cheap_sample;
         auto sample_block = storage_snapshot->metadata->getSampleBlock();
         for (const auto & col_name : cheap_column_names)
         {
+            if (!sample_block.has(col_name))
+                continue;
             const auto & col = sample_block.getByName(col_name);
             cheap_sample.insert({col.type->createColumn(), col.type, col.name});
         }

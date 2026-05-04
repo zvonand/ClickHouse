@@ -61,7 +61,7 @@ The `FILE` source access type is required.
 - **Lazy content reading**: the `content` column is only read when explicitly selected. Queries that do not select `content` avoid file I/O entirely.
 - **Predicate pushdown on metadata**: filters on cheap columns (`path`, `name`, `depth`, `type`, `is_symlink`) are evaluated before reading file content, size, or modification time.
 - **Parallel traversal**: multiple threads traverse the directory tree concurrently via a shared bounded queue, enabling fast scanning of large directory trees.
-- **Early LIMIT**: because results are streamed, `LIMIT` stops the traversal early.
+- **Streaming LIMIT**: results are streamed as the traversal proceeds, so a `LIMIT` returns once enough rows have been emitted. Note: each individual directory is enumerated in full when first visited (children are pushed into the traversal queue eagerly), so `LIMIT` cannot interrupt scanning of a single very large directory.
 )",
             .examples
             {

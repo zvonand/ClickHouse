@@ -11,6 +11,7 @@ allowed-tools: Bash, Read, Grep, Glob
 ## Arguments
 
 - `$0` (optional): number of days the test must be failure-free on master before it is eligible for closing. Default: `14`.
+- `$1` (optional): pass `dry-run` to print the table of close candidates and stop without calling `gh issue close`. Any other value (or none) runs the full sweep.
 
 ## Goal
 

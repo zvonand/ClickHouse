@@ -702,8 +702,6 @@ void AwsAuthSTSAssumeRoleWebIdentityCredentialsProvider::CacheKey::updateHash(Si
     hash.update(session_name);
 }
 
-
-
 bool AwsAuthSTSAssumeRoleWebIdentityCredentialsProvider::isWebIdentityConfigured(const String & kms_role_arn_override)
 {
     auto resolved = resolveWebIdentitySettingsFromEnvironmentAndProfile(kms_role_arn_override);

@@ -95,8 +95,18 @@ void TableFunctionURL::parseArgumentsImpl(ASTs & args, const ContextPtr & contex
 
     /// Re-derive format from the resolved URL if still auto, because the original
     /// filename may have been a relative reference (e.g. "?x=1") with no extension.
+    /// `resolveURLBase` tolerates malformed inputs via string manipulation, so the resolved URL
+    /// may contain characters that `Poco::URI` rejects. Fall back to "auto" instead of throwing.
     if (format == "auto")
-        format = FormatFactory::instance().tryGetFormatFromFileName(Poco::URI(filename).getPath()).value_or("auto");
+    {
+        try
+        {
+            format = FormatFactory::instance().tryGetFormatFromFileName(Poco::URI(filename).getPath()).value_or("auto");
+        }
+        catch (const Poco::Exception &)
+        {
+        }
+    }
 }
 
 StoragePtr TableFunctionURL::getStorage(

@@ -1944,7 +1944,17 @@ StorageURL::Configuration StorageURL::getConfiguration(ASTs & args, const Contex
     configuration.url = resolveURLBase(configuration.url, url_base);
 
     if (configuration.format == "auto")
-        configuration.format = FormatFactory::instance().tryGetFormatFromFileName(Poco::URI(configuration.url).getPath()).value_or("auto");
+    {
+        /// `resolveURLBase` tolerates malformed inputs via string manipulation, so the resolved URL
+        /// may contain characters that `Poco::URI` rejects. Fall back to "auto" instead of throwing.
+        try
+        {
+            configuration.format = FormatFactory::instance().tryGetFormatFromFileName(Poco::URI(configuration.url).getPath()).value_or("auto");
+        }
+        catch (const Poco::Exception &)
+        {
+        }
+    }
 
     for (const auto & [header, value] : configuration.headers)
     {

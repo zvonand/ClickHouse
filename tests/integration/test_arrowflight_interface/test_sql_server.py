@@ -9,7 +9,9 @@ import string
 from .flight_sql_client import (
     FlightSQLClient,
     flight_descriptor,
+    ActionCreatePreparedStatementRequest,
     CommandStatementUpdate,
+    CommandStatementIngest,
     DoPutUpdateResult,
     CancelStatus,
     SetSessionOptionsResult,
@@ -1052,3 +1054,46 @@ def test_prepared_statement_update():
     assert table.num_rows == 3
     assert [table.column("id")[i].as_py() for i in range(3)] == [1, 2, 3]
     assert [table.column("name")[i].as_py() for i in range(3)] == ["alice", "bob", "charlie"]
+
+
+#
+# Transaction ID rejection tests
+#
+
+def test_transaction_id_rejected_for_statement_query():
+    """CommandStatementQuery with transaction_id should be rejected."""
+    client = get_client()
+    cmd = CommandStatementQuery(query="SELECT 1", transaction_id=b"fake-txn-id")
+    with pytest.raises(pa.lib.ArrowNotImplementedError, match="transaction_id is not supported"):
+        client.client.get_flight_info(flight_descriptor(cmd), client._flight_call_options())
+
+
+def test_transaction_id_rejected_for_statement_update():
+    """CommandStatementUpdate with transaction_id should be rejected."""
+    client = get_client()
+    cmd = CommandStatementUpdate(query="SELECT 1", transaction_id=b"fake-txn-id")
+    desc = flight_descriptor(cmd)
+    with pytest.raises(pa.lib.ArrowNotImplementedError, match="transaction_id is not supported"):
+        writer, reader = client.client.do_put(desc, pa.schema([]), client._flight_call_options())
+        reader.read()
+        writer.close()
+
+
+def test_transaction_id_rejected_for_statement_ingest():
+    """CommandStatementIngest with transaction_id should be rejected."""
+    client = get_client()
+    cmd = CommandStatementIngest(table="t", transaction_id=b"fake-txn-id")
+    desc = flight_descriptor(cmd)
+    with pytest.raises(pa.lib.ArrowNotImplementedError, match="transaction_id is not supported"):
+        writer, reader = client.client.do_put(desc, pa.schema([]), client._flight_call_options())
+        reader.read()
+        writer.close()
+
+
+def test_transaction_id_rejected_for_create_prepared_statement():
+    """CreatePreparedStatement with transaction_id should be rejected."""
+    client = get_client()
+    req = ActionCreatePreparedStatementRequest(query="SELECT 1", transaction_id=b"fake-txn-id")
+    action = flight.Action("CreatePreparedStatement", req.SerializeToString())
+    with pytest.raises(pa.lib.ArrowNotImplementedError, match="transaction_id is not supported"):
+        list(client.client.do_action(action, client._flight_call_options()))

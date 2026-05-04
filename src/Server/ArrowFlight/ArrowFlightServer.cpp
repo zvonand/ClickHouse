@@ -1468,6 +1468,9 @@ arrow::Status ArrowFlightServer::DoAction(
             if (!request.ParseFromArray(action.body->data(), static_cast<int>(action.body->size())))
                 return arrow::Status::Invalid("Could not deserialize ActionCreatePreparedStatementRequest.");
 
+            if (request.has_transaction_id())
+                return arrow::Status::NotImplemented("CreatePreparedStatement: transaction_id is not supported");
+
             const auto & query = request.query();
 
             if (query.empty())

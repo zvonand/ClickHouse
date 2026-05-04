@@ -501,14 +501,20 @@ static bool preprocessUnionJoin(IParser::Pos & pos, ASTPtr & node, Expected & ex
     }
     else
     {
-        String ch_join = "INNER";
-        if (join_kind == "fullouter") ch_join = "FULL";
+        /// Map KQL join kind to ClickHouse join type.
+        /// Reject unsupported `kind=...` values rather than silently treating them as `INNER`,
+        /// which would mask typos and unsupported kinds with semantically different results.
+        /// Mirrors the explicit-reject behavior in `ParserKQLJoin::parseImpl`.
+        String ch_join;
+        if (join_kind.empty() || join_kind == "inner" || join_kind == "innerunique") ch_join = "INNER";
+        else if (join_kind == "fullouter") ch_join = "FULL";
         else if (join_kind == "leftouter") ch_join = "LEFT";
         else if (join_kind == "rightouter") ch_join = "RIGHT";
         else if (join_kind == "leftanti" || join_kind == "leftantisemi") ch_join = "LEFT ANTI";
         else if (join_kind == "leftsemi") ch_join = "LEFT SEMI";
         else if (join_kind == "rightanti" || join_kind == "rightantisemi") ch_join = "RIGHT ANTI";
         else if (join_kind == "rightsemi") ch_join = "RIGHT SEMI";
+        else return false;
 
         String on_clause;
         if (join_on.find("==") == String::npos && join_on.find('=') == String::npos)

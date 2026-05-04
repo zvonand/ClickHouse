@@ -106,14 +106,14 @@ Not every close candidate has an explicit fix commit — some stabilize via surr
 For integration tests (`test_X/test.py::...`), search the directory: `tests/integration/test_X/`.
 For stateless tests (`NNNNN_name`), search: `tests/queries/0_stateless/NNNNN_name.*`.
 
-### 5. Confirm scope before closing
+### 5. Print the scope, then proceed
 
-Before issuing `gh issue close`, **show the user a table** of:
+Before issuing `gh issue close`, **print a table** showing:
 
 - Issues to close (with linked fix commit if found)
 - Issues to keep open (with failure count)
 
-This is a public, shared-state action — get confirmation if closing more than a handful at once. The user already authorized when invoking the skill, but a one-line summary lets them spot mistakes.
+The user already authorized closing when they invoked the skill, so do not ask follow-up questions — proceed to step 6 immediately after printing. The table is for after-the-fact spot-checking, not for interactive approval. If the user wants a preview without changes, they can pass `dry-run` as a second argument and the skill should stop here.
 
 ### 6. Close issues
 

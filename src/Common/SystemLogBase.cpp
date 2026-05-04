@@ -296,12 +296,6 @@ void SystemLogBase<LogElement>::handleCrash()
 }
 
 template <typename LogElement>
-SystemLogBase<LogElement>::~SystemLogBase()
-{
-    stopFlushThread();
-}
-
-template <typename LogElement>
 void SystemLogBase<LogElement>::startup()
 {
     std::lock_guard lock(thread_mutex);

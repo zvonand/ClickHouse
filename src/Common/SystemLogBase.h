@@ -208,16 +208,6 @@ public:
         const SystemLogQueueSettings & settings_,
         std::shared_ptr<SystemLogQueue<LogElement>> queue_ = nullptr);
 
-    /// Stop the saving thread before destroying the queue.
-    ///
-    /// `queue` is declared in this class and `saving_thread` in `ISystemLog`, so member
-    /// destruction would normally drop `queue` (and its condition variables) while the
-    /// saving thread is still blocked in `pop()`. `pthread_cond_destroy` then hangs on the
-    /// waiter. Joining the thread here guarantees there are no waiters left, even when
-    /// `Context::shutdown` did not run `flushAndShutdown` (for example, because an
-    /// exception escaped from it).
-    ~SystemLogBase() override;
-
     void startup() override;
 
     /** Append a record into log.

@@ -605,6 +605,12 @@ SystemLog<LogElement>::SystemLog(
 }
 
 template <typename LogElement>
+SystemLog<LogElement>::~SystemLog()
+{
+    Base::stopFlushThread();
+}
+
+template <typename LogElement>
 void SystemLog<LogElement>::shutdown()
 {
     Base::stopFlushThread();

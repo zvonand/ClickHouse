@@ -67,6 +67,9 @@ HTTPServer(('127.0.0.1', $HTTP_PORT), Handler).serve_forever()
 " &
     local HTTP_PID=$!
 
+    # Unconditional cleanup on any function return (success, failure, or exception)
+    trap 'kill $HTTP_PID 2>/dev/null; wait $HTTP_PID 2>/dev/null; rm -f "$log_file"' RETURN
+
     # Wait for server to start
     for _ in $(seq 1 50); do
         curl -s "http://127.0.0.1:$HTTP_PORT/health" -o /dev/null 2>/dev/null && break
@@ -107,9 +110,6 @@ HTTPServer(('127.0.0.1', $HTTP_PORT), Handler).serve_forever()
         exit 1
     fi
 
-    kill $HTTP_PID 2>/dev/null
-    wait $HTTP_PID 2>/dev/null
-    rm -f "$log_file"
 }
 
 # Test a: slow HEAD, skip_empty=0, fast GET - tests HEAD cancellation phase

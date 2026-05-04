@@ -1966,51 +1966,52 @@ class ClickHouseCluster:
         return self.base_letsencrypt_pebble_cmd
 
     def setup_prometheus_cmd(self, instance, env_variables, docker_compose_yml_dir):
-        if "writer" in self.prometheus_servers:
-            prefix = f"PROMETHEUS_WRITER"
-            env_variables[f"{prefix}_HOST"] = self.prometheus_writer_host
-            env_variables[f"{prefix}_PORT"] = str(self.prometheus_writer_port)
-            env_variables[f"{prefix}_LOGS"] = self.prometheus_writer_logs_dir
-            env_variables[f"{prefix}_LOGS_FS"] = "bind"
-
-        if "reader" in self.prometheus_servers:
-            prefix = f"PROMETHEUS_READER"
-            env_variables[f"{prefix}_HOST"] = self.prometheus_reader_host
-            env_variables[f"{prefix}_PORT"] = str(self.prometheus_reader_port)
-            env_variables[f"{prefix}_LOGS"] = self.prometheus_reader_logs_dir
-            env_variables[f"{prefix}_LOGS_FS"] = "bind"
-
-        if "receiver" in self.prometheus_servers:
-            prefix = f"PROMETHEUS_RECEIVER"
-            env_variables[f"{prefix}_HOST"] = self.prometheus_receiver_host
-            env_variables[f"{prefix}_PORT"] = str(self.prometheus_receiver_port)
-            env_variables[f"{prefix}_LOGS"] = self.prometheus_receiver_logs_dir
-            env_variables[f"{prefix}_LOGS_FS"] = "bind"
-
-        handler_urls = []
-        for handler_host, handler_port, handler_path in self.prometheus_remote_write_handlers:
-            handler_urls.append(f"http://{handler_host}:{handler_port}/{handler_path.strip('/')}")
-        env_variables["PROMETHEUS_REMOTE_WRITE_HANDLERS"] = '[' + ', '.join([f"{{'url': '{url}'}}" for url in handler_urls]) + ']'
-
-        handler_urls = []
-        for handler_host, handler_port, handler_path in self.prometheus_remote_read_handlers:
-            handler_urls.append(f"http://{handler_host}:{handler_port}/{handler_path.strip('/')}")
-        env_variables["PROMETHEUS_REMOTE_READ_HANDLERS"] = '[' + ', '.join([f"{{'url': '{url}'}}" for url in handler_urls]) + ']'
-
         if not self.with_prometheus:
             self.with_prometheus = True
-            self.base_cmd.extend(
-                [
-                    "--file",
-                    p.join(docker_compose_yml_dir, "docker_compose_prometheus.yml"),
-                ]
-            )
-            self.base_prometheus_cmd = self.compose_cmd(
-                "--env-file",
-                instance.env_file,
-                "--file",
-                p.join(docker_compose_yml_dir, "docker_compose_prometheus.yml"),
-            )
+            prometheus_compose_args = ["--env-file", instance.env_file]
+
+            if "writer" in self.prometheus_servers:
+                prefix = "PROMETHEUS_WRITER"
+                env_variables[f"{prefix}_HOST"] = self.prometheus_writer_host
+                env_variables[f"{prefix}_PORT"] = str(self.prometheus_writer_port)
+                env_variables[f"{prefix}_LOGS"] = self.prometheus_writer_logs_dir
+                env_variables[f"{prefix}_LOGS_FS"] = "bind"
+                prometheus_writer_docker_compose_path = p.join(docker_compose_yml_dir, "docker_compose_prometheus_writer.yml")
+                self.base_cmd.extend(["--file", prometheus_writer_docker_compose_path])
+                prometheus_compose_args.extend(["--file", prometheus_writer_docker_compose_path])
+
+            if "reader" in self.prometheus_servers:
+                prefix = "PROMETHEUS_READER"
+                env_variables[f"{prefix}_HOST"] = self.prometheus_reader_host
+                env_variables[f"{prefix}_PORT"] = str(self.prometheus_reader_port)
+                env_variables[f"{prefix}_LOGS"] = self.prometheus_reader_logs_dir
+                env_variables[f"{prefix}_LOGS_FS"] = "bind"
+                prometheus_reader_docker_compose_path = p.join(docker_compose_yml_dir, "docker_compose_prometheus_reader.yml")
+                self.base_cmd.extend(["--file", prometheus_reader_docker_compose_path])
+                prometheus_compose_args.extend(["--file", prometheus_reader_docker_compose_path])
+
+            if "receiver" in self.prometheus_servers:
+                prefix = "PROMETHEUS_RECEIVER"
+                env_variables[f"{prefix}_HOST"] = self.prometheus_receiver_host
+                env_variables[f"{prefix}_PORT"] = str(self.prometheus_receiver_port)
+                env_variables[f"{prefix}_LOGS"] = self.prometheus_receiver_logs_dir
+                env_variables[f"{prefix}_LOGS_FS"] = "bind"
+                prometheus_receiver_docker_compose_path = p.join(docker_compose_yml_dir, "docker_compose_prometheus_receiver.yml")
+                self.base_cmd.extend(["--file", prometheus_receiver_docker_compose_path])
+                prometheus_compose_args.extend(["--file", prometheus_receiver_docker_compose_path])
+
+            handler_urls = []
+            for handler_host, handler_port, handler_path in self.prometheus_remote_write_handlers:
+                handler_urls.append(f"http://{handler_host}:{handler_port}/{handler_path.strip('/')}")
+            env_variables["PROMETHEUS_REMOTE_WRITE_HANDLERS"] = '[' + ', '.join([f"{{'url': '{url}'}}" for url in handler_urls]) + ']'
+
+            handler_urls = []
+            for handler_host, handler_port, handler_path in self.prometheus_remote_read_handlers:
+                handler_urls.append(f"http://{handler_host}:{handler_port}/{handler_path.strip('/')}")
+            env_variables["PROMETHEUS_REMOTE_READ_HANDLERS"] = '[' + ', '.join([f"{{'url': '{url}'}}" for url in handler_urls]) + ']'
+
+            self.base_prometheus_cmd = self.compose_cmd(*prometheus_compose_args)
+
         return self.base_prometheus_cmd
 
     def add_instance(

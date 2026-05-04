@@ -3,6 +3,7 @@
 #include <IO/Operators.h>
 #include <IO/WriteBufferFromString.h>
 #include <IO/WriteHelpers.h>
+#include <Parsers/ASTLiteral.h>
 #include <Parsers/ASTSubquery.h>
 #include <Parsers/ASTWithAlias.h>
 #include <Parsers/CommonParsers.h>
@@ -393,6 +394,19 @@ static bool decideParensEmission(const IAST & node, IAST::FormatStateStacked & f
             frame.list_element_index = 0;
             return false;
         }
+    }
+
+    /// A multi-element tuple literal naturally formats as `(elem, elem, ...)` — the
+    /// parens are part of the value's representation, not grouping parens. Emitting the
+    /// `parenthesized` flag's parens on top of that would produce `((1, 2))` for inputs
+    /// like `(((1), (2)))` or `NOT ((1, 1, 1))`, where the canonical form is a single
+    /// pair. Suppress them here. The aliased-tuple case (`((1, 2)) AS a`) is already
+    /// handled by the alias-deferral branch above and remains unaffected.
+    if (const auto * literal = dynamic_cast<const ASTLiteral *>(&node);
+        literal && literal->value.getType() == Field::Types::Tuple
+            && literal->value.safeGet<Tuple>().size() > 1)
+    {
+        return false;
     }
 
     frame.need_parens = false;

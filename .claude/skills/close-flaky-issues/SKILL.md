@@ -50,7 +50,7 @@ The trailing `?` after `capture` is required: without it, an issue with a `null`
 
 ### 2. Query CI failure history
 
-Run **one** batch query against `play.clickhouse.com` for all extracted test names. The `checks` table is public-readable via the `play` user.
+Run **one** batch query against `play.clickhouse.com` for all extracted test names. The `checks` table is publicly readable via the `play` user.
 
 **Before running the query, guard against an empty list.** If `jq` extracted no non-empty test names (zero open `flaky test` issues, or all bodies missing `Test name:`), `test_name IN ()` is invalid SQL and aborts the sweep. Skip the query in that case and report "nothing to close".
 

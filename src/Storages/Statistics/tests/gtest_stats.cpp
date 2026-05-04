@@ -752,7 +752,7 @@ TEST(Statistics, NullableEstimator)
     check("a IS NOT NULL AND a > 500 AND b IS NULL", 40.0, 2.0);
 
     /// Contradictions spanning two columns
-    check("a > 500 AND b > 500 AND b IS NULL",  0.0, 1e-6);  /// b > 500 contradicts b IS NULL
+    check("a > 500 AND b > 500 AND b IS NULL", 0.0, 1e-6);  /// b > 500 contradicts b IS NULL
     check("a IS NULL AND a > 500 AND b IS NULL", 0.0, 1e-6); /// a IS NULL contradicts a > 500
 }
 

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Tags: no-fasttest
+# Tags: no-fasttest, no-random-settings
+# no-random-settings: this test asserts a specific parse-time error
+# (CANNOT_PARSE_INPUT_ASSERTION_FAILED). Randomized session settings injected by the
+# flaky-check runner (e.g. malformed session_timezone) can produce an unrelated
+# BAD_ARGUMENTS error during INSERT FROM INFILE setup, masking the targeted assertion.
 # Test: covers `input_format_hive_text_allow_variable_number_of_columns` setting wiring through
 #       `updateFormatSettings` in `src/Processors/Formats/Impl/HiveTextRowInputFormat.cpp` to
 #       `csv.allow_variable_number_of_columns` consumed at
@@ -13,9 +17,14 @@ CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CURDIR"/../shell_config.sh
 
-DATA_DIR="${CURDIR}/data_hive"
-DATA_FEWER="${DATA_DIR}/03999_hive_fewer_fields.txt"
-DATA_EXTRAS="${DATA_DIR}/03999_hive_extra_fields.txt"
+# Use per-invocation unique paths in $CLICKHOUSE_TMP. The flaky-check runner
+# launches this test multiple times concurrently; sharing a fixed path under
+# data_hive/ races on file write/delete and produces non-deterministic INSERT
+# behaviour (file truncated mid-read, or removed before the second invocation
+# starts). $CLICKHOUSE_TEST_UNIQUE_NAME embeds the random database name and is
+# unique per test invocation, so each parallel run gets its own files.
+DATA_FEWER="${CLICKHOUSE_TMP}/03999_hive_fewer_fields_${CLICKHOUSE_TEST_UNIQUE_NAME}.txt"
+DATA_EXTRAS="${CLICKHOUSE_TMP}/03999_hive_extra_fields_${CLICKHOUSE_TEST_UNIQUE_NAME}.txt"
 
 printf '1,3\n3,5,9' > "${DATA_FEWER}"
 printf '1,2,3,4,5\n6,7,8\n' > "${DATA_EXTRAS}"

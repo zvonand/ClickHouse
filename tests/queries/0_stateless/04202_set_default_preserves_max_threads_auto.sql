@@ -2,10 +2,13 @@
 --
 -- `SET <name> = DEFAULT` used to lose the `is_auto` flag for `SettingFieldMaxThreads`-typed
 -- settings (`max_threads`, `max_final_threads`, `max_parsing_threads`). The cause was that
--- `BaseSettings::resetValueToDefault` round-tripped through `static_cast<Field>(*default)`,
--- which for `SettingFieldMaxThreads` returns the resolved auto-value (an opaque `UInt64`),
--- so the subsequent `operator=(const Field &)` reconstructed the field as if it had been
--- set to that explicit value.
+-- `BaseSettings::resetValueToDefault` round-trips through `static_cast<Field>(*default)`,
+-- and `SettingFieldMaxThreads::operator Field` used to return the resolved auto-value (an
+-- opaque `UInt64`), so the subsequent `operator=(const Field &)` reconstructed the field as
+-- if it had been set to that explicit value. The fix (mirroring `SettingAutoWrapper`) is to
+-- have `operator Field` emit the `"auto"` keyword when `is_auto` is set, so the round-trip
+-- is invertible: `fieldToMaxThreads(Field("auto"))` parses back to the canonical 0 and
+-- restores `is_auto = true`.
 --
 -- We use `startsWith(value, '''auto(')` to assert that the auto state is preserved without
 -- depending on the actual core count.

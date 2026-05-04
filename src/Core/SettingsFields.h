@@ -215,7 +215,13 @@ struct SettingFieldMaxThreads final : SettingFieldBase
     void setChanged(bool changed_) override { changed = changed_; }
 
     operator UInt64() const { return value; } /// NOLINT
-    explicit operator Field() const override { return value; }
+    /// Return the canonical `"auto"` string when `is_auto` is set, mirroring `SettingAutoWrapper::operator Field`.
+    /// This makes the `Field` round-trip invertible: `operator=(Field("auto"))` recognises the keyword
+    /// (via `fieldToMaxThreads` -> `stringToMaxThreads`) and restores `is_auto = true`. Without this,
+    /// `BaseSettings::resetValueToDefault` (and other code paths that round-trip through `Field`) would
+    /// silently drop the `is_auto` flag — e.g. `SET <name> = DEFAULT` would convert `'auto(N)'` into a
+    /// fixed `N`. See issue #103120.
+    explicit operator Field() const override { return is_auto ? Field("auto") : Field(value); }
 
     /// Writes "auto(<number>)" instead of simple "<number>" if `is_auto == true`.
     String toString() const override;

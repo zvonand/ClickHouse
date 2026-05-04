@@ -1146,9 +1146,13 @@ using AliasMap = std::unordered_map<std::string_view, std::string_view>;
             } \
             void resetValueToDefault(Data & data, size_t index) const \
             { \
-                auto p = field_infos[index].create_default_function(); \
-                *field_infos[index].get_data_function(*const_cast<Data *>(&data)) = static_cast<Field>(*p); \
-                field_infos[index].get_data_function(*const_cast<Data *>(&data))->setChanged(false); \
+                /* Use the type-specific reset_function instead of going through Field. */ \
+                /* Going through `static_cast<Field>` and `operator=(const Field &)` is */ \
+                /* not always invertible: e.g. `SettingFieldMaxThreads::operator Field()` */ \
+                /* returns the computed `value` (the resolved auto-value), so a Field    */ \
+                /* round-trip would lose the `is_auto` flag. The reset_function copies   */ \
+                /* via the type's own `operator=`, preserving all type-specific state.   */ \
+                field_infos[index].reset_function(*const_cast<Data *>(&data)); \
             } \
             \
             /* Binary serialization (by index) */ \
@@ -1177,6 +1181,7 @@ using AliasMap = std::unordered_map<std::string_view, std::string_view>;
                 const UInt64 flags; \
                 SettingFieldBase * (*get_data_function)(Data &);                    /* Get pointer to setting in Data struct */ \
                 std::unique_ptr<SettingFieldBase> (*create_default_function)();     /* Create setting with default value */ \
+                void (*reset_function)(Data &);                                     /* Reset setting to default, preserving type-specific state */ \
             }; \
             \
             std::vector<FieldInfo> field_infos;                                     /* Metadata for all settings */ \
@@ -1285,9 +1290,12 @@ using AliasMap = std::unordered_map<std::string_view, std::string_view>;
 
 
 /// Generate a FieldInfo entry for a setting without a config path.
-/// Creates two lambdas:
+/// Creates three lambdas:
 /// 1. get_data_function: Returns pointer to the setting field in a Data struct
 /// 2. create_default_function: Creates a new setting field with default value
+/// 3. reset_function: Resets the setting to its default value via the type's own
+///    `operator=`. This preserves type-specific state that `static_cast<Field>` would
+///    lose (e.g. `SettingFieldMaxThreads::is_auto`).
 /// NOLINTNEXTLINE
 #define IMPLEMENT_SETTINGS_TRAITS_(TYPE, NAME, DEFAULT, DESCRIPTION, FLAGS, ...) \
     res.field_infos.emplace_back( \
@@ -1300,6 +1308,7 @@ using AliasMap = std::unordered_map<std::string_view, std::string_view>;
             static_cast<UInt64>(FLAGS), \
             [](Data & data) -> SettingFieldBase * { return &data.NAME; }, \
             []() -> std::unique_ptr<SettingFieldBase> { return std::make_unique<SettingField##TYPE>(DEFAULT); }, \
+            [](Data & data) { data.NAME = SettingField##TYPE(DEFAULT); data.NAME.setChanged(false); }, \
         });
 
 /// Generate a FieldInfo entry for a setting with a config file path
@@ -1315,5 +1324,6 @@ using AliasMap = std::unordered_map<std::string_view, std::string_view>;
             static_cast<UInt64>(FLAGS), \
             [](Data & data) -> SettingFieldBase * { return &data.NAME; }, \
             []() -> std::unique_ptr<SettingFieldBase> { return std::make_unique<SettingField##TYPE>(DEFAULT); }, \
+            [](Data & data) { data.NAME = SettingField##TYPE(DEFAULT); data.NAME.setChanged(false); }, \
         });
 }

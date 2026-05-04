@@ -1,0 +1,17 @@
+max_threads	1
+max_final_threads	1
+max_parsing_threads	1
+after-set max_threads	0
+after-set max_final_threads	0
+after-set max_parsing_threads	0
+after-default max_threads	1
+after-default max_final_threads	1
+after-default max_parsing_threads	1
+idempotent max_threads	1
+multi-default max_threads	1
+multi-default max_final_threads	1
+multi-default max_parsing_threads	1
+autowrapper-set	1
+autowrapper-default	auto
+control changed	1
+control default-changed	0

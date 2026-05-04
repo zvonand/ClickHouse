@@ -107,16 +107,16 @@ HTTPServer(('127.0.0.1', $HTTP_PORT), Handler).serve_forever()
     else
         cat "$log_file"
         echo "FAIL: Expected cancellation error message"
-        exit 1
+        return 1
     fi
 
 }
 
 # Test a: slow HEAD, skip_empty=0, fast GET - tests HEAD cancellation phase
-test_url_cancellation 30 0 0
+test_url_cancellation 30 0 0 || exit 1
 
 # Test b: slow HEAD, skip_empty=1, fast GET - tests HEAD cancellation with skip empty files
-test_url_cancellation 30 0 1
+test_url_cancellation 30 0 1 || exit 1
 
 # Test c: fast HEAD, skip_empty=0, slow GET - tests GET cancellation phase
-test_url_cancellation 0 30 0
+test_url_cancellation 0 30 0 || exit 1

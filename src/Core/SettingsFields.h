@@ -212,16 +212,27 @@ struct SettingFieldMaxThreads final : SettingFieldBase
     }
 
     bool isChanged() const override { return changed; }
-    void setChanged(bool changed_) override { changed = changed_; }
+
+    /// `setChanged(false)` is invoked by `BaseSettings::resetValueToDefault` after assigning the
+    /// default value through a `Field` round-trip. The `Field` path drops the `is_auto` flag because
+    /// `SettingFieldMaxThreads` deliberately behaves like a plain `UInt64` for backward compatibility
+    /// (i.e. `operator Field` returns the resolved value, not the canonical `0`/`"auto"`). Without the
+    /// extra restoration below, `SET <name> = DEFAULT` would convert `'auto(N)'` into a fixed `N`.
+    /// `setChanged(false)` is the only path in the tree that puts a setting back into the
+    /// "unchanged from default" state, so the canonical default state is restored here. See issue
+    /// #103120.
+    void setChanged(bool changed_) override
+    {
+        changed = changed_;
+        if (!changed_)
+        {
+            is_auto = true;
+            value = getAuto();
+        }
+    }
 
     operator UInt64() const { return value; } /// NOLINT
-    /// Return the canonical `"auto"` string when `is_auto` is set, mirroring `SettingAutoWrapper::operator Field`.
-    /// This makes the `Field` round-trip invertible: `operator=(Field("auto"))` recognises the keyword
-    /// (via `fieldToMaxThreads` -> `stringToMaxThreads`) and restores `is_auto = true`. Without this,
-    /// `BaseSettings::resetValueToDefault` (and other code paths that round-trip through `Field`) would
-    /// silently drop the `is_auto` flag — e.g. `SET <name> = DEFAULT` would convert `'auto(N)'` into a
-    /// fixed `N`. See issue #103120.
-    explicit operator Field() const override { return is_auto ? Field("auto") : Field(value); }
+    explicit operator Field() const override { return value; }
 
     /// Writes "auto(<number>)" instead of simple "<number>" if `is_auto == true`.
     String toString() const override;

@@ -3,12 +3,17 @@
 -- `SET <name> = DEFAULT` used to lose the `is_auto` flag for `SettingFieldMaxThreads`-typed
 -- settings (`max_threads`, `max_final_threads`, `max_parsing_threads`). The cause was that
 -- `BaseSettings::resetValueToDefault` round-trips through `static_cast<Field>(*default)`,
--- and `SettingFieldMaxThreads::operator Field` used to return the resolved auto-value (an
--- opaque `UInt64`), so the subsequent `operator=(const Field &)` reconstructed the field as
--- if it had been set to that explicit value. The fix (mirroring `SettingAutoWrapper`) is to
--- have `operator Field` emit the `"auto"` keyword when `is_auto` is set, so the round-trip
--- is invertible: `fieldToMaxThreads(Field("auto"))` parses back to the canonical 0 and
--- restores `is_auto = true`.
+-- and `SettingFieldMaxThreads::operator Field` returns the resolved auto-value (an opaque
+-- `UInt64`) rather than the canonical `0`/`"auto"`, because it deliberately behaves like a
+-- plain `UInt64` for backward compatibility with code that reads `getSetting('max_threads')`
+-- as numeric. The subsequent `operator=(const Field &)` therefore reconstructed the field
+-- as if it had been set to that explicit value, dropping `is_auto`.
+--
+-- The fix overrides `SettingFieldMaxThreads::setChanged(bool)` so that `setChanged(false)`
+-- (called by `BaseSettings::resetValueToDefault` immediately after the lossy `Field`
+-- assignment, and only from there) restores the canonical default state: `is_auto = true,
+-- value = getAuto()`. `operator Field` is unchanged, so distributed forwarding and code
+-- that reads max_threads as `UInt64` retain their previous behaviour.
 --
 -- We use `startsWith(value, '''auto(')` to assert that the auto state is preserved without
 -- depending on the actual core count.

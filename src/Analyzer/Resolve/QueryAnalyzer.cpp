@@ -2183,24 +2183,36 @@ ProjectionNames QueryAnalyzer::resolveMatcher(QueryTreeNodePtr & matcher_node, I
     /// columns in the Aggregating step are non-Nullable.
     /// This causes a crash in AggregateFunctionNullVariadic::addBatchSinglePlace.
     ///
-    /// We recursively check the APPLY expression tree because the aggregate function may be nested
+    /// We traverse the APPLY expression tree because the aggregate function may be nested
     /// inside other function calls (e.g. `toString(argMax(x, number))`), not just at the top level.
-    /// We use AggregateFunctionFactory name lookup (not FunctionNode::isAggregateFunction()) because
-    /// APPLY expressions have not been resolved yet at this point — FunctionNode::kind is still UNKNOWN.
-    auto has_aggregate_function_in_tree = [](const IQueryTreeNode * node, auto & self) -> bool
+    /// We use `AggregateFunctionFactory` name lookup (not `FunctionNode::isAggregateFunction`) because
+    /// APPLY expressions have not been resolved yet at this point — `FunctionNode::kind` is still `UNKNOWN`.
+    auto has_aggregate_function_in_tree = [](const IQueryTreeNode * root) -> bool
     {
-        if (!node)
+        if (!root)
             return false;
-        if (const auto * func = node->as<FunctionNode>())
+
+        std::vector<const IQueryTreeNode *> nodes_to_process;
+        nodes_to_process.push_back(root);
+
+        while (!nodes_to_process.empty())
         {
-            if (AggregateFunctionFactory::instance().isAggregateFunctionName(func->getFunctionName()))
-                return true;
+            const auto * subtree_node = nodes_to_process.back();
+            nodes_to_process.pop_back();
+
+            if (const auto * func = subtree_node->as<FunctionNode>())
+            {
+                if (AggregateFunctionFactory::instance().isAggregateFunctionName(func->getFunctionName()))
+                    return true;
+            }
+
+            for (const auto & child : subtree_node->getChildren())
+            {
+                if (child)
+                    nodes_to_process.push_back(child.get());
+            }
         }
-        for (const auto & child : node->getChildren())
-        {
-            if (child && self(child.get(), self))
-                return true;
-        }
+
         return false;
     };
 
@@ -2219,7 +2231,7 @@ ProjectionNames QueryAnalyzer::resolveMatcher(QueryTreeNodePtr & matcher_node, I
             {
                 expr_to_check = apply->getExpressionNode().get();
             }
-            if (expr_to_check && has_aggregate_function_in_tree(expr_to_check, has_aggregate_function_in_tree))
+            if (expr_to_check && has_aggregate_function_in_tree(expr_to_check))
             {
                 has_aggregate_apply_transformer = true;
                 break;

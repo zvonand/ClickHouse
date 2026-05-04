@@ -2169,8 +2169,11 @@ TEST(FunctionsStress, stress)
 
     auto request_shutdown = [&]
         {
+            /// Stuck workers are converted to nullptr below (see the `t.release()` call). A
+            /// termination signal arriving after that point would otherwise dereference null.
             for (auto & t : threads)
-                t->thread_should_stop.store(true);
+                if (t)
+                    t->thread_should_stop.store(true);
         };
 
     /// Print stack trace and function name on crash.
@@ -2224,7 +2227,7 @@ TEST(FunctionsStress, stress)
             /// then leak the entire `FunctionsStressTestThread` so the worker can keep using
             /// its state safely. See the comment near `threads` declaration above for details.
             t->thread.detach();
-            (void)t.release();
+            [[maybe_unused]] auto * leaked = t.release();
         }
         else
         {

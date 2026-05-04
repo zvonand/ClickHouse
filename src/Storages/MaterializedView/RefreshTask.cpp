@@ -1422,7 +1422,7 @@ void RefreshTask::CoordinationZnode::parse(const String & data, bool running_zno
     };
     auto try_read_field = [&](const char * name, auto & out) -> bool
     {
-        using T = std::remove_reference<decltype(out)>::type;
+        using T = std::remove_reference_t<decltype(out)>;
 
         if (next_field_name != name)
             return false;
@@ -1479,7 +1479,7 @@ void RefreshTask::CoordinationZnode::parse(const String & data, bool running_zno
     required_field("randomness", randomness);
     optional_field("refresh_running", refresh_running, running_znode_exists);
 
-    if (next_field_name != "")
+    if (next_field_name.empty())
     {
         LOG_INFO(log_, "Unrecognized field '{}' in RMV coordination znode. Maybe the znode was written by a newer version of the server that added this field, or maybe parsing is broken.", next_field_name);
     }

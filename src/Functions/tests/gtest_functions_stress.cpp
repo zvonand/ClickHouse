@@ -2162,6 +2162,11 @@ TEST(FunctionsStress, stress)
     /// For stuck workers we instead `detach` the `std::thread` and `release` the `unique_ptr`,
     /// leaving the heap-allocated state alive forever. The test is failing anyway, so this leak
     /// only persists until the test process exits.
+    ///
+    /// The actual `unique_ptr` release for stuck workers is deferred until after the signal
+    /// listener thread has stopped — see the cleanup pass at the bottom of this function.
+    /// `request_shutdown` (the signal listener callback) reads `threads`, so mutating the
+    /// `unique_ptr` slots concurrently would be a data race.
     std::vector<std::unique_ptr<FunctionsStressTestThread>> threads(static_cast<size_t>(num_threads));
     for (auto & t : threads)
         t = std::make_unique<FunctionsStressTestThread>();
@@ -2169,8 +2174,9 @@ TEST(FunctionsStress, stress)
 
     auto request_shutdown = [&]
         {
-            /// Stuck workers are converted to nullptr below (see the `t.release()` call). A
-            /// termination signal arriving after that point would otherwise dereference null.
+            /// `threads` is only mutated after `signal_listener_thread` has been stopped and
+            /// joined, so all entries are non-null while the listener is alive. The `if (t)`
+            /// guard is purely defensive.
             for (auto & t : threads)
                 if (t)
                     t->thread_should_stop.store(true);
@@ -2209,9 +2215,16 @@ TEST(FunctionsStress, stress)
         total_stats[i].function_idx = i;
     size_t stuck_threads = 0;
 
+    /// Indices of workers that turned out to be stuck. We detach their `std::thread` immediately
+    /// (so its destructor doesn't `std::terminate`), but defer the `unique_ptr` release until
+    /// after `signal_listener_thread` has been joined. `request_shutdown` reads `threads`, so
+    /// any concurrent mutation would be a data race.
+    std::vector<size_t> stuck_indices;
+
     auto deadline = std::chrono::steady_clock::now() + stop_timeout;
-    for (auto & t : threads)
+    for (size_t i = 0; i < threads.size(); ++i)
     {
+        auto & t = threads[i];
         std::optional<Operation> stuck_operation;
         {
             std::unique_lock lock(t->mutex);
@@ -2223,25 +2236,36 @@ TEST(FunctionsStress, stress)
         {
             LOG_ERROR(logger, "Thread is stuck while {}", stuck_operation->describe());
             ++stuck_threads;
-            /// Detach the still-joinable `std::thread` so its destructor doesn't `std::terminate`,
-            /// then leak the entire `FunctionsStressTestThread` so the worker can keep using
-            /// its state safely. See the comment near `threads` declaration above for details.
+            /// Detach the still-joinable `std::thread` so its destructor doesn't `std::terminate`.
+            /// Detaching mutates only `t->thread`, which `request_shutdown` does not read, so it
+            /// is safe to do here while the signal listener is still alive.
             t->thread.detach();
-            [[maybe_unused]] auto * leaked = t.release();
+            stuck_indices.push_back(i);
         }
         else
         {
             t->thread.join();
-            for (size_t i = 0; i < testable_functions.size(); ++i)
-                total_stats[i].merge(t->function_stats[i]);
+            for (size_t j = 0; j < testable_functions.size(); ++j)
+                total_stats[j].merge(t->function_stats[j]);
         }
     }
 
     String failure_details = reportResults(total_stats, stuck_threads);
 
+    /// Stop and join the signal listener BEFORE releasing the `unique_ptr` slots for stuck
+    /// workers. While the listener is alive it can fire `request_shutdown`, which iterates
+    /// `threads` and reads each `unique_ptr`. Releasing concurrently would be a data race.
     writeSignalIDtoSignalPipe(SignalListener::StopThread);
     signal_listener_thread.join();
     HandledSignals::instance().reset();
+
+    /// Now that no other thread can read `threads`, release the stuck workers' `unique_ptr`s.
+    /// The heap-allocated state stays alive forever so the still-running stuck workers can keep
+    /// using it safely; the test process is about to exit so the leak is bounded.
+    for (size_t i : stuck_indices)
+    {
+        [[maybe_unused]] auto * leaked = threads[i].release();
+    }
 
     ASSERT_TRUE(failure_details.empty()) << failure_details;
 }

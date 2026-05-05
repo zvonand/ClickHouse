@@ -205,6 +205,63 @@ Workflow:
 
 5. **Verify test coverage.** The PR's tests must include adversarial edge cases that the original caller would never produce: empty inputs, minimal-length inputs, malformed inputs, NULLs, maximum-length inputs.
 
+**12) Shell-command safety in Python / shell scripts**
+
+Even though Python and shell scripts are secondary to C++ review, **destructive or privileged shell commands with unquoted substitution are a blocker, not a nit**. They are easy to write, easy to miss in review, and have catastrophic blast radius (`rm -rf` on the wrong path, command injection, accidental deletion of unrelated files). Always flag them.
+
+Patterns to flag — any of these is a Blocker (or Major if the substituted value is provably constant in the immediate caller, but the construct is still fragile and should be rewritten):
+
+- **`rm -rf` and other destructive commands with f-string / `%`-format / `+`-concat substitution** passed to `subprocess.run(..., shell=True)`, `subprocess.Popen(..., shell=True)`, `os.system`, `os.popen`, `commands.getoutput`, or any in-tree wrapper that uses `shell=True` under the hood (e.g. ClickHouse's `Shell.check` / `Shell.run` / `Shell.get_output` in `ci/praktika/utils.py` and `tests/ci/ci_utils.py` — all of which call `subprocess.run(..., shell=True, executable="/bin/bash", ...)`). Examples of destructive/privileged commands: `rm`, `rm -rf`, `mv`, `cp -r`, `find ... -delete`, `chmod`, `chown`, `chgrp`, `mkfs`, `mount`, `umount`, `dd`, `kill`, `pkill`, `sudo …`.
+- **Backticks or `$(…)` in shell scripts that interpolate variables into destructive commands** without `"…"` quoting (e.g. `rm -rf $dir/.tmp` without quotes around `"$dir"`).
+- **Path concatenation with `+` or `f"{a}/{b}"` for filesystem operations** when a `pathlib.Path` is already in scope — even when it doesn't go to a shell, mixing string paths and `Path` objects loses the type discipline that prevents these bugs from creeping in.
+
+Bad — every line below is a Blocker:
+
+```python
+Shell.check(f"rm -rf {dest}/.repodata", strict=True)        # ClickHouse Shell wrapper uses shell=True
+subprocess.run(f"rm -rf {tmp}", shell=True, check=True)
+subprocess.run(f"rm -rf {tmp}/*", shell=True)               # globbing AND substitution
+os.system(f"rm -rf {var}")
+os.system("rm -rf " + path)
+Shell.check(f"mv {src} {dst}", strict=True)
+```
+
+```bash
+# In a .sh script
+rm -rf $TMP_DIR/.repodata        # unquoted variable
+rm -rf "$TMP_DIR"/*              # globbing — if $TMP_DIR is empty, becomes `rm -rf /*`
+find $DIR -name '*.tmp' -delete  # unquoted $DIR
+```
+
+Good — preferred replacements:
+
+```python
+# 1. Use Python directly — no shell at all (best for filesystem operations).
+import shutil
+from pathlib import Path
+shutil.rmtree(Path(dest) / ".repodata", ignore_errors=True)
+
+# 2. If a subprocess is genuinely required, pass argv as a list — no shell, no quoting bugs.
+subprocess.run(["rm", "-rf", "--", str(Path(dest) / ".repodata")], check=True)
+
+# 3. If a shell wrapper is the only option (e.g. complex pipelines), use shlex.quote on every
+#    substituted value AND a `--` argument terminator where supported.
+import shlex
+Shell.check(f"rm -rf -- {shlex.quote(str(stale_repodata))}", strict=True)
+```
+
+```bash
+# In .sh: always quote, always use `--` when the command supports it
+rm -rf -- "${TMP_DIR}/.repodata"
+find "${DIR}" -name '*.tmp' -delete
+```
+
+Why this is a Blocker, not a nit:
+- Even if today the substituted value is "obviously safe", paths flow through environment variables, CI parameters, S3 keys, user names, and external configuration — any of which can introduce a space, a `;`, a `&&`, a `*`, a `~`, or an empty string. An empty `$VAR` plus `rm -rf "$VAR"/*` deletes the filesystem root. `rm -rf $VAR` with a space in `$VAR` deletes whatever happens to match the second token.
+- The fix is small and uniformly safer; there is no reason to keep the unquoted form.
+- `subprocess.run(shell=True)` with an f-string is the Python equivalent of `eval` for shell. ClickHouse's `Shell.check` looks like a benign helper but is exactly this construct — wrappers do not make it safe.
+
+When you find one of these, propose the concrete `shutil.rmtree` / argv-list / `shlex.quote` replacement in the suggested fix, do not just say "use quoting".
 
 CLICKHOUSE RULES (MANDATORY)
 - **Deletion logging**
@@ -244,6 +301,7 @@ SEVERITY MODEL – WHAT DESERVES A COMMENT
 - Security or privilege issues, or license incompatibility.
 - Server-side file access with user-controlled paths that bypass `user_files_path` or equivalent restrictions.
 - Large binary files (JARs, archives, datasets, compiled artifacts) committed to git — permanent, irreversible repo bloat.
+- Destructive or privileged shell commands (`rm -rf`, `mv`, `find … -delete`, `chmod`, `chown`, `dd`, `kill`, `sudo …`, etc.) constructed via string interpolation and passed to `shell=True` (`subprocess.run`/`Popen`, `os.system`, `Shell.check`/`Shell.run` and similar wrappers), or unquoted variables in destructive shell-script commands. See checklist item **12) Shell-command safety**.
 
 **Majors** – serious but not catastrophic
 - Under-tested important edge cases or error paths.

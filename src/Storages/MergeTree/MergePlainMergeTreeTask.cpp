@@ -1,4 +1,5 @@
 #include <Storages/MergeTree/MergePlainMergeTreeTask.h>
+#include <Common/CurrentThread.h>
 
 #include <Storages/MergeTree/MergeTreeData.h>
 #include <Storages/StorageMergeTree.h>
@@ -8,6 +9,7 @@
 #include <Common/ProfileEventsScope.h>
 #include <Common/ProfileEvents.h>
 #include <Common/ThreadFuzzer.h>
+#include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Interpreters/Context.h>
 
 
@@ -33,6 +35,7 @@ void MergePlainMergeTreeTask::onCompleted()
 
 bool MergePlainMergeTreeTask::executeStep()
 {
+    auto component_guard = Coordination::setCurrentComponent("MergePlainMergeTreeTask::executeStep");
     /// All metrics will be saved in the thread_group, including all scheduled tasks.
     /// In profile_counters only metrics from this thread will be saved.
     ProfileEventsScope profile_events_scope(&profile_counters);
@@ -97,11 +100,12 @@ void MergePlainMergeTreeTask::prepare()
 
     storage.writePartLog(
         PartLogElement::MERGE_PARTS_START, {}, 0,
-        future_part->name, new_part, future_part->parts, merge_list_entry.get(), {});
+        future_part->name, new_part, future_part->parts, merge_list_entry.get(), {}, {}, {});
 
     write_part_log = [this] (const ExecutionStatus & execution_status)
     {
         auto profile_counters_snapshot = std::make_shared<ProfileEvents::Counters::Snapshot>(profile_counters.getPartiallyAtomicSnapshot());
+        auto projections_duration_ms = merge_task ? merge_task->grabProjectionsMergeTime() : std::map<String, UInt64>{};
         storage.writePartLog(
             PartLogElement::MERGE_PARTS,
             execution_status,
@@ -110,7 +114,9 @@ void MergePlainMergeTreeTask::prepare()
             new_part,
             future_part->parts,
             merge_list_entry.get(),
-            std::move(profile_counters_snapshot));
+            std::move(profile_counters_snapshot),
+            {},
+            projections_duration_ms);
     };
 
     transfer_profile_counters_to_initial_query = [this, query_thread_group = CurrentThread::getGroup()] ()
@@ -193,6 +199,7 @@ void MergePlainMergeTreeTask::finish()
 
 void MergePlainMergeTreeTask::cancel() noexcept
 {
+    auto component_guard = Coordination::setCurrentComponent("MergePlainMergeTreeTask::cancel");
     if (merge_task)
         merge_task->cancel();
 

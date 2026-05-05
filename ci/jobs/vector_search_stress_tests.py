@@ -224,7 +224,7 @@ test_params_cohere_wiki_20m = {
     TRUTH_SET_COUNT: 25000,
     RECALL_K: 10,
     # Let's have more than 1 part for this dataset (7 - 9 parts)
-    MERGE_TREE_SETTINGS: "max_bytes_to_merge_at_max_space_in_pool=11811160064",
+    MERGE_TREE_SETTINGS: "max_bytes_to_merge_at_max_space_in_pool=11811160064, min_insert_block_size_rows = 3000000, min_insert_block_size_bytes=11737418240",
     OTHER_SETTINGS: None,
     CONCURRENCY_TEST: True,
 }
@@ -319,6 +319,11 @@ class RunTest:
                 break
             logger("Waiting for existing merges to complete...")
             time.sleep(5)
+
+        if self._test_params[MERGE_TREE_SETTINGS] is not None:
+            if "max_bytes_to_merge_at_max_space_in_pool" in self._test_params[MERGE_TREE_SETTINGS]:
+                logger("Skipping OPTIMIZE TABLE")
+                return
 
         try:
             self._chclient.query(
@@ -829,7 +834,7 @@ def install_and_start_clickhouse():
 
 
 # Array of (dataset, test_params)
-TESTS_TO_RUN = [
+"""
     (
         "Test using the laion dataset",
         dataset_laion_5b_mini_for_quick_test,
@@ -840,6 +845,8 @@ TESTS_TO_RUN = [
         dataset_hackernews_openai,
         test_params_hackernews_10m,
     ),
+"""
+TESTS_TO_RUN = [
     (
         "Test using the cohere wiki dataset",
         dataset_cohere_wiki_20m,

@@ -181,6 +181,16 @@ add_subdirectory(keyvaluepair)
 # Signed integer overflow on user-provided data inside boost::geometry - ignore.
 set_source_files_properties("pointInPolygon.cpp" PROPERTIES COMPILE_FLAGS -fno-sanitize=signed-integer-overflow)
 
+# Under x86-64-v3 + ThinLTO the auto-vectorizer/unroller produce a 16-YMM
+# scratch zero-init followed by per-byte scatter writes in the Jaccard kernel
+# (`stringJaccardIndex`).  The combination causes store-buffer pressure and
+# partial store-forwarding stalls on Intel cores, regressing this query ~17%
+# vs the v2 codegen.  Compile this file at v2 to keep the SSE-only sequence
+# that matches master's performance.
+if (ARCH_AMD64 AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3)
+    set_source_files_properties(FunctionsStringDistance.cpp PROPERTIES COMPILE_FLAGS "-march=x86-64-v2")
+endif()
+
 if (USE_GPERF)
     # Only for regenerating
     add_custom_target(generate-html-char-ref-gperf ./HTMLCharacterReference.sh

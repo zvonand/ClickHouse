@@ -581,9 +581,14 @@ class ReleaseInfo:
             # "already exists" and still fails. Treat that as success by
             # verifying the release exists after any failure.
             if not Shell.check(cmd_create, verbose=True, retries=5, retry_delay=2):
+                # The recovery `gh release view` is invoked precisely when GitHub's
+                # API has been flaky. Retry it under the same policy so a single
+                # transient 5xx on the verify path doesn't fail the release.
                 assert Shell.check(
                     f"gh release view --repo {repo} {self.release_tag}",
                     verbose=True,
+                    retries=5,
+                    retry_delay=2,
                 ), f"Failed to create release {self.release_tag}"
             for cmd in cmds_upload:
                 Shell.check(cmd, strict=True, verbose=True, retries=5, retry_delay=2)

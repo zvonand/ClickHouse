@@ -4809,7 +4809,8 @@ void MergeTreeData::checkMutationIsPossible(const MutationCommands & commands, c
     if (auto uk_metadata = getInMemoryMetadataPtr(getContext(), false); uk_metadata->hasUniqueKey())
     {
         const auto & uk_column_names = uk_metadata->getUniqueKeyColumns();
-        auto is_uk_column = [&](const String & column) {
+        auto is_uk_column = [&](const String & column)
+        {
             return std::find(uk_column_names.begin(), uk_column_names.end(), column) != uk_column_names.end();
         };
 

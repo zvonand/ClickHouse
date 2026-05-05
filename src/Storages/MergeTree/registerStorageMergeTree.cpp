@@ -798,33 +798,20 @@ static StoragePtr create(const StorageFactory::Arguments & args)
         /// CREATE only; ATTACH must still load existing tables.
         if (metadata.hasUniqueKey() && args.mode <= LoadingStrictnessLevel::CREATE)
         {
-            StoragePolicyPtr resolved_storage_policy;
-            try
-            {
-                if ((*storage_settings)[MergeTreeSetting::disk].changed)
-                    resolved_storage_policy = context->getStoragePolicyFromDisk((*storage_settings)[MergeTreeSetting::disk]);
-                else
-                    resolved_storage_policy = context->getStoragePolicy((*storage_settings)[MergeTreeSetting::storage_policy]);
-            }
-            catch (...)
-            {
-                /// Unresolvable policy: let the downstream MergeTree constructor surface it.
-                resolved_storage_policy.reset();
-            }
+            StoragePolicyPtr resolved_storage_policy = (*storage_settings)[MergeTreeSetting::disk].changed
+                ? context->getStoragePolicyFromDisk((*storage_settings)[MergeTreeSetting::disk])
+                : context->getStoragePolicy((*storage_settings)[MergeTreeSetting::storage_policy]);
 
-            if (resolved_storage_policy)
+            for (const auto & disk : resolved_storage_policy->getDisks())
             {
-                for (const auto & disk : resolved_storage_policy->getDisks())
+                const auto & desc = disk->getDataSourceDescription();
+                if (desc.type != DataSourceType::Local)
                 {
-                    const auto & desc = disk->getDataSourceDescription();
-                    if (desc.type != DataSourceType::Local)
-                    {
-                        throw Exception(ErrorCodes::SUPPORT_IS_DISABLED,
-                            "UNIQUE KEY on non-local disks is not yet supported "
-                            "(disk `{}` has source type `{}`). "
-                            "UNIQUE KEY tables must currently reside on a local-only storage policy.",
-                            disk->getName(), desc.toString());
-                    }
+                    throw Exception(ErrorCodes::SUPPORT_IS_DISABLED,
+                        "UNIQUE KEY on non-local disks is not yet supported "
+                        "(disk `{}` has source type `{}`). "
+                        "UNIQUE KEY tables must currently reside on a local-only storage policy.",
+                        disk->getName(), desc.toString());
                 }
             }
         }

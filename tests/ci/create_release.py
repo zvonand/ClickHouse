@@ -559,10 +559,17 @@ class ReleaseInfo:
             f"gh release create --repo {repo} --title 'Release {self.release_tag}' {self.release_tag}"
         ]
         for file in packages_files:
-            cmds.append(f"gh release upload {self.release_tag} {file}")
+            # `--clobber` makes retries idempotent if a previous attempt
+            # registered the asset server-side before failing.
+            cmds.append(f"gh release upload --clobber {self.release_tag} {file}")
         if not dry_run:
+            # GitHub's release API occasionally returns transient 5xx errors
+            # (e.g. 502 Bad Gateway) under load, aborting the whole release.
+            # Retry each command a few times before giving up.
             for cmd in cmds:
-                Shell.check(cmd, strict=True, verbose=True)
+                Shell.check(
+                    cmd, strict=True, verbose=True, retries=5, retry_delay=15
+                )
             self.release_url = (
                 f"https://github.com/{repo}/releases/tag/{self.release_tag}"
             )

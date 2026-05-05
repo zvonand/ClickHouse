@@ -151,12 +151,16 @@ bool DayOfWeek::convertImpl(String & out, IParser::Pos & pos)
     ++pos;
     const String datetime_str = getConvertedArgument(fn_name, pos);
 
-    /// KQL dayofweek returns a timespan: N.00:00:00 for N days, or 00:00:00 for Sunday
+    /// KQL `dayofweek` returns a timespan: `N.00:00:00` for N days, or `00:00:00` for Sunday.
+    /// Bind `toDayOfWeek({0}) % 7` once via the SQL `(<expr>) AS <alias>` pattern so the
+    /// input expression is evaluated exactly once per row. Without this, non-deterministic
+    /// arguments such as `now64()` could produce inconsistent results within one call.
+    const auto dow = "_kql_dow_" + generateUniqueIdentifier();
     out = fmt::format(
         "concat("
-        "if(toDayOfWeek({0}) % 7 > 0, concat(toString(toDayOfWeek({0}) % 7), '.'), ''), "
+        "if(((toDayOfWeek({0}) % 7) AS {1}) > 0, concat(toString({1}), '.'), ''), "
         "'00:00:00')",
-        datetime_str);
+        datetime_str, dow);
     return true;
 }
 

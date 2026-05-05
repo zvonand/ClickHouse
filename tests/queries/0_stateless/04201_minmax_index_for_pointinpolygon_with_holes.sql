@@ -3,6 +3,7 @@
 -- Covers: src/Storages/MergeTree/KeyCondition.cpp:3600-3604 — `if (func_name == "pointInPolygon") return analyze_point_in_polygon()`
 -- inside the `else` (num_args > 2) block. PR's own test 03031 only exercises Case1 (num_args == 2, no holes).
 
+
 DROP TABLE IF EXISTS minmax_pip_holes;
 
 CREATE TABLE minmax_pip_holes

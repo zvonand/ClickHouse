@@ -1,0 +1,14 @@
+-- i8 SELECT with NaN reference vector
+-- i8 SELECT with +Inf reference vector
+-- i8 SELECT with -Inf reference vector
+-- i8 SELECT with zero-magnitude reference vector
+-- i8 SELECT with valid reference vector still works
+0
+-- i8 INSERT with NaN element
+-- i8 INSERT with +Inf element
+-- i8 INSERT with zero-magnitude vector
+-- bf16 SELECT with NaN reference vector still rejected
+-- bf16 SELECT with zero-magnitude reference vector is allowed
+1
+-- bf16 INSERT with NaN element still rejected
+-- bf16 INSERT with zero-magnitude vector is allowed

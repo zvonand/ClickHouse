@@ -131,6 +131,7 @@ class TextLog;
 class TraceLog;
 class MetricLog;
 class TransposedMetricLog;
+class HistogramMetricLog;
 class AsynchronousMetricLog;
 class OpenTelemetrySpanLog;
 class ZooKeeperLog;
@@ -138,6 +139,7 @@ class ZooKeeperConnectionLog;
 class AggregatedZooKeeperLog;
 class IcebergMetadataLog;
 class DeltaMetadataLog;
+class PredicateStatisticsLog;
 class SessionLog;
 class BackupsWorker;
 class TransactionsInfoLog;
@@ -440,7 +442,7 @@ public:
             partitions = rhs.partitions;
             projections = rhs.projections;
             views = rhs.views;
-            skip_indices = rhs.skip_indices;
+            row_policies = rhs.row_policies;
         }
 
         QueryAccessInfo(QueryAccessInfo && rhs) = delete;
@@ -461,7 +463,7 @@ public:
             std::swap(partitions, rhs.partitions);
             std::swap(projections, rhs.projections);
             std::swap(views, rhs.views);
-            std::swap(skip_indices, rhs.skip_indices);
+            std::swap(row_policies, rhs.row_policies);
         }
 
         /// To prevent a race between copy-constructor and other uses of this structure.
@@ -472,7 +474,7 @@ public:
         std::set<std::string> partitions TSA_GUARDED_BY(mutex){};
         std::set<std::string> projections TSA_GUARDED_BY(mutex){};
         std::set<std::string> views TSA_GUARDED_BY(mutex){};
-        std::set<std::string> skip_indices TSA_GUARDED_BY(mutex){};
+        std::set<std::string> row_policies TSA_GUARDED_BY(mutex){};
     };
     using QueryAccessInfoPtr = std::shared_ptr<QueryAccessInfo>;
 
@@ -747,6 +749,8 @@ public:
         DB_ORDINARY_DEPRECATED,
         DELAY_ACCOUNTING_DISABLED,
         LINUX_FAST_CLOCK_SOURCE_NOT_USED,
+        LINUX_MDRAID_IS_BEING_RESYNCHRONIZED,
+        LINUX_MDRAID_IS_DEGRADED,
         LINUX_MAX_PID_TOO_LOW,
         LINUX_MAX_THREADS_COUNT_TOO_LOW,
         LINUX_MEMORY_OVERCOMMIT_DISABLED,
@@ -781,6 +785,7 @@ public:
 
     std::unordered_map<WarningType, PreformattedMessage> getWarnings() const;
     void addOrUpdateWarningMessage(WarningType warning, const PreformattedMessage & message) const;
+    void addOrUpdateWarningMessage(WarningType warning, std::optional<PreformattedMessage> message) const;
     void addWarningMessageAboutDatabaseOrdinary(const String & database_name) const;
     void removeWarningMessage(WarningType warning) const;
     void removeAllWarnings() const;
@@ -997,6 +1002,7 @@ public:
 
     void addQueryAccessInfo(const Names & partition_names);
     void addViewAccessInfo(const String & view_name);
+    void addUsedRowPolicy(const String & policy_name);
 
     struct QualifiedProjectionName
     {
@@ -1006,8 +1012,6 @@ public:
     };
 
     void addQueryAccessInfo(const QualifiedProjectionName & qualified_projection_name);
-
-    void addSkipIndexAccessInfo(const String & full_table_name, const String & skip_index_name);
 
     /// Supported factories for records in query_log
     enum class QueryLogFactories : uint8_t
@@ -1512,6 +1516,7 @@ public:
     std::shared_ptr<TextLog> getTextLog() const;
     std::shared_ptr<MetricLog> getMetricLog() const;
     std::shared_ptr<TransposedMetricLog> getTransposedMetricLog() const;
+    std::shared_ptr<HistogramMetricLog> getHistogramMetricLog() const;
     std::shared_ptr<AsynchronousMetricLog> getAsynchronousMetricLog() const;
     std::shared_ptr<OpenTelemetrySpanLog> getOpenTelemetrySpanLog() const;
     std::shared_ptr<ZooKeeperLog> getZooKeeperLog() const;
@@ -1531,6 +1536,7 @@ public:
     std::shared_ptr<AggregatedZooKeeperLog> getAggregatedZooKeeperLog() const;
     std::shared_ptr<IcebergMetadataLog> getIcebergMetadataLog() const;
     std::shared_ptr<DeltaMetadataLog> getDeltaMetadataLog() const;
+    std::shared_ptr<PredicateStatisticsLog> getPredicateStatisticsLog() const;
 
     SystemLogs getSystemLogs() const;
 
@@ -1712,6 +1718,9 @@ public:
     void initializeBackgroundExecutorsIfNeeded();
     bool areBackgroundExecutorsInitialized() const;
 
+    /// True if the low-memory auto-tuning heuristic lowered background_pool_size at startup.
+    bool wasBackgroundPoolAutoLowered() const;
+
     MergeMutateBackgroundExecutorPtr getMergeMutateExecutor() const;
     OrdinaryBackgroundExecutorPtr getMovesExecutor() const;
     OrdinaryBackgroundExecutorPtr getFetchesExecutor() const;
@@ -1869,6 +1878,10 @@ struct HTTPContext : public IHTTPContext
     uint64_t getMaxFieldNameSize() const override;
 
     uint64_t getMaxFieldValueSize() const override;
+
+    uint64_t getMaxRequestHeaderSize() const override;
+
+    Poco::Timespan getHeadersReadTimeout() const override;
 
     Poco::Timespan getReceiveTimeout() const override;
 

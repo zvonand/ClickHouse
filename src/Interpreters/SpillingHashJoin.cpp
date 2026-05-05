@@ -52,7 +52,13 @@ SpillingHashJoin::SpillingHashJoin(
     , max_num_buckets(max_num_buckets_)
     , max_bytes_before_external_join(table_join->maxBytesBeforeExternalJoin())
 {
-    concurrent_join = std::make_shared<ConcurrentHashJoin>(table_join, concurrent_slots_, right_sample_block_, stats_collecting_params_);
+    concurrent_join = std::make_shared<ConcurrentHashJoin>(
+        table_join,
+        concurrent_slots_,
+        right_sample_block_,
+        stats_collecting_params_,
+        /*any_take_last_row_=*/false,
+        max_bytes_before_external_join);
     supports_parallel_non_joined_blocks_processing = concurrent_join->supportParallelNonJoinedBlocksProcessing();
 }
 
@@ -180,7 +186,9 @@ void SpillingHashJoin::switchToGraceHashJoin()
                 table_join,
                 left_sample_block,
                 std::make_shared<const Block>(right_sample_block),
-                tmp_data);
+                tmp_data,
+                /*any_take_last_row_=*/false,
+                max_bytes_before_external_join);
             grace_join->initialize(*left_sample_block);
             chosen_join = grace_join;
 
@@ -200,7 +208,14 @@ void SpillingHashJoin::switchToGraceHashJoin()
     BlocksList right_blocks = hash_join->releaseJoinedBlocks(/*restructure=*/false);
 
     chosen_join = std::make_shared<GraceHashJoin>(
-        initial_num_buckets, max_num_buckets, table_join, left_sample_block, std::make_shared<const Block>(right_sample_block), tmp_data);
+        initial_num_buckets,
+        max_num_buckets,
+        table_join,
+        left_sample_block,
+        std::make_shared<const Block>(right_sample_block),
+        tmp_data,
+        /*any_take_last_row_=*/false,
+        max_bytes_before_external_join);
 
     chosen_join->initialize(*left_sample_block);
 

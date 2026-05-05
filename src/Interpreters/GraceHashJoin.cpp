@@ -40,15 +40,6 @@ namespace ErrorCodes
     extern const int NOT_IMPLEMENTED;
 }
 
-/// Floor for the automatic-spill check against `max_bytes_before_external_join`. Each rehash
-/// halves the in-memory bucket, so for total data D and threshold T we need ~log2(D / T)
-/// rehashes per bucket (capped by `grace_hash_join_max_buckets`). With smaller thresholds
-/// the hash-table cell overhead alone (~32 bytes per row) can already exceed `T/2` before
-/// any rehash can help, forcing one rehash per added block and quickly hitting the bucket
-/// cap. 1 MiB enforces the contract for any practical configuration while still leaving low
-/// test thresholds (e.g. 1 KiB in `03915_spilling_hash_join`) unaffected.
-static constexpr size_t MIN_THRESHOLD_FOR_AUTOMATIC_SPILL = 1024 * 1024;
-
 namespace
 {
     class AccumulatedBlockReader
@@ -265,7 +256,8 @@ GraceHashJoin::GraceHashJoin(
     SharedHeader left_sample_block_,
     SharedHeader right_sample_block_,
     TemporaryDataOnDiskScopePtr tmp_data_,
-    bool any_take_last_row_)
+    bool any_take_last_row_,
+    size_t external_join_threshold_)
     : log{getLogger("GraceHashJoin")}
     , table_join{std::move(table_join_)}
     , left_sample_block{left_sample_block_}
@@ -273,6 +265,7 @@ GraceHashJoin::GraceHashJoin(
     , any_take_last_row{any_take_last_row_}
     , initial_num_buckets(initial_num_buckets_)
     , max_num_buckets(max_num_buckets_)
+    , external_join_threshold(external_join_threshold_)
     , left_key_names(table_join->getOnlyClause().key_names_left)
     , right_key_names(table_join->getOnlyClause().key_names_right)
     , tmp_data(tmp_data_->childScope({
@@ -335,19 +328,16 @@ bool GraceHashJoin::hasMemoryOverflow(size_t total_rows, size_t total_bytes) con
         return false;
     bool has_overflow = !table_join->sizeLimits().softCheck(total_rows, total_bytes);
 
-    /// Also respect `max_bytes_before_external_join`. When the SpillingHashJoin wrapper hands data
-    /// to us after exceeding its threshold, we must keep spilling under the same cap; otherwise
-    /// the in-memory bucket would just keep growing and the wrapper's spill decision is meaningless.
-    /// We use half the threshold for the same reason as the wrapper: the in-memory hash table
-    /// doubles its buffer in power-of-two steps, transiently holding 3X the previous size, so
-    /// rehashing buckets early prevents that doubling from exceeding the cap. See the comment
-    /// on `MIN_THRESHOLD_FOR_AUTOMATIC_SPILL` for why a small floor is required.
-    if (!has_overflow)
-    {
-        const auto external_join_threshold = table_join->maxBytesBeforeExternalJoin();
-        if (external_join_threshold >= MIN_THRESHOLD_FOR_AUTOMATIC_SPILL && total_bytes * 2 >= external_join_threshold)
-            has_overflow = true;
-    }
+    /// Wrapper-only auto-spill: when `SpillingHashJoin` drives this instance, it passes its
+    /// memory cap as `external_join_threshold`. We must keep spilling under the same cap;
+    /// otherwise the in-memory bucket would just keep growing and the wrapper's spill decision
+    /// would be meaningless. We use half the threshold for the same reason as the wrapper: the
+    /// in-memory hash table doubles its buffer in power-of-two steps, transiently holding 3X
+    /// the previous size, so rehashing buckets early prevents that doubling from exceeding the
+    /// cap. Standalone `grace_hash` instances pass 0 and rely solely on
+    /// `max_rows_in_join` / `max_bytes_in_join`.
+    if (!has_overflow && external_join_threshold > 0 && total_bytes * 2 >= external_join_threshold)
+        has_overflow = true;
 
     if (has_overflow)
         LOG_TRACE(log, "Memory overflow, size exceeded {} / {} bytes, {} / {} rows",
@@ -785,8 +775,8 @@ void GraceHashJoin::addBlockToJoinImpl(Block block)
         auto prev_keys_num = hash_join->getTotalRowCount();
         size_t pre_total_bytes = hash_join->getTotalByteCount();
 
-        /// Pre-check: rehash when the in-memory bucket alone is already past half of
-        /// `max_bytes_before_external_join`. The inner `HashJoin::addBlockToJoin` grows its
+        /// Pre-check: rehash when the in-memory bucket alone is already past half of the
+        /// wrapper-supplied auto-spill cap. The inner `HashJoin::addBlockToJoin` grows its
         /// hash buffer in power-of-two steps. Doubling from X to 2X transiently holds 3X
         /// (old buffer + new buffer being filled), so a post-add check can race with that
         /// doubling and observe the OOM only as an allocator exception.
@@ -795,12 +785,11 @@ void GraceHashJoin::addBlockToJoinImpl(Block block)
         /// in the incoming block: `block.allocatedBytes()` is a misleading lower bound on
         /// the actual hash-table cost (cell overhead, load-factor padding, resize peaks),
         /// so a tiny block could leave a near-full bucket bypassing the pre-check and OOM
-        /// during the resize. Mirrors `SpillingHashJoin::addBlockToJoin`. Gated on the
-        /// external-join threshold only (not on `max_rows_in_join` / `max_bytes_in_join`,
-        /// which are still enforced by the post-check below) so that very small soft
-        /// limits, common in tests, do not amplify into excessive rehashing.
-        const auto external_join_threshold = table_join->maxBytesBeforeExternalJoin();
-        const bool pre_threshold_overflow = external_join_threshold >= MIN_THRESHOLD_FOR_AUTOMATIC_SPILL
+        /// during the resize. Mirrors `SpillingHashJoin::addBlockToJoin`. Skipped for
+        /// standalone `grace_hash` instances (`external_join_threshold == 0`); they still
+        /// rely on the post-insert `hasMemoryOverflow` check against
+        /// `max_rows_in_join` / `max_bytes_in_join`.
+        const bool pre_threshold_overflow = external_join_threshold > 0
             && pre_total_bytes * 2 >= external_join_threshold;
 
         bool block_added = false;

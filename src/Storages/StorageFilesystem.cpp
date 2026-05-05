@@ -162,6 +162,19 @@ public:
     {
     }
 
+    ~FilesystemSource() override
+    {
+        /// If we are destroyed while still holding overflow entries (e.g. on cancellation),
+        /// release their `in_flight` counts so sibling streams don't wait forever for an
+        /// `in_flight == 0` transition that would otherwise never happen.
+        if (!local_overflow.empty())
+        {
+            const auto leftover = static_cast<int64_t>(local_overflow.size());
+            if (path_info->in_flight.fetch_sub(leftover) == leftover)
+                path_info->queue.finish();
+        }
+    }
+
     Chunk generate() override
     {
         auto names_and_types_in_use = storage_snapshot->getSampleBlockForColumns(columns_in_use).getNamesAndTypesList();

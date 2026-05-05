@@ -4,6 +4,10 @@
 -- Also covers null-aware variants (globalNullIn/globalNotNullIn) via transform_null_in.
 -- https://github.com/ClickHouse/ClickHouse/pull/100375
 
+-- Pin the optimizer settings that drive PREWHERE assignment so that randomized
+-- runs which disable them do not bypass the `cannotBeMoved` guard under test.
+SET query_plan_optimize_prewhere = 1;
+SET optimize_move_to_prewhere = 1;
 SET transform_null_in = 1;
 
 CREATE TABLE t_100375_mt (v0 UInt32, v1 UInt32, v2 Nullable(DateTime), PRIMARY KEY(v1)) ENGINE = SummingMergeTree;

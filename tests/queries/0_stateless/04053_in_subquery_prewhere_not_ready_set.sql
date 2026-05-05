@@ -2,6 +2,11 @@
 -- gets moved to PREWHERE by optimizePrewhere after applyFilters already ran.
 -- https://github.com/ClickHouse/ClickHouse/issues/100318
 
+-- Pin the optimizer settings that trigger the rewrite this test exercises;
+-- otherwise randomized runs may disable PREWHERE move and skip the fixed path.
+SET query_plan_optimize_prewhere = 1;
+SET optimize_move_to_prewhere = 1;
+
 CREATE TABLE t_100318_log (v0 UInt32) ENGINE = Log;
 CREATE TABLE t_100318_mt (v0 UInt32, v1 UInt32, v2 DateTime, PRIMARY KEY(v1)) ENGINE = SummingMergeTree;
 CREATE TABLE t_100318_rmt (v0 UInt32, v1 UInt32, PRIMARY KEY(v0)) ENGINE = ReplacingMergeTree;

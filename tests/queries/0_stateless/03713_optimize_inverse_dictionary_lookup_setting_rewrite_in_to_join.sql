@@ -67,3 +67,9 @@ SELECT color_id, payload
 FROM t
 WHERE dictGetString('colors', 'name', color_id) = 'red'
 ORDER BY color_id, payload;
+SELECT 'Equality, LHS, opt off';
+SELECT color_id, payload
+FROM t
+WHERE dictGetString('colors', 'name', color_id) = 'red'
+ORDER BY color_id, payload
+SETTINGS optimize_inverse_dictionary_lookup = 0;

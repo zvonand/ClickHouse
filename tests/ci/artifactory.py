@@ -230,6 +230,13 @@ class RpmArtifactory:
         for package in paths:
             _copy_if_not_exists(Path(package), dest_dir)
 
+        # Remove stale temp repodata directory left by a previous interrupted run; createrepo_c
+        # refuses to start when it already exists, mistaking it for a concurrent process.
+        stale_repodata = dest_dir / ".repodata"
+        if stale_repodata.exists():
+            print(f"Removing stale temp repodata directory: {stale_repodata}")
+            Shell.check(f"rm -rf {stale_repodata}", strict=True)
+
         # switching between different fuse providers invalidates --update option (apparently some fuse(s) can mess around with mtime)
         #   add --skip-stat to skip mtime check
         commands = (

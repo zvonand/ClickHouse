@@ -13,6 +13,11 @@
 
 #include <Interpreters/Context.h>
 
+#include <DataTypes/DataTypeLowCardinality.h>
+#include <DataTypes/DataTypeNullable.h>
+#include <DataTypes/DataTypeTuple.h>
+
+#include <Functions/FunctionFactory.h>
 #include <Functions/FunctionsExternalDictionaries.h>
 
 #include <Access/ContextAccess.h>
@@ -26,6 +31,9 @@ namespace DB
 
 namespace Setting
 {
+extern const SettingsUInt64 max_bytes_in_set;
+extern const SettingsUInt64 max_rows_in_set;
+extern const SettingsOverflowMode set_overflow_mode;
 extern const SettingsBool optimize_inverse_dictionary_lookup;
 extern const SettingsBool rewrite_in_to_join;
 }
@@ -139,6 +147,83 @@ bool hasNullableComponentInComplexKey(const QueryTreeNodePtr & key_expr_node)
             return true;
     }
     return false;
+}
+
+bool isRewriteSemanticallySafe(
+    const DataTypePtr & dict_attr_type,
+    const DataTypePtr & dictget_result_type,
+    const Field & attr_null_value,
+    const ConstantNode & const_arg_node,
+    bool default_is_lhs,
+    const String & attr_comparison_function_name,
+    const ContextPtr & context)
+{
+    /// Same underlying type after stripping `Nullable` / `LowCardinality` needed. If attribute `n`
+    /// is `UInt32`, `dictGetUInt16(..., 'n', id) = 42` throws because the underlying types differ (`UInt32` vs `UInt16`)
+    const bool stripped_types_match
+        = removeLowCardinalityAndNullable(dict_attr_type)->equals(*removeLowCardinalityAndNullable(dictget_result_type));
+    if (!stripped_types_match)
+        return false;
+
+    /// `dictGet` and `IN` don't have the same stored-NULL attribute semantics.
+    /// Example: if dictionary has `id = 1, name = NULL`, `dictGet(..., 1) = 'x'` gives
+    /// `NULL`. The `IN` rewrite uses `WHERE name = 'x'`, so the row is filtered out and
+    /// `1 IN (...)` gives `0`. This is visible in projection or `isNull(predicate)`.
+    /// Skip optimization when the attribute can contain `NULL`, including
+    /// `LowCardinality(Nullable(...))`.
+    if (isNullableOrLowCardinalityNullable(dict_attr_type))
+        return false;
+
+    const DataTypePtr const_arg_type = const_arg_node.getResultType();
+    const Field & const_arg_value = const_arg_node.getValue();
+
+    auto default_column = ColumnWithTypeAndName(dict_attr_type->createColumnConst(1, attr_null_value), dict_attr_type, "default_value");
+    auto const_arg_column = ColumnWithTypeAndName(const_arg_type->createColumnConst(1, const_arg_value), const_arg_type, "const_value");
+
+    ColumnsWithTypeAndName comparison_arguments;
+    if (default_is_lhs)
+        comparison_arguments = {std::move(default_column), std::move(const_arg_column)};
+    else
+        comparison_arguments = {std::move(const_arg_column), std::move(default_column)};
+
+    /// `dictGet` and `IN` don't have the same missing-key default semantics.
+    /// e.g: `dictGet(..., id) = ''` vs `id IN (SELECT id FROM dictionary(...) WHERE name = '')`
+    /// Example: if dictionary has one row `id = 1, name = 'x'`, data has `id = 2`, and
+    /// attribute `DEFAULT` is `''`, `dictGet(..., 2)` returns `''`, so
+    /// `dictGet(..., id) = ''` is true for `id = 2`. The `IN` rewrite scans only
+    /// dictionary keys, so the subquery has no `id = 2` and `2 IN (...)` is false.
+    ///
+    /// One of the alternatives is to add `OR id NOT IN (SELECT id FROM dictionary(...))` when the
+    /// predicate is true for `DEFAULT`, but it requires another set with all dictionary keys.
+    /// This can be expensive to materialize, so skip optimization for such case.
+    ///
+    /// As a result, given the current rewrite, if `const <op> DEFAULT` is false, only then the
+    /// transformation is semantically correct.
+    Field comparison_result;
+    try
+    {
+        auto function_resolver = FunctionFactory::instance().get(attr_comparison_function_name, context);
+        auto comparison_function_base = function_resolver->build(comparison_arguments);
+        auto comparison_result_column
+            = comparison_function_base->execute(comparison_arguments, comparison_function_base->getResultType(), 1, /* dry_run = */ false);
+        comparison_result = (*comparison_result_column)[0];
+    }
+    catch (const Exception &)
+    {
+        /// The constant fold runs during optimization and can throw for values that runtime
+        /// would not evaluate. Example: `match('', '(')` throws `CANNOT_COMPILE_REGEXP`, but
+        /// `id < 0 AND match(dictGetString(...), '(')` can skip the `match` branch due to
+        /// short-circuit evaluation. If we throw here, the optimization breaks a query that
+        /// works without it. Skip optimization for such case.
+        return false;
+    }
+
+    if (comparison_result.isNull())
+        return false;
+
+    /// Check `const <op> DEFAULT` is false
+    UInt64 comparison_result_uint = 0;
+    return comparison_result.tryGet<UInt64>(comparison_result_uint) && comparison_result_uint == 0;
 }
 
 
@@ -264,7 +349,21 @@ public:
         if (!dict_structure.hasAttribute(attr_col_name))
             return;
 
-        DataTypePtr dict_attr_col_type = dict_structure.getAttribute(attr_col_name).type;
+        const DictionaryAttribute & attr = dict_structure.getAttribute(attr_col_name);
+        DataTypePtr dict_attr_col_type = attr.type;
+
+        const auto * const_arg_node = (dict_side == Side::LHS) ? arguments[1]->as<ConstantNode>() : arguments[0]->as<ConstantNode>();
+
+        /// Skip rewrites that would change query behavior. Details are in the function.
+        if (!isRewriteSemanticallySafe(
+                dict_attr_col_type,
+                dictget_function_info.return_type,
+                attr.null_value,
+                *const_arg_node,
+                dict_side == Side::LHS,
+                attr_comparison_function_name,
+                getContext()))
+            return;
 
         auto dict_table_function = std::make_shared<TableFunctionNode>("dictionary");
         dict_table_function->getArguments().getNodes().push_back(dictget_function_info.dict_name_node);

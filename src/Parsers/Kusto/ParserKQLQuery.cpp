@@ -664,14 +664,21 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
         if (!isValidKQLPos(pos) || Poco::toLower(String(pos->begin, pos->end)) != "step")
             return false;
         ++pos;
+        /// Reject `range x from a to b step` with no literal after `step`,
+        /// which would otherwise dereference an invalid token below.
+        if (!isValidKQLPos(pos))
+            return false;
         /// Handle negative step: -N (may be single ErrorWrongNumber token or Minus + Number)
         String step_sign;
         String step_raw;
         String step_val;
-        if (isValidKQLPos(pos) && (pos->type == TokenType::Minus || String(pos->begin, pos->end) == "-"))
+        if (pos->type == TokenType::Minus || String(pos->begin, pos->end) == "-")
         {
             step_sign = "-";
             ++pos;
+            /// Reject `range x from a to b step -` with no literal after the unary minus.
+            if (!isValidKQLPos(pos))
+                return false;
             step_raw = String(pos->begin, pos->end);
             step_val = step_sign + IParserKQLFunction::getExpression(pos);
         }

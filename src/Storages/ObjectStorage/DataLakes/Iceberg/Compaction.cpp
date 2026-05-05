@@ -1,4 +1,5 @@
 #include <string>
+#include <unordered_set>
 #include <Columns/IColumn.h>
 #include <Core/ColumnsWithTypeAndName.h>
 #include <Core/Settings.h>
@@ -72,6 +73,9 @@ struct Plan
     std::unordered_map<Iceberg::IcebergPathFromMetadata, std::vector<Iceberg::IcebergPathFromMetadata>> manifest_list_to_manifest_files;
     std::unordered_map<Int64, std::vector<std::shared_ptr<DataFilePlan>>> snapshot_id_to_data_files;
     std::unordered_map<Iceberg::IcebergPathFromMetadata, std::shared_ptr<DataFilePlan>> path_to_data_file;
+    /// Raw paths of every file referenced by the snapshots being compacted, used at cleanup
+    /// time to also remove files that live outside the base object_storage.
+    std::unordered_set<Iceberg::IcebergPathFromMetadata> referenced_file_paths;
     FileNamesGenerator generator;
     Poco::JSON::Object::Ptr initial_metadata_object;
 
@@ -156,12 +160,14 @@ Plan getPlan(
     std::unordered_map<Iceberg::IcebergPathFromMetadata, std::shared_ptr<ManifestFilePlan>> manifest_files;
     for (const auto & snapshot : snapshots_info)
     {
+        plan.referenced_file_paths.insert(snapshot.manifest_list_path);
         auto manifest_list = getManifestList(object_storage, persistent_table_components, context, snapshot.manifest_list_path, log, secondary_storages);
         for (const auto & manifest_file : manifest_list)
         {
             plan.manifest_list_to_manifest_files[snapshot.manifest_list_path].push_back(manifest_file.manifest_file_path);
             if (!plan.manifest_file_to_first_snapshot.contains(manifest_file.manifest_file_path))
                 plan.manifest_file_to_first_snapshot[manifest_file.manifest_file_path] = snapshot.snapshot_id;
+            plan.referenced_file_paths.insert(manifest_file.manifest_file_path);
             auto files_handle = getManifestFileEntriesHandle(
                 object_storage, persistent_table_components, context, log, manifest_file, static_cast<Int32>(current_schema_id), secondary_storages);
 
@@ -172,10 +178,14 @@ Plan getPlan(
             }
             manifest_files[manifest_file.manifest_file_path]->manifest_lists_path.push_back(snapshot.manifest_list_path);
             for (const auto & pos_delete_file : files_handle.getFilesWithoutDeleted(FileContentType::POSITION_DELETE))
+            {
                 all_positional_delete_files.push_back(pos_delete_file);
+                plan.referenced_file_paths.insert(pos_delete_file->parsed_entry->file_path_key);
+            }
 
             for (const auto & data_file : files_handle.getFilesWithoutDeleted(FileContentType::DATA))
             {
+                plan.referenced_file_paths.insert(data_file->parsed_entry->file_path_key);
                 auto partition_index = plan.partition_encoder.encodePartition(data_file->parsed_entry->partition_key_value);
                 if (plan.partitions.size() <= partition_index)
                     plan.partitions.push_back({});
@@ -517,23 +527,44 @@ void writeMetadataFiles(
     }
 }
 
-std::vector<String> getOldFiles(ObjectStoragePtr object_storage, const String & table_path)
+/// Files to delete after compaction: a base-storage directory listing under `metadata/` and
+/// `data/` (covers historical metadata.json and any orphan files on the base storage), plus
+/// any paths from the compacted snapshots that resolve to a secondary storage.
+std::vector<std::pair<ObjectStoragePtr, String>> getOldFiles(
+    ObjectStoragePtr object_storage,
+    SecondaryStorages & secondary_storages,
+    ContextPtr context,
+    const PersistentTableComponents & persistent_table_components,
+    const Plan & plan)
 {
-    auto metadata_files = listFiles(*object_storage, table_path, "metadata", "");
-    auto data_files = listFiles(*object_storage, table_path, "data", "");
+    std::vector<std::pair<ObjectStoragePtr, String>> result;
 
-    for (auto && data_file : data_files)
-        metadata_files.push_back(data_file);
+    for (auto && file : listFiles(*object_storage, persistent_table_components.table_path, "metadata", ""))
+        result.emplace_back(object_storage, std::move(file));
+    for (auto && file : listFiles(*object_storage, persistent_table_components.table_path, "data", ""))
+        result.emplace_back(object_storage, std::move(file));
 
-    return metadata_files;
+    for (const auto & raw_path : plan.referenced_file_paths)
+    {
+        auto [storage_to_use, key_in_storage] = resolveObjectStorageForPath(
+            persistent_table_components.table_location,
+            raw_path.serialize(),
+            object_storage,
+            secondary_storages,
+            context,
+            persistent_table_components.path_resolver);
+
+        if (storage_to_use.get() != object_storage.get())
+            result.emplace_back(std::move(storage_to_use), std::move(key_in_storage));
+    }
+
+    return result;
 }
 
-void clearOldFiles(ObjectStoragePtr object_storage, const std::vector<String> & old_files)
+void clearOldFiles(const std::vector<std::pair<ObjectStoragePtr, String>> & old_files)
 {
-    for (const auto & metadata_file : old_files)
-    {
-        object_storage->removeObjectIfExists(StoredObject(metadata_file));
-    }
+    for (const auto & [storage, key] : old_files)
+        storage->removeObjectIfExists(StoredObject(key));
 }
 
 void compactIcebergTable(
@@ -558,7 +589,8 @@ void compactIcebergTable(
         persistent_table_components.metadata_compression_method);
     if (plan.need_optimize)
     {
-        auto old_files = getOldFiles(object_storage_, persistent_table_components.table_path);
+        auto old_files = getOldFiles(
+            object_storage_, *secondary_storages_, context_, persistent_table_components, plan);
         writeDataFiles(
             plan,
             sample_block_,
@@ -570,7 +602,7 @@ void compactIcebergTable(
             persistent_table_components.metadata_compression_method,
             secondary_storages_);
         writeMetadataFiles(plan, persistent_table_components.path_resolver, object_storage_, context_, sample_block_, write_format, persistent_table_components.table_path);
-        clearOldFiles(object_storage_, old_files);
+        clearOldFiles(old_files);
     }
 }
 

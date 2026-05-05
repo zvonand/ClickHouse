@@ -48,7 +48,7 @@ You can also peruse [ClickHouse Events](https://clickhouse.com/company/news-even
 
 Upcoming meetups
 * [Boston Meetup](https://luma.com/0f3asaol) - May 6th, 2026
-* [ClickHouse + Cast AI Meetup](https://luma.com/awssummitsg26party) - May 6th, 2026
+* [ClickHouse + Cast AI Meetup (Singapore)](https://luma.com/awssummitsg26party) - May 6th, 2026
 * [Long Beach Pycon Party](https://luma.com/hs289p7w) - May 15th, 2026
 * [Agentic AI Unplugged: Bengaluru Edition](https://luma.com/AgenticAI-BLR2026) - May 15th, 2026
 * [Chicago Meetup](https://luma.com/c5evgnbc) - May 19th, 2026

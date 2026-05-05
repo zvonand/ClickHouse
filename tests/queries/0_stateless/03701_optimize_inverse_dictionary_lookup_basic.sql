@@ -79,44 +79,44 @@ FROM t
 WHERE 'red' = dictGetString('colors', 'name', color_id)
 ORDER BY color_id, payload;
 
-SELECT 'Inequality <, LHS - plan';
+SELECT 'Inequality <, LHS, no rewrite (default 0 < 10) - plan';
 EXPLAIN SYNTAX run_query_tree_passes=1
 SELECT color_id, payload
 FROM t
 WHERE dictGetUInt64('colors', 'n', color_id) < 10
 ORDER BY color_id, payload;
 
-SELECT 'Inequality <, LHS';
+SELECT 'Inequality <, LHS, no rewrite (default 0 < 10)';
 SELECT color_id, payload
 FROM t
 WHERE dictGetUInt64('colors', 'n', color_id) < 10
 ORDER BY color_id, payload;
 
-SELECT 'Inequality <, RHS - plan';
+SELECT 'Inequality <, RHS, no rewrite (default 0 < 10) - plan';
 EXPLAIN SYNTAX run_query_tree_passes=1
 SELECT color_id, payload
 FROM t
 WHERE 10 > dictGetUInt64('colors', 'n', color_id)
 ORDER BY color_id, payload;
 
-SELECT 'Inequality <, RHS';
+SELECT 'Inequality <, RHS, no rewrite (default 0 < 10)';
 SELECT color_id, payload
 FROM t
 WHERE 10 > dictGetUInt64('colors', 'n', color_id)
 ORDER BY color_id, payload;
 
-SELECT 'Type variant cast, >= Int32 - plan';
+SELECT 'Type mismatch not allowed, >= Int32 - plan';
 EXPLAIN SYNTAX run_query_tree_passes=1
 SELECT color_id, payload
 FROM t
 WHERE dictGetInt32('colors', 'n', color_id) >= 2
 ORDER BY color_id, payload;
 
-SELECT 'Type variant cast, >= Int32';
+SELECT 'Type mismatch not allowed, >= Int32';
 SELECT color_id, payload
 FROM t
 WHERE dictGetInt32('colors', 'n', color_id) >= 2
-ORDER BY color_id, payload;
+ORDER BY color_id, payload; -- { serverError TYPE_MISMATCH }
 
 SELECT 'LIKE - plan';
 EXPLAIN SYNTAX run_query_tree_passes=1
@@ -157,40 +157,40 @@ FROM t
 WHERE equals(dictGetString('colors','name', color_id), 'red')
 ORDER BY color_id;
 
-SELECT 'notEquals - plan';
+SELECT 'notEquals, no rewrite (default empty string != red) - plan';
 EXPLAIN SYNTAX run_query_tree_passes=1
 SELECT color_id, payload
 FROM t
 WHERE dictGetString('colors','name', color_id) != 'red'
 ORDER BY color_id, payload;
 
-SELECT 'notEquals';
+SELECT 'notEquals, no rewrite (default empty string != red)';
 SELECT color_id, payload
 FROM t
 WHERE dictGetString('colors','name', color_id) != 'red'
 ORDER BY color_id, payload;
 
-SELECT 'NOT LIKE r% - plan';
+SELECT 'NOT LIKE r%, no rewrite (default empty string NOT LIKE r%) - plan';
 EXPLAIN SYNTAX run_query_tree_passes=1
 SELECT color_id, payload
 FROM t
 WHERE dictGetString('colors','name', color_id) NOT LIKE 'r%'
 ORDER BY color_id, payload;
 
-SELECT 'NOT LIKE r%';
+SELECT 'NOT LIKE r%, no rewrite (default empty string NOT LIKE r%)';
 SELECT color_id, payload
 FROM t
 WHERE dictGetString('colors','name', color_id) NOT LIKE 'r%'
 ORDER BY color_id, payload;
 
-SELECT 'NOT ILIKE r% - plan';
+SELECT 'NOT ILIKE r%, no rewrite (default empty string NOT ILIKE r%) - plan';
 EXPLAIN SYNTAX run_query_tree_passes=1
 SELECT color_id, payload
 FROM t
 WHERE dictGetString('colors','name', color_id) NOT ILIKE 'r%'
 ORDER BY color_id, payload;
 
-SELECT 'NOT ILIKE r%';
+SELECT 'NOT ILIKE r%, no rewrite (default empty string NOT ILIKE r%)';
 SELECT color_id, payload
 FROM t
 WHERE dictGetString('colors','name', color_id) NOT ILIKE 'r%'
@@ -237,14 +237,14 @@ WHERE (dictGetString('colors', 'name', color_id) = 'red' AND dictGetUInt64('colo
    OR dictGetString('colors', 'name', color_id) = 'green'
 ORDER BY color_id, payload;
 
-SELECT 'NULL constant - plan';
+SELECT 'NULL constant, no rewrite - plan';
 EXPLAIN SYNTAX run_query_tree_passes=1
 SELECT color_id, payload
 FROM t
 WHERE dictGetString('colors', 'name', color_id) = NULL
 ORDER BY color_id, payload;
 
-SELECT 'NULL constant';
+SELECT 'NULL constant, no rewrite';
 SELECT color_id, payload
 FROM t
 WHERE dictGetString('colors', 'name', color_id) = NULL
@@ -494,4 +494,4 @@ LAYOUT(HASHED());
 SELECT DISTINCT 13, *, or(-32 = dictGetInt32(toFixedString('dictionary_all', toLowCardinality(14)), toFixedString('i32', 3), id), isNotDistinctFrom(1, 9223372036854775806), toLowCardinality(19), not(equals(payload, 9223372036854775806))), isNotNull('dictGetFloat64 - plan'), id, isNotNull(1)
 FROM tab__fuzz_24 PREWHERE equals(9223372036854775806, payload)
 WHERE isNotDistinctFrom(id, isNotDistinctFrom(9223372036854775806, equals(1, isNotNull(9223372036854775806)))) QUALIFY and(NULL, equals(1, isZeroOrNull(1)))
-ORDER BY payload DESC;
+ORDER BY payload DESC; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }

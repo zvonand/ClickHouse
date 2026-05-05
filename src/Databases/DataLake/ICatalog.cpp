@@ -120,12 +120,6 @@ void TableMetadata::setLocation(const std::string & location_)
         bucket = bucket_part.substr(0, at_pos);
         azure_account_with_suffix = bucket_part.substr(at_pos + 1);
 
-        /// Some catalogs (e.g. Apache Polaris) follow the ADLS Gen2 filesystem convention
-        /// of including the container name as the first segment of the path in abfss:// locations,
-        /// e.g. abfss://container@account.dfs.core.windows.net/container/actual/path.
-        /// We record this as a flag so that `constructLocation` and `getMetadataLocation` can
-        /// strip the redundant prefix when needed, while `path` itself is left intact so that
-        /// `getLocation` remains a round-trip of `setLocation`.
         if (force_add_bucket)
             abfss_has_container_path_prefix = true;
 

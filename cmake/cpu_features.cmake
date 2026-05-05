@@ -109,7 +109,10 @@ elseif (ARCH_AMD64)
             set (X86_REPRESENTATIVE_FLAG "avx2")
         endif ()
         if (X86_ARCH_LEVEL VERSION_GREATER_EQUAL 4)
-            set (X86_REPRESENTATIVE_FLAG "avx512f")
+            # `x86-64-v4` requires AVX-512 F/BW/CD/DQ/VL.  Knights Landing has
+            # `avx512f` but lacks BW/DQ/VL, so check one of those instead — any
+            # CPU with `avx512vl` will also have F.
+            set (X86_REPRESENTATIVE_FLAG "avx512vl")
         endif ()
         execute_process(
             COMMAND grep -P "(?=.*${X86_REPRESENTATIVE_FLAG})" /proc/cpuinfo

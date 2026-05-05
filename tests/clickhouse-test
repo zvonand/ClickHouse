@@ -4318,6 +4318,7 @@ def run_tests_array(
                         if total_failures_shared.value >= args.max_failures:
                             print(f"\nReached --max-failures limit ({args.max_failures}), stopping.")
                             stop_tests()
+                            server_died.set()
                             break
             elif test_result.status == TestStatus.SKIPPED:
                 skipped_total += 1
@@ -4330,6 +4331,7 @@ def run_tests_array(
         if failures_chain >= args.max_failures_chain:
             print(f"\nMax failures chain ({args.max_failures_chain}) reached, stopping.")
             stop_tests()
+            server_died.set()
             break
 
     if failures_total > 0:

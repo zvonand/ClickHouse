@@ -155,13 +155,20 @@ void remapColumnStats(std::unordered_map<String, ColumnStats> & mapped, const Ac
 
 struct RuntimeHashStatisticsContext
 {
-    /// Final cache key (matches what `ConcurrentHashJoin` writes into `HashTablesStatistics`):
-    ///   raw_hash[N] XOR <per-side contribution of N's parent join>.
-    /// Populated for every node by `calculateHashTableCacheKeys`. Mutated during join reorder
+    /// `HashTablesStatistics` keys identify a specific hash table BUILT from a subtree AND
+    /// keyed by specific columns — both pieces are needed: the same right-side subtree
+    /// joined on `t2.a` and joined on `t2.b` produces two physically different hash tables
+    /// with different sizes/NDVs, so they must NOT share a cache entry. The key encoding is:
+    ///     cache_keys[N]  =  raw_hashes[N]  XOR  <per-side contribution of N's parent join>
+    /// where the contribution hashes the parent join's equi-key columns on the side N sits on.
+    /// Populated for every node by `calculateHashTableCacheKeys`; mutated during join reorder
     /// to reflect the post-reorder parent of each node.
     std::unordered_map<const QueryPlan::Node *, UInt64> cache_keys;
-    /// Raw bottom-up hash, independent of the node's parent join. Used by join-reorder code
-    /// in `chooseJoinOrder` to derive the cache key for sub-join nodes built during reorder.
+    /// Bottom-up hash of the subtree rooted at the node — does NOT include any parent-join
+    /// contribution, so it identifies "what data" but not "what hash table keyed how". Used
+    /// by join-reorder code in `chooseJoinOrder` to derive cache keys for sub-join nodes
+    /// built during reorder, where the post-reorder parent's contribution differs from
+    /// whatever was originally stamped into `cache_keys` during the pre-reorder walk.
     std::unordered_map<const QueryPlan::Node *, UInt64> raw_hashes;
     StatsCollectingParams params;
 
@@ -201,6 +208,49 @@ struct RuntimeHashStatisticsContext
                 return hint->source_rows;
         }
         return {};
+    }
+
+    /// Mirror what `calculateHashTableCacheKeys` would have produced for an equivalent join in
+    /// the original tree, but for `new_node` that the join-reorder pass is emitting on top of
+    /// `left_child_node` and `right_child_node` (which can themselves be original leaves or
+    /// sub-joins built earlier in the same reorder loop). Returns the derived right-side key,
+    /// suitable for `JoinStepLogical::setRightHashTableCacheKey`.
+    ///
+    /// Each child's final cache key combines its parent-independent subtree hash with the
+    /// parent join's per-side contribution (see `cache_keys` doc above for why both are
+    /// needed). We start from `raw_hashes[child]` rather than the previously-xored value in
+    /// `cache_keys[child]`, because under reorder the new parent's contribution can differ
+    /// from the original tree's parent contribution that was stamped into `cache_keys`.
+    UInt64 deriveCacheKeysForNewJoin(
+        const QueryPlan::Node * left_child_node,
+        const QueryPlan::Node * right_child_node,
+        const QueryPlan::Node & new_node,
+        const JoinStepLogical & join_step)
+    {
+        if (cache_keys.empty())
+            return 0;
+
+        UInt64 raw_left = getRawHash(left_child_node);
+        UInt64 raw_right = getRawHash(right_child_node);
+        UInt64 left_key = raw_left ^ calculateJoinStepCacheKeyContribution(join_step, JoinTableSide::Left);
+        UInt64 right_key = raw_right ^ calculateJoinStepCacheKeyContribution(join_step, JoinTableSide::Right);
+
+        /// Update cache_keys to reflect the new parent for these children (in case any
+        /// downstream code reads them back via getCachedKey).
+        cache_keys[left_child_node] = left_key;
+        cache_keys[right_child_node] = right_key;
+
+        /// Record this join's own raw hash so any outer reorder iteration can derive its key
+        /// the same way; cache_keys gets the same value initially and may later be xored when
+        /// new_node becomes a child of yet another reorder-built join.
+        SipHash node_hash;
+        node_hash.update(left_key);
+        node_hash.update(right_key);
+        UInt64 raw_new = node_hash.get64();
+        raw_hashes[&new_node] = raw_new;
+        cache_keys[&new_node] = raw_new;
+
+        return right_key;
     }
 };
 
@@ -1169,44 +1219,8 @@ QueryPlan::Node chooseJoinOrder(QueryGraphBuilder query_graph_builder, QueryPlan
 
             auto & new_node = nodes.emplace_back();
 
-            /// Derive the right-side `HashTablesStatistics` cache key for this freshly-built
-            /// join step, mirroring what `calculateHashTableCacheKeys` would have produced for
-            /// an equivalent join in the original tree.
-            ///
-            /// For each child (original leaf or a sub-join we built earlier in this loop),
-            /// `raw_hashes` already holds the child's parent-independent bottom-up hash. We
-            /// XOR the new join's per-side contribution into that to get the child's final
-            /// cache key, and SipHash-combine the two final keys to record THIS join's raw
-            /// hash so any outer join we emit later can do the same derivation.
-            ///
-            /// Going through `raw_hashes` instead of mutating the previously-xored values in
-            /// `cache_keys` is what keeps the derived key matching the cache write path: in
-            /// the no-reorder case both keys equal `raw_child XOR contribution`; in the
-            /// reorder case the new join's contribution is correctly applied on top of the
-            /// child's clean raw hash rather than on top of whatever the original tree's
-            /// parent had stamped.
-            auto & ctx = query_graph_builder.context->statistics_context;
-            UInt64 right_table_key = 0;
-            if (!ctx.cache_keys.empty())
-            {
-                UInt64 raw_left = ctx.getRawHash(left_child_node);
-                UInt64 raw_right = ctx.getRawHash(right_child_node);
-                UInt64 left_key = raw_left ^ calculateJoinStepCacheKeyContribution(*join_step, JoinTableSide::Left);
-                UInt64 right_key = raw_right ^ calculateJoinStepCacheKeyContribution(*join_step, JoinTableSide::Right);
-                right_table_key = right_key;
-
-                /// Update cache_keys to reflect the new parent for these children (in case any
-                /// downstream code reads them back via getCachedKey).
-                ctx.cache_keys[left_child_node] = left_key;
-                ctx.cache_keys[right_child_node] = right_key;
-
-                SipHash node_hash;
-                node_hash.update(left_key);
-                node_hash.update(right_key);
-                UInt64 raw_new = node_hash.get64();
-                ctx.raw_hashes[&new_node] = raw_new;
-                ctx.cache_keys[&new_node] = raw_new;
-            }
+            UInt64 right_table_key = query_graph_builder.context->statistics_context
+                .deriveCacheKeysForNewJoin(left_child_node, right_child_node, new_node, *join_step);
             if (right_table_key)
                 join_step->setRightHashTableCacheKey(right_table_key);
 

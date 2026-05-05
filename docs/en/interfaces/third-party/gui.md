@@ -513,5 +513,5 @@ Features:
 - Native ClickHouse type handling — `Nullable`, `Array`, `LowCardinality`, nested objects.
 - Vector search support — `Array(Float32)` embedding columns rendered as compact vector cells, 2D embedding visualization, and Find Similar via `cosineDistance`.
 - Inline data editing in result tables with batched save, plus CSV/JSON/SQL export and import using ClickHouse's native formats.
-- Connection options: HTTP/HTTPS, SSH tunnel for private/firewalled clusters, optional read-only mode for safe production browsing.
+- Connection options: HTTP/HTTPS, SSH tunnel for private clusters behind a firewall, optional read-only mode for safe production browsing.
 - Works with ClickHouse Cloud and self-hosted.

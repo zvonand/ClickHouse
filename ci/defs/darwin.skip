@@ -875,4 +875,3 @@
 04132_column_sparse_ops
 04141_max_streams_for_union_step_distributed
 04142_position_huge_start_pos
-clickhouse-test

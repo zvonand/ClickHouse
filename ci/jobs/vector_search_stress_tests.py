@@ -223,7 +223,8 @@ test_params_cohere_wiki_20m = {
     NEW_TRUTH_SET_FILE: None,
     TRUTH_SET_COUNT: 25000,
     RECALL_K: 10,
-    MERGE_TREE_SETTINGS: None,
+    # Let's have more than 1 part for this dataset (7 - 9 parts)
+    MERGE_TREE_SETTINGS: "max_bytes_to_merge_at_max_space_in_pool=11811160064",
     OTHER_SETTINGS: None,
     CONCURRENCY_TEST: True,
 }
@@ -271,6 +272,8 @@ class RunTest:
         logger(f"Begin loading data into {self._table}")
 
         create_table = f"CREATE TABLE {self._table} ( {self._dataset[SCHEMA]} ) ENGINE = MergeTree ORDER BY {self._id_column}"
+        if self._test_params[MERGE_TREE_SETTINGS] is not None:
+            create_table += f" SETTINGS {self._test_params[MERGE_TREE_SETTINGS]}"
         self._chclient.query(create_table)
 
         for url in self._dataset[S3_URLS]:

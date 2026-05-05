@@ -157,7 +157,7 @@ public:
 
         /// Whether any replica is executing a refresh right now.
         /// May be inaccurate if the replica that's executing refresh lost zookeeper connection for
-        /// a long time (long enough for its ephemeral znode to expire + refreshable_materialized_view_keeper_grace_period).
+        /// a long time (long enough for its ephemeral znode to expire + grace period).
         bool refresh_running = false;
 
         /// Znode version. Not serialized.
@@ -291,7 +291,6 @@ private:
     RefreshSettings refresh_settings;
     std::vector<StorageID> initial_dependencies;
     const bool refresh_append;
-    std::chrono::milliseconds keeper_grace_period;
 
     RefreshSet::Handle set_handle;
 

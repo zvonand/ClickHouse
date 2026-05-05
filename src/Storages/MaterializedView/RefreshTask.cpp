@@ -50,7 +50,6 @@ namespace Setting
     extern const SettingsUInt64 log_queries_cut_to_length;
     extern const SettingsBool stop_refreshable_materialized_views_on_startup;
     extern const SettingsSeconds lock_acquire_timeout;
-    extern const SettingsUInt64 refreshable_materialized_view_keeper_grace_period;
 }
 
 namespace ServerSetting
@@ -86,7 +85,6 @@ RefreshTask::RefreshTask(
     : view(view_)
     , refresh_schedule(strategy)
     , refresh_append(strategy.append)
-    , keeper_grace_period(context->getSettingsRef()[Setting::refreshable_materialized_view_keeper_grace_period])
 {
     createLogger(view->getStorageID());
 
@@ -116,9 +114,13 @@ RefreshTask::RefreshTask(
         /// currently both DatabaseReplicated and DatabaseShared seem to require this behavior.
         if (!replica_path_existed)
         {
-            if (!attach && !is_restore_from_backup &&
-                !zookeeper->isFeatureEnabled(KeeperFeatureFlag::MULTI_READ))
-                throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Keeper server doesn't support multi-reads.");
+            if (!attach && !is_restore_from_backup)
+            {
+                /// (It would be possible to avoid using these features, if needed.)
+                if (!zookeeper->isFeatureEnabled(KeeperFeatureFlag::MULTI_READ) ||
+                    !zookeeper->isFeatureEnabled(KeeperFeatureFlag::CREATE_IF_NOT_EXISTS))
+                    throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Keeper server doesn't have all feature flags required by refreshable MV: MULTI_READ, CREATE_IF_NOT_EXISTS");
+            }
 
             zookeeper->createAncestors(coordination.path);
             Coordination::Requests ops;
@@ -251,7 +253,7 @@ void RefreshTask::shutdown()
     {
         /// Avoid throwing from shutdown().
         /// If we failed to write to zookeeper, other replicas won't start refresh until our
-        /// zookeeper session expires (+ keeper_grace_period). This is not a problem if this
+        /// zookeeper session expires (+ grace period). This is not a problem if this
         /// shutdown() is caused by server shutdown or by table DROP, but may be bad if it's a DETACH
         /// (and we'll hold on to the session indefinitely).
         tryLogCurrentException(getLogger(), "Keeper error during RMV shutdown");
@@ -360,7 +362,7 @@ void RefreshTask::alterRefreshParams(const DB::ASTRefreshStrategy & new_strategy
 RefreshTask::Info RefreshTask::getInfo() const
 {
     std::lock_guard guard(mutex);
-    return Info {.view_id = set_handle.getID(), .state = state, .next_refresh_time = next_refresh_time, .znode = coordination.root_znode, .replica_name = coordination.replica_name, .refresh_running = coordination.running_znode_exists, .progress = execution.progress.getValues(), .unexpected_error = scheduling.unexpected_error};
+    return Info {.view_id = set_handle.getID(), .state = state, .next_refresh_time = next_refresh_time, .znode = coordination.root_znode, .replica_name = coordination.replica_name, .refresh_running = coordination.root_znode.refresh_running, .progress = execution.progress.getValues(), .unexpected_error = scheduling.unexpected_error};
 }
 
 void RefreshTask::start()
@@ -442,7 +444,7 @@ void RefreshTask::wait()
     {
         if (!view)
             throw Exception(ErrorCodes::TABLE_IS_DROPPED, "The table was dropped or detached");
-        if (!coordination.running_znode_exists && !coordination.root_znode.last_attempt_succeeded && coordination.root_znode.last_attempt_time.time_since_epoch().count() != 0)
+        if (!coordination.root_znode.refresh_running && !coordination.root_znode.last_attempt_succeeded && coordination.root_znode.last_attempt_time.time_since_epoch().count() != 0)
             throw Exception(ErrorCodes::REFRESH_FAILED,
                 "Refresh failed{}: {}", coordination.coordinated ? " (on replica " + coordination.root_znode.last_attempt_replica + ")" : "",
                 coordination.root_znode.last_attempt_error.empty() ? "Replica went away" : coordination.root_znode.last_attempt_error);
@@ -653,15 +655,23 @@ void RefreshTask::doScheduling(bool is_shutdown)
 
                 if (!coordination.running_znode_exists)
                 {
+                    /// If ephemeral znode unexpectedly disappears, wait for this long to give the
+                    /// owner of the znode a chance to re-create it.
+                    /// Currently hard-coded as 1.25x the keeper session timeout, but it doesn't
+                    /// necessarily need to be longer than session timeout, since the grace period
+                    /// starts after the session already expired.
+                    UInt64 grace_period_ms = zookeeper->getSessionTimeoutMS();
+                    grace_period_ms += grace_period_ms / 4;
+
                     std::chrono::system_clock::time_point now = currentTime();
                     if (!running_znode_missing_since.has_value())
                     {
-                        LOG_INFO(getLogger(), "RMV coordination znode says refresh is running on replica '{}', but there's no corresponding ephemeral znode. Waiting for refreshable_materialized_view_keeper_grace_period={}ms before assuming that the replica crashed.", coordination.root_znode.last_attempt_replica, keeper_grace_period.count());
+                        LOG_INFO(getLogger(), "RMV coordination znode says refresh is running on replica '{}', but there's no corresponding ephemeral znode. Waiting for {} ms before assuming that the replica crashed.", coordination.root_znode.last_attempt_replica, grace_period_ms);
                         running_znode_missing_since = now;
                     }
                     coordination.running_znode_missing_since = running_znode_missing_since;
 
-                    std::chrono::system_clock::time_point deadline = *coordination.running_znode_missing_since + keeper_grace_period;
+                    std::chrono::system_clock::time_point deadline = *coordination.running_znode_missing_since + std::chrono::milliseconds(grace_period_ms);
                     if (now >= deadline)
                     {
                         LOG_WARNING(getLogger(), "Replica '{}' appears to have crashed while executing a refresh. Clearing the lock in zookeeper to allow another replica to start a new refresh.", coordination.root_znode.last_attempt_replica);
@@ -1208,8 +1218,9 @@ bool RefreshTask::updateCoordinationState(CoordinationZnode root, bool running, 
         }
         else
         {
-            /// `try_remove` because the ephemeral znode might be missing if we've reconnected to zookeeper just now.
-            ops.emplace_back(zkutil::makeRemoveRequest(coordination.path + "/running", -1, /*try_remove=*/ true));
+            /// (Avoid `try_remove = true` because it requires a keeper feature flag TRY_REMOVE that we're otherwise not using.)
+            if (coordination.running_znode_exists)
+                ops.emplace_back(zkutil::makeRemoveRequest(coordination.path + "/running", -1));
         }
 
         Coordination::Responses responses;
@@ -1479,7 +1490,7 @@ void RefreshTask::CoordinationZnode::parse(const String & data, bool running_zno
     required_field("randomness", randomness);
     optional_field("refresh_running", refresh_running, running_znode_exists);
 
-    if (next_field_name.empty())
+    if (!next_field_name.empty())
     {
         LOG_INFO(log_, "Unrecognized field '{}' in RMV coordination znode. Maybe the znode was written by a newer version of the server that added this field, or maybe parsing is broken.", next_field_name);
     }

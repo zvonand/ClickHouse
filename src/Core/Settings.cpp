@@ -7785,9 +7785,6 @@ Timeout for waiting for window view fire signal in event time processing
     DECLARE(Bool, stop_refreshable_materialized_views_on_startup, false, R"(
 On server startup, prevent scheduling of refreshable materialized views, as if with SYSTEM STOP VIEWS. You can manually start them with `SYSTEM START VIEWS` or `SYSTEM START VIEW <name>` afterwards. Also applies to newly created views. Has no effect on non-refreshable materialized views.
 )", EXPERIMENTAL) \
-    DECLARE(UInt64, refreshable_materialized_view_keeper_grace_period, 40'000, R"(
-If a coordinated refreshable materialized view loses connection to zookeeper, other replicas wait for this long before starting another refresh, in hopes that the replica reconnects.
-)", EXPERIMENTAL) \
     \
     DECLARE(Bool, allow_experimental_database_materialized_postgresql, false, R"(
 Allow to create database with Engine=MaterializedPostgreSQL(...).

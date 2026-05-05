@@ -77,4 +77,17 @@ FROM (
 )
 ORDER BY product_id;
 
+SELECT '-- Query H: den-crane VALUES-based count(c2) repro from PR #104114';
+-- Pre-fix: count(c2) returned 2 because the inner SELECT DISTINCT c1, c2 had
+-- its `c1` column pruned by `RemoveUnusedProjectionColumnsPass` (the outer
+-- query only references `c2`), turning the DISTINCT into `DISTINCT c2` and
+-- collapsing (117, 150000) and (118, 150000) into a single row.
+-- Post-fix: returns 3 (2 distinct rows from the LHS + 1 row from the RHS).
+SELECT count(c2) FROM
+(
+    SELECT DISTINCT c1, c2 FROM VALUES ((117, 150000), (118, 150000))
+    UNION ALL
+    SELECT c1, c2 FROM VALUES ((118, 150000))
+);
+
 DROP TABLE t_qty_103785;

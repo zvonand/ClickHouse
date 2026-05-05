@@ -1,5 +1,6 @@
 -- Tags: no-replicated-database, no-parallel-replicas
--- no-replicated-database, no-parallel-replicas: Dictionary is not created in replicated databases, parallel replicas.
+-- no-replicated-database: EXPLAIN output differs for replicated database.
+-- no-parallel-replicas: Dictionary is not available on parallel-replica workers.
 
 SET optimize_or_like_chain = 0;
 SET optimize_rewrite_like_perfect_affix = 0;

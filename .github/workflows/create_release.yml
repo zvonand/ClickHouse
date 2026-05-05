@@ -128,6 +128,13 @@ jobs:
         run: |
           python3 ./tests/ci/create_release.py --set-progress-started --progress "update changelog, docker version, security"
 
+          # On a rerun the branch and PR already exist — skip generation to avoid
+          # redundant docker pulls and changelog regeneration.
+          if git ls-remote --exit-code --heads origin "auto/${{ env.RELEASE_TAG }}" >/dev/null 2>&1; then
+            echo "ChangeLog branch auto/${{ env.RELEASE_TAG }} already exists — skipping generation on rerun"
+            exit 0
+          fi
+
           # git checkout master  # in case WF started from feature branch
           echo "List versions"
           ./utils/list-versions/list-versions.sh > ./utils/list-versions/version_date.tsv

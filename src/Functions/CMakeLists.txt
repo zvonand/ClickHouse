@@ -181,14 +181,24 @@ add_subdirectory(keyvaluepair)
 # Signed integer overflow on user-provided data inside boost::geometry - ignore.
 set_source_files_properties("pointInPolygon.cpp" PROPERTIES COMPILE_FLAGS -fno-sanitize=signed-integer-overflow)
 
-# Under x86-64-v3 + ThinLTO the auto-vectorizer/unroller produce a 16-YMM
-# scratch zero-init followed by per-byte scatter writes in the Jaccard kernel
-# (`stringJaccardIndex`).  The combination causes store-buffer pressure and
-# partial store-forwarding stalls on Intel cores, regressing this query ~17%
-# vs the v2 codegen.  Compile this file at v2 to keep the SSE-only sequence
-# that matches master's performance.
+# Files where the v3 wrapper codegen hurts performance.
+#
+# - FunctionsStringDistance.cpp: under v3+LTO the auto-vectorizer/unroller
+#   produce a 16-YMM scratch zero-init followed by per-byte scatter writes
+#   in the Jaccard kernel (`stringJaccardIndex`).  The combination causes
+#   store-buffer pressure and partial store-forwarding stalls on Intel cores,
+#   regressing the query ~17%.
+# - randomString.cpp: under v3 the `ColumnString` prologue is emitted with
+#   YMM stores / `vpbroadcastq`, which forces a `vzeroupper` before each
+#   virtual `getUInt` call inside the per-row loop.  The extra ~6 cycle
+#   transition × 100M rows regresses `randomString(rand() % 10)` ~15%.
+#
+# Compiling these files at v2 keeps the SSE-only wrapper codegen that matches
+# master.  The hot AVX2 kernels they invoke (e.g. `RandImpl::execute`) live in
+# separate translation units and remain at v3.
 if (ARCH_AMD64 AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3)
     set_source_files_properties(FunctionsStringDistance.cpp PROPERTIES COMPILE_FLAGS "-march=x86-64-v2")
+    set_source_files_properties(randomString.cpp PROPERTIES COMPILE_FLAGS "-march=x86-64-v2")
 endif()
 
 if (USE_GPERF)

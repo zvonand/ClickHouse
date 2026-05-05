@@ -93,9 +93,9 @@ Optional parameters:
   `AWS_ZONE_NAME` for the AWS IMDSv2 availability zone name, for example `eu-central-1a`;
   `GCP_ZONE` for the GCP metadata service zone, for example `europe-central2-a`;
   `CLICKHOUSE` to use ClickHouse internal detection, which may rely on cloud metadata or configuration;
-  `AUTO` to try `AWS_ZONE_ID`, then `AWS_ZONE_NAME`, then `GCP_ZONE`.
+  `AWS_ZONE_NAME_THEN_GCP_ZONE` to try `AWS_ZONE_NAME` and then `GCP_ZONE`.
   Default: empty string, disabled.
-  Tip: different environments use different availability zone formats. Amazon MSK typically uses zone IDs, so prefer `AWS_ZONE_ID`. Confluent Cloud typically uses zone names, so prefer `AWS_ZONE_NAME`. If unsure, use `AUTO` or check the `broker.rack` value on your cluster.
+  Tip: different environments use different availability zone formats. Amazon MSK typically uses zone IDs, so prefer `AWS_ZONE_ID`. Confluent Cloud typically uses zone names, so prefer `AWS_ZONE_NAME`. If unsure, use `AWS_ZONE_NAME_THEN_GCP_ZONE` or check the `broker.rack` value on your cluster.
   Note: Kafka brokers must be configured with `broker.rack` and `replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector`.
 - `kafka_compression_codec` — Compression codec used for producing messages. Supported: empty string, `none`, `gzip`, `snappy`, `lz4`, `zstd`. In case of empty string the compression codec is not set by the table, thus values from the config files or default value from `librdkafka` will be used. Default: empty string.
 - `kafka_compression_level` — Compression level parameter for algorithm selected by kafka_compression_codec. Higher values will result in better compression at the cost of more CPU usage. Usable range is algorithm-dependent: `[0-9]` for `gzip`; `[0-12]` for `lz4`; only `0` for `snappy`; `[0-12]` for `zstd`; `-1` = codec-dependent default compression level. Default: `-1`.

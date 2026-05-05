@@ -414,7 +414,7 @@ void updateConfigurationFromConfig(
                 LOG_ERROR(params.log, "Failed to determine client.rack via facility {}.", autodetect_rack);
         }
         else
-            LOG_ERROR(params.log, "Unknown kafka_autodetect_client_rack facility.");
+            LOG_ERROR(params.log, "Unknown kafka_autodetect_client_rack facility  {}. Expected one of AWS_ZONE_ID, AWS_ZONE_NAME, GCP_ZONE, CLICKHOUSE, AWS_ZONE_NAME_THEN_GCP_ZONE.", autodetect_rack);
     }
 
 #if USE_KRB5

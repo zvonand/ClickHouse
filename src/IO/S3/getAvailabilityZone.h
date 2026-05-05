@@ -6,7 +6,7 @@ namespace DB::S3
 {
 enum class AZFacilities
 {
-    AUTO,
+    AWS_ZONE_NAME_THEN_GCP_ZONE,
     AWS_ZONE_ID,
     AWS_ZONE_NAME,
     GCP_ZONE,
@@ -14,6 +14,6 @@ enum class AZFacilities
 };
 
 /// getRunningAvailabilityZone returns the availability zone of the underlying compute resources where the current process runs.
-std::string getRunningAvailabilityZone(AZFacilities az_facility = AZFacilities::AUTO);
-std::string tryGetRunningAvailabilityZone(AZFacilities az_facility = AZFacilities::AUTO);
+std::string getRunningAvailabilityZone(AZFacilities az_facility = AZFacilities::AWS_ZONE_NAME_THEN_GCP_ZONE);
+std::string tryGetRunningAvailabilityZone(AZFacilities az_facility = AZFacilities::AWS_ZONE_NAME_THEN_GCP_ZONE);
 }

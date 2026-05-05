@@ -196,7 +196,7 @@ def test_kafka_zone_awareness(kafka_cluster, create_query_generator):
 @pytest.mark.parametrize(
     ("autodetect_facility", "expected_rack", "topic_name"),
     [
-        ("AUTO", "euc1-az2", "zone_awareness_auto"),
+        ("AWS_ZONE_NAME_THEN_GCP_ZONE", "eu-central-1a", "zone_awareness_auto"),
         ("CLICKHOUSE", "clickhouse-test-az", "zone_awareness_clickhouse"),
     ],
 )

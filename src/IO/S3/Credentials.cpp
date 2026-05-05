@@ -418,8 +418,11 @@ String getAvailabilityZoneOrException(bool is_zone_id)
         std::istream & token_rs = token_session.receiveResponse(token_response);
         if (token_response.getStatus() == Poco::Net::HTTPResponse::HTTP_OK)
             Poco::StreamCopier::copyToString(token_rs, token_str);
-        if (token_str.empty())
-            throw DB::Exception(ErrorCodes::AWS_ERROR, "Failed to get AWS availability zone (token). HTTP response code: {}", token_response.getStatus());
+        else
+            LOG_WARNING(
+                logger,
+                "Failed to get AWS availability zone token. HTTP response code: {}. Falling back to token-less flow IMDSv1",
+                token_response.getStatus());
     }
 
     Poco::URI uri(getAWSMetadataEndpoint() + (is_zone_id ? AWSEC2MetadataClient::EC2_AVAILABILITY_ZONE_ID_RESOURCE : AWSEC2MetadataClient::EC2_AVAILABILITY_ZONE_RESOURCE));
@@ -428,7 +431,8 @@ String getAvailabilityZoneOrException(bool is_zone_id)
 
     Poco::Net::HTTPRequest request(Poco::Net::HTTPRequest::HTTP_GET, uri.getPath());
 
-    request.set(AWSEC2MetadataClient::EC2_IMDS_TOKEN_HEADER, token_str);
+    if (!token_str.empty())
+        request.set(AWSEC2MetadataClient::EC2_IMDS_TOKEN_HEADER, token_str);
     session.sendRequest(request);
 
     Poco::Net::HTTPResponse response;
@@ -484,16 +488,17 @@ String getRunningAvailabilityZone(AZFacilities az_facility)
 
     using AZGetter = std::function<String()>;
 
-    std::vector<std::pair<bool /* used if AUTO */, AZGetter>> az_getters =
+    std::vector<std::pair<bool /* used if AWS_ZONE_NAME_THEN_GCP_ZONE */, AZGetter>> az_getters =
     {
-        /// order of getters reflects DB::S3::AZFacilities, except AUTO, which is skipped
-        {true,  [](){return AWSEC2MetadataClient::getAWSZoneID();}},                          /// AWS_ZONE_ID
+        /// mimics original behavior Placement logic relies on
+        ///   skip AWS_ZONE_ID (in favour of AWS_ZONE_NAME) and CLICKHOUSE
+        {false, [](){return AWSEC2MetadataClient::getAWSZoneID();}},                          /// AWS_ZONE_ID
         {true,  [](){return AWSEC2MetadataClient::getAWSZoneName();}},                        /// AWS_ZONE_NAME
         {true,  getGCPAvailabilityZoneOrException},                                           /// GCP_ZONE
         {false, [](){return PlacementInfo::PlacementInfo::instance().getAvailabilityZone();}} /// CLICKHOUSE
     };
 
-    if (az_facility == AZFacilities::AUTO)
+    if (az_facility == AZFacilities::AWS_ZONE_NAME_THEN_GCP_ZONE)
     {
         std::vector<std::string> ex_msgs;
 

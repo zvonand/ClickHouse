@@ -36,7 +36,7 @@ FROM default.tab AS __table1
 WHERE __table1.id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'dictionary_all\') AS __table1
-    WHERE _CAST(__table1.i32, \'Int32\') = -32
+    WHERE __table1.i32 = -32
 )
 ORDER BY
     __table1.id ASC,
@@ -51,7 +51,7 @@ FROM default.tab AS __table1
 WHERE __table1.id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'dictionary_all\') AS __table1
-    WHERE _CAST(__table1.u64, \'UInt64\') = 64
+    WHERE __table1.u64 = 64
 )
 ORDER BY
     __table1.id ASC,
@@ -66,7 +66,7 @@ FROM default.tab AS __table1
 WHERE __table1.id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'dictionary_all\') AS __table1
-    WHERE _CAST(__table1.f64, \'Float64\') = 20.
+    WHERE __table1.f64 = 20.
 )
 ORDER BY
     __table1.id ASC,
@@ -81,7 +81,7 @@ FROM default.tab AS __table1
 WHERE __table1.id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'dictionary_all\') AS __table1
-    WHERE _CAST(__table1.d, \'Date\') = _CAST(\'2025-01-01\', \'Date\')
+    WHERE __table1.d = _CAST(\'2025-01-01\', \'Date\')
 )
 ORDER BY
     __table1.id ASC,
@@ -96,7 +96,7 @@ FROM default.tab AS __table1
 WHERE __table1.id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'dictionary_all\') AS __table1
-    WHERE _CAST(__table1.dt, \'DateTime\') = _CAST(\'2025-01-01 10:00:00\', \'DateTime\')
+    WHERE __table1.dt = _CAST(\'2025-01-01 10:00:00\', \'DateTime\')
 )
 ORDER BY
     __table1.id ASC,
@@ -111,7 +111,7 @@ FROM default.tab AS __table1
 WHERE __table1.id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'dictionary_all\') AS __table1
-    WHERE _CAST(__table1.uid, \'UUID\') = _CAST(\'00000000-0000-0000-0000-000000000001\', \'UUID\')
+    WHERE __table1.uid = _CAST(\'00000000-0000-0000-0000-000000000001\', \'UUID\')
 )
 ORDER BY
     __table1.id ASC,
@@ -126,7 +126,7 @@ FROM default.tab AS __table1
 WHERE __table1.id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'dictionary_all\') AS __table1
-    WHERE _CAST(__table1.ip4, \'IPv4\') = _CAST(\'192.168.0.1\', \'IPv4\')
+    WHERE __table1.ip4 = _CAST(\'192.168.0.1\', \'IPv4\')
 )
 ORDER BY
     __table1.id ASC,
@@ -141,29 +141,25 @@ FROM default.tab AS __table1
 WHERE __table1.id IN (
     SELECT __table1.id AS id
     FROM dictionary(\'dictionary_all\') AS __table1
-    WHERE _CAST(__table1.ip6, \'IPv6\') = _CAST(\'2001:db8::1\', \'IPv6\')
+    WHERE __table1.ip6 = _CAST(\'2001:db8::1\', \'IPv6\')
 )
 ORDER BY
     __table1.id ASC,
     __table1.payload ASC
 dictGetIPv6
 1	x
-dictGetOrNull(String) - plan
+dictGetOrNull(String), no rewrite (dictGetOrNull is not supported by the optimization) - plan
 SELECT
     __table1.id AS id,
     __table1.payload AS payload
 FROM default.tab AS __table1
-WHERE _CAST((__table1.id IN (
-    SELECT __table1.id AS id
-    FROM dictionary(\'dictionary_all\') AS __table1
-    WHERE _CAST(__table1.name, \'Nullable(String)\') = \'alpha\'
-)), \'Nullable(UInt8)\')
+WHERE dictGetOrNull(\'dictionary_all\', \'name\', __table1.id) = \'alpha\'
 ORDER BY
     __table1.id ASC,
     __table1.payload ASC
-dictGetOrNull(String)
+dictGetOrNull(String), no rewrite (dictGetOrNull is not supported by the optimization)
 1	x
-dictGetOrNull(String) IS NULL - plan
+dictGetOrNull(String) IS NULL, no rewrite (dictGetOrNull is not supported by the optimization) - plan
 SELECT
     __table1.id AS id,
     __table1.payload AS payload
@@ -172,5 +168,5 @@ WHERE isNull(dictGetOrNull(\'dictionary_all\', \'name\', __table1.id))
 ORDER BY
     __table1.id ASC,
     __table1.payload ASC
-dictGetOrNull(String) IS NULL
+dictGetOrNull(String) IS NULL, no rewrite (dictGetOrNull is not supported by the optimization)
 99	z

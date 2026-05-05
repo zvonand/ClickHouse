@@ -13,21 +13,21 @@ CREATE TABLE ref_table_all
 (
   id   UInt64,
   name String,
-  i8   String,
-  i16  String,
-  i32  String,
-  i64  String,
-  u8   String,
-  u16  String,
-  u32  String,
-  u64  String,
-  f32  String,
-  f64  String,
-  d    String,
-  dt   String,
-  uid  String,
-  ip4  String,
-  ip6  String
+  i8   Int8,
+  i16  Int16,
+  i32  Int32,
+  i64  Int64,
+  u8   UInt8,
+  u16  UInt16,
+  u32  UInt32,
+  u64  UInt64,
+  f32  Float32,
+  f64  Float64,
+  d    Date,
+  dt   DateTime,
+  uid  UUID,
+  ip4  IPv4,
+  ip6  IPv6
 )
 ENGINE = MergeTree
 ORDER BY id;
@@ -46,21 +46,21 @@ CREATE DICTIONARY dictionary_all
 (
   id   UInt64,
   name String,
-  i8   String,
-  i16  String,
-  i32  String,
-  i64  String,
-  u8   String,
-  u16  String,
-  u32  String,
-  u64  String,
-  f32  String,
-  f64  String,
-  d    String,
-  dt   String,
-  uid  String,
-  ip4  String,
-  ip6  String
+  i8   Int8,
+  i16  Int16,
+  i32  Int32,
+  i64  Int64,
+  u8   UInt8,
+  u16  UInt16,
+  u32  UInt32,
+  u64  UInt64,
+  f32  Float32,
+  f64  Float64,
+  d    Date,
+  dt   DateTime,
+  uid  UUID,
+  ip4  IPv4,
+  ip6  IPv6
 )
 PRIMARY KEY id
 SOURCE(CLICKHOUSE(TABLE 'ref_table_all'))
@@ -187,24 +187,24 @@ SELECT id, payload FROM tab
 WHERE dictGetIPv6('dictionary_all', 'ip6', id) = toIPv6('2001:db8::1')
 ORDER BY id, payload;
 
-SELECT 'dictGetOrNull(String) - plan';
+SELECT 'dictGetOrNull(String), no rewrite (dictGetOrNull is not supported by the optimization) - plan';
 EXPLAIN SYNTAX run_query_tree_passes=1
 SELECT id, payload FROM tab
 WHERE dictGetOrNull('dictionary_all', 'name', id) = 'alpha'
 ORDER BY id, payload;
 
-SELECT 'dictGetOrNull(String)';
+SELECT 'dictGetOrNull(String), no rewrite (dictGetOrNull is not supported by the optimization)';
 SELECT id, payload FROM tab
 WHERE dictGetOrNull('dictionary_all', 'name', id) = 'alpha'
 ORDER BY id, payload;
 
-SELECT 'dictGetOrNull(String) IS NULL - plan';
+SELECT 'dictGetOrNull(String) IS NULL, no rewrite (dictGetOrNull is not supported by the optimization) - plan';
 EXPLAIN SYNTAX run_query_tree_passes=1
 SELECT id, payload FROM tab
 WHERE isNull(dictGetOrNull('dictionary_all','name', id))
 ORDER BY id, payload;
 
-SELECT 'dictGetOrNull(String) IS NULL';
+SELECT 'dictGetOrNull(String) IS NULL, no rewrite (dictGetOrNull is not supported by the optimization)';
 SELECT id, payload FROM tab
 WHERE isNull(dictGetOrNull('dictionary_all','name', id))
 ORDER BY id, payload;

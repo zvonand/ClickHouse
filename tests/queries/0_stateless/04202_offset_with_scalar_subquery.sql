@@ -6,12 +6,9 @@
 -- regress to "INVALID_LIMIT_EXPRESSION: ... expression must be constant" if the
 -- __getScalar fold path is ever broken for those clauses specifically.
 
+-- { echo }
 SELECT number FROM numbers(10) ORDER BY number LIMIT 5 OFFSET 1 + (SELECT count() FROM numbers(2));
-
 SELECT number FROM numbers(10) ORDER BY number LIMIT 5 OFFSET (SELECT sum(number), count() FROM numbers(3)).2;
-
 SELECT number FROM numbers(10) ORDER BY number OFFSET (SELECT sum(number), count() FROM numbers(3)).2;
-
 SELECT number % 3 AS k FROM numbers(10) ORDER BY number, k LIMIT 1 + (SELECT count() FROM numbers(1)) BY k;
-
 SELECT number % 3 AS k FROM numbers(20) ORDER BY number, k LIMIT 1 + (SELECT count() FROM numbers(1)) OFFSET (SELECT count() FROM numbers(3)) BY k;

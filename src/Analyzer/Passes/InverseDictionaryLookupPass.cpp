@@ -273,23 +273,16 @@ public:
         NameAndTypePair attr_col{attr_col_name, dict_attr_col_type};
         auto attr_col_node = std::make_shared<ColumnNode>(attr_col, dict_table_function);
 
-        /// Needed for dictGet functions like `dictGetString`, `dictGetInt32`, etc.
-        QueryTreeNodePtr attr_col_node_casted = attr_col_node;
-        if (!attr_col_node->getResultType()->equals(*dictget_function_info.return_type))
-        {
-            attr_col_node_casted = createCastFunction(attr_col_node, dictget_function_info.return_type, getContext());
-        }
-
         auto attr_comparison_function_node = std::static_pointer_cast<FunctionNode>(node_function->clone());
         attr_comparison_function_node->markAsOperator();
 
         if (dict_side == Side::LHS)
         {
-            attr_comparison_function_node->getArguments().getNodes() = { attr_col_node_casted, arguments[1] };
+            attr_comparison_function_node->getArguments().getNodes() = { attr_col_node, arguments[1] };
         }
         else
         {
-            attr_comparison_function_node->getArguments().getNodes() = { arguments[0], attr_col_node_casted };
+            attr_comparison_function_node->getArguments().getNodes() = { arguments[0], attr_col_node };
         }
         resolveOrdinaryFunctionNodeByName(*attr_comparison_function_node, attr_comparison_function_name, getContext());
 

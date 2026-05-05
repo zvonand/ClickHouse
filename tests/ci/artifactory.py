@@ -175,11 +175,12 @@ class DebianArtifactory:
         Shell.check("docker pull ubuntu:latest", strict=True, verbose=True)
         print(f"Test packages installation, version [{self.version}]")
         # `apt-key` was removed in Ubuntu 24.04. Use the modern approach:
-        # import the key into a dedicated keyring and reference it with [signed-by=].
+        # fetch the ASCII-armored key over HTTP (no dirmngr needed) and dearmor it
+        # into a dedicated keyring, then reference it with [signed-by=].
         setup_key = (
             f"mkdir -p /etc/apt/keyrings && "
-            f"gpg --no-default-keyring --keyring {self._KEYRING_PATH} "
-            f"--keyserver hkp://keyserver.ubuntu.com:80 --recv-keys {self._SIGN_KEY}"
+            f"curl -fsSL 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x{self._SIGN_KEY}' "
+            f"| gpg --dearmor -o {self._KEYRING_PATH}"
         )
         debian_command = (
             f"echo 'deb [signed-by={self._KEYRING_PATH}] {self.repo_url} stable main' | "

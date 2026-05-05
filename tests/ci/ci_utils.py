@@ -267,6 +267,13 @@ class GH:
 
 class Shell:
     @classmethod
+    def run(cls, command, verbose=False) -> int:
+        """Run command and return its integer exit code (no retries, no assert)."""
+        if verbose:
+            print(f"Run command [{command}]")
+        return subprocess.run(command, shell=True).returncode
+
+    @classmethod
     def get_output_or_raise(cls, command):
         return cls.get_output(command, strict=True)
 

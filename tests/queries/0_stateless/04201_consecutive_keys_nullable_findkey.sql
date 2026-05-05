@@ -6,6 +6,7 @@
 -- `Aggregator::executeImplBatch` switches to `findKey` for subsequent blocks.
 -- Covers: src/Common/ColumnsHashingImpl.h:229-241 — findKey nullable branch.
 
+
 DROP TABLE IF EXISTS t_nullable_findkey;
 
 CREATE TABLE t_nullable_findkey (id UInt64, x Nullable(Int64))

@@ -1506,6 +1506,7 @@ class JobConfigs:
         runs_on=RunnerLabels.ARM_LARGE_STORAGE,
         run_in_docker="clickhouse/performance-comparison",
         command="python3 ./ci/jobs/vector_search_stress_tests.py",
+        timeout=6 * 3600,
     )
     llvm_coverage_job = Job.Config(
         name=JobNames.LLVM_COVERAGE,

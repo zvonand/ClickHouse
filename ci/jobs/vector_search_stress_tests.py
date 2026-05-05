@@ -342,6 +342,10 @@ class RunTest:
             logger("Waiting for optimize table to complete...")
             time.sleep(5)
 
+    # Runs ALTER TABLE ... ADD INDEX and then MATERIALIZE INDEX
+    def build_index(self):
+        logger("Adding vector similarity index")
+
         result = self._chclient.query(
             f"SELECT name, formatReadableSize(bytes) FROM system.parts WHERE table = '{self._table}' AND active=1"
         )
@@ -349,9 +353,6 @@ class RunTest:
         for row in result.result_rows:
             logger(f"{row[0]}\t\t{row[1]} bytes")
 
-    # Runs ALTER TABLE ... ADD INDEX and then MATERIALIZE INDEX
-    def build_index(self):
-        logger("Adding vector similarity index")
         quantization = self._test_params[QUANTIZATION]
         hnsw_M = self._test_params[HNSW_M]
         hnsw_ef_C = self._test_params[HNSW_EF_CONSTRUCTION]
@@ -834,7 +835,7 @@ def install_and_start_clickhouse():
 
 
 # Array of (dataset, test_params)
-"""
+TESTS_TO_RUN = [
     (
         "Test using the laion dataset",
         dataset_laion_5b_mini_for_quick_test,
@@ -845,8 +846,6 @@ def install_and_start_clickhouse():
         dataset_hackernews_openai,
         test_params_hackernews_10m,
     ),
-"""
-TESTS_TO_RUN = [
     (
         "Test using the cohere wiki dataset",
         dataset_cohere_wiki_20m,

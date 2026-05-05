@@ -145,5 +145,29 @@ DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_secret;
 DROP NAMED COLLECTION IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_nc_secret;
 " 2>&1 | grep -cF 'abs.invalid'
 
+# URL engine: credentials in `url_base` must NOT leak into the materialized engine args.
+# Even though resolution would otherwise produce `http://user:pass@base.invalid/dir/persist.csv`,
+# the resolved URL must be skipped in materialization to avoid exposing secrets via
+# SHOW CREATE TABLE. Persistence relies on `url_base` being set the same way at attach time.
+$CLICKHOUSE_CLIENT -n -q "
+DROP NAMED COLLECTION IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_nc_creds;
+CREATE NAMED COLLECTION ${CLICKHOUSE_TEST_UNIQUE_NAME}_nc_creds AS url='persist.csv', format='CSV';
+SET url_base = 'http://user:pass@base.invalid/dir/';
+DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_creds;
+CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_creds (c String) ENGINE = URL(${CLICKHOUSE_TEST_UNIQUE_NAME}_nc_creds);
+SHOW CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_creds FORMAT TabSeparatedRaw;
+DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_nc_creds;
+DROP NAMED COLLECTION IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_nc_creds;
+" 2>&1 | grep -cF 'user:pass'
+
+# URL engine: credentials introduced by url_base must also NOT leak into positional engine args.
+$CLICKHOUSE_CLIENT -n -q "
+SET url_base = 'http://user:pass@base.invalid/dir/';
+DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_pos_creds;
+CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_pos_creds (c String) ENGINE = URL('persist.csv', CSV);
+SHOW CREATE TABLE ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_pos_creds FORMAT TabSeparatedRaw;
+DROP TABLE IF EXISTS ${CLICKHOUSE_TEST_UNIQUE_NAME}_url_pos_creds;
+" 2>&1 | grep -cF 'user:pass'
+
 # Invalid url_base (no scheme) should produce an error
 $CLICKHOUSE_CLIENT --query "SELECT * FROM url('data.csv', CSV, 'c String') SETTINGS url_base = 'example.invalid/def/', $FAST" 2>&1 | grep -oF 'must contain a scheme' | head -1

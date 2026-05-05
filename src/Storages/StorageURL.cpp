@@ -1769,6 +1769,22 @@ static String normalizeDotSegmentsInURL(const String & url, size_t authority_sta
     return url.substr(0, path_start) + normalized + url.substr(path_end);
 }
 
+/// Returns true if the URL has a userinfo component (`user[:password]@`) in its authority part.
+/// Used to avoid persisting credentials into the CREATE TABLE AST when materializing a URL
+/// resolved through `url_base`.
+static bool urlHasUserInfo(const String & url)
+{
+    auto scheme_end = url.find("://");
+    if (scheme_end == String::npos)
+        return false;
+    auto authority_start = scheme_end + 3;
+    auto authority_end = url.find_first_of("/?#", authority_start);
+    auto at_pos = url.find('@', authority_start);
+    if (at_pos == String::npos)
+        return false;
+    return authority_end == String::npos || at_pos < authority_end;
+}
+
 String StorageURL::resolveURLBase(const String & url, const String & base)
 {
     if (base.empty())
@@ -1872,6 +1888,14 @@ void StorageURL::addInferredEngineArgsToCreateQuery(ASTs & args, const ContextPt
     /// reproduce the originally-resolved URL even if `url_base` is later changed or unset.
     /// `uri` is the URL after `url_base` resolution (computed by `getConfiguration`).
     if (args.empty())
+        return;
+
+    /// Skip materialization when the resolved URL contains userinfo (`user:pass@host`).
+    /// Credentials may originate from `url_base` (e.g. `SET url_base = 'http://user:pass@base/dir/'`)
+    /// rather than from the user-written engine arguments, and persisting them into the
+    /// CREATE TABLE AST would expose secrets via `SHOW CREATE TABLE`. Persistence in this case
+    /// relies on `url_base` being set with the same value at attach/restart time.
+    if (urlHasUserInfo(uri))
         return;
 
     /// Positional form: `URL('url', ...)` — replace the first literal argument.

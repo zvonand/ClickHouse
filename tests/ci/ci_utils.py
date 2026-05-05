@@ -291,7 +291,8 @@ class Shell:
         dry_run=False,
         stdin_str=None,
         retries=0,
-        retry_delay=10,
+        retry_delay=2,
+        retry_backoff=2,
         **kwargs,
     ):
         if dry_run:
@@ -324,12 +325,13 @@ class Shell:
             if retcode == 0:
                 break
             if attempt + 1 < attempts:
+                delay = retry_delay * (retry_backoff**attempt)
                 print(
                     f"Command failed with exit code {retcode}, "
-                    f"retrying in {retry_delay}s "
+                    f"retrying in {delay}s "
                     f"(attempt {attempt + 2}/{attempts}): {command}"
                 )
-                time.sleep(retry_delay)
+                time.sleep(delay)
         if strict:
             assert retcode == 0, f"Command failed with exit code {retcode}: {command}"
         return retcode == 0

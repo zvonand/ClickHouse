@@ -555,27 +555,37 @@ class ReleaseInfo:
     def create_gh_release(self, packages_files: List[str], dry_run: bool) -> None:
         repo = Envs.GITHUB_REPOSITORY
         assert repo
-        cmds = [
-            f"gh release create --repo {repo} --title 'Release {self.release_tag}' {self.release_tag}"
+        cmd_create = f"gh release create --repo {repo} --title 'Release {self.release_tag}' {self.release_tag}"
+        cmds_upload = [
+            # `--clobber` makes uploads idempotent: retries succeed even when a
+            # previous attempt registered the asset server-side before failing.
+            f"gh release upload --clobber {self.release_tag} {file}"
+            for file in packages_files
         ]
-        for file in packages_files:
-            # `--clobber` makes retries idempotent if a previous attempt
-            # registered the asset server-side before failing.
-            cmds.append(f"gh release upload --clobber {self.release_tag} {file}")
         if not dry_run:
             # GitHub's release API occasionally returns transient 5xx errors
             # (e.g. 502 Bad Gateway) under load, aborting the whole release.
-            # Retry each command a few times before giving up.
-            for cmd in cmds:
-                Shell.check(
-                    cmd, strict=True, verbose=True, retries=5, retry_delay=15
-                )
+            # Retry each command with exponential back-off before giving up.
+            #
+            # `gh release create` is not idempotent: if GitHub creates the
+            # release server-side but returns a transient error, the retry hits
+            # "already exists" and still fails. Treat that as success by
+            # verifying the release exists after any failure.
+            if not Shell.check(cmd_create, verbose=True, retries=5, retry_delay=2):
+                assert Shell.check(
+                    f"gh release view --repo {repo} {self.release_tag}",
+                    verbose=True,
+                ), f"Failed to create release {self.release_tag}"
+            for cmd in cmds_upload:
+                Shell.check(cmd, strict=True, verbose=True, retries=5, retry_delay=2)
             self.release_url = (
                 f"https://github.com/{repo}/releases/tag/{self.release_tag}"
             )
         else:
             print("Dry-run, would run commands:")
-            print("\n  * ".join(cmds))
+            print(f"  * {cmd_create}")
+            for cmd in cmds_upload:
+                print(f"  * {cmd}")
             self.release_url = "dry-run"
         self.dump()
 

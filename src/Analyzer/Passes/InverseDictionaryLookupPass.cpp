@@ -68,8 +68,7 @@ bool isSupportedDictGetFunction(const String & name)
            "dictGetDateTime",
            "dictGetUUID",
            "dictGetIPv4",
-           "dictGetIPv6",
-           "dictGetOrNull"};
+           "dictGetIPv6"};
 
     return supported_functions.contains(name);
 }

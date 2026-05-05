@@ -81,7 +81,8 @@ $CLICKHOUSE_CLIENT -q "
         'local',
         countIf(ProfileEvents['JoinSpillingHashJoinSwitchedToGraceJoin'] > 0) > 0
     FROM system.query_log
-    WHERE log_comment = '${LOG_LOCAL}'
+    WHERE current_database = currentDatabase()
+        AND log_comment = '${LOG_LOCAL}'
         AND type = 'QueryFinish'
         AND event_date >= yesterday()
 "
@@ -91,7 +92,8 @@ $CLICKHOUSE_CLIENT -q "
         'distributed',
         countIf(ProfileEvents['JoinSpillingHashJoinSwitchedToGraceJoin'] > 0) > 0
     FROM system.query_log
-    WHERE log_comment = '${LOG_DIST}'
+    WHERE current_database = currentDatabase()
+        AND log_comment = '${LOG_DIST}'
         AND type = 'QueryFinish'
         AND event_date >= yesterday()
 "

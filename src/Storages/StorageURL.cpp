@@ -381,7 +381,8 @@ StorageURLSource::StorageURLSource(
                 credentials,
                 headers,
                 glob_url,
-                current_uri_options.size() == 1);
+                current_uri_options.size() == 1,
+                [this]() { return isCancelled(); });
 
             /// If file is empty and engine_url_skip_empty_files=1, skip it and go to the next file.
         }
@@ -551,7 +552,8 @@ std::pair<Poco::URI, std::unique_ptr<ReadWriteBufferFromHTTP>> StorageURLSource:
     Poco::Net::HTTPBasicCredentials & credentials,
     const HTTPHeaderEntries & headers,
     bool glob_url,
-    bool delay_initialization)
+    bool delay_initialization,
+    ReadWriteBufferFromHTTP::CheckCancelled check_cancelled)
 {
     String first_exception_message;
     ReadSettings read_settings = context_->getReadSettings();
@@ -585,7 +587,10 @@ std::pair<Poco::URI, std::unique_ptr<ReadWriteBufferFromHTTP>> StorageURLSource:
                            .withSkipNotFound(skip_url_not_found_error)
                            .withHeaders(headers)
                            .withDelayInit(delay_initialization)
-                           .create(credentials);
+                            .create(credentials);
+
+            if (check_cancelled)
+                res->setCancellationCheck(check_cancelled);
 
             if (context_->getSettingsRef()[Setting::engine_url_skip_empty_files] && res->eof() && option != std::prev(end))
             {

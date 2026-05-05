@@ -2448,6 +2448,8 @@ static const std::function<bool(const std::shared_ptr<SQLDatabase> &)> db_has_re
 static const std::function<bool(const SQLTable &)> table_has_replicas
     = [](const SQLTable & t) { return t.isAttached() && t.replica_counter > 0; };
 
+static const auto has_queue_func = [](const SQLTable & t) { return t.isAttached() && t.isAnyQueueEngine(); };
+
 void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const bool allow_table_statements, SystemCommand * sc)
 {
     const uint32_t has_merge_tree = static_cast<uint32_t>(allow_table_statements && collectionHas<SQLTable>(has_merge_tree_func));
@@ -2458,6 +2460,7 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
         = static_cast<uint32_t>(allow_table_statements && collectionHas<SQLView>(has_refreshable_view_func));
     const uint32_t has_table = static_cast<uint32_t>(allow_table_statements && collectionHas<SQLTable>(attached_tables));
     const uint32_t has_replicated_table = static_cast<uint32_t>(allow_table_statements && collectionHas<SQLTable>(table_has_replicas));
+    const uint32_t has_queue_table = static_cast<uint32_t>(allow_table_statements && collectionHas<SQLTable>(has_queue_func));
     const uint32_t has_replicated_database
         = static_cast<uint32_t>(allow_table_statements && collectionHas<std::shared_ptr<SQLDatabase>>(db_has_replicas));
     const uint32_t has_database
@@ -2581,6 +2584,15 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
          [&] { cluster = setTableSystemStatement<SQLDictionary>(rg, attached_dictionaries, sc->mutable_reload_dictionary()); }},
         /// Distributed
         {3 * has_table, [&] { cluster = setTableSystemStatement<SQLTable>(rg, attached_tables, sc->mutable_flush_distributed()); }},
+        /// Object storage queue
+        {3 * has_queue_table,
+         [&]
+         {
+             auto * foq = sc->mutable_flush_object_storage_queue();
+             const SQLTable & t = rg.pickRandomly(filterCollection<SQLTable>(has_queue_func));
+             t.setName(foq->mutable_table(), false);
+             foq->set_path(t.getTablePath(rg, this->allow_not_deterministic));
+         }},
         {3 * has_table, [&] { cluster = setTableSystemStatement<SQLTable>(rg, attached_tables, sc->mutable_stop_distributed_sends()); }},
         {3 * has_table, [&] { cluster = setTableSystemStatement<SQLTable>(rg, attached_tables, sc->mutable_start_distributed_sends()); }},
         {3, [&] { sc->set_drop_query_condition_cache(true); }},

@@ -5527,6 +5527,14 @@ CONV_FN(SystemCommand, cmd)
         case CmdType::kDropDistributedCache:
             ret += "DROP DISTRIBUTED CACHE";
             break;
+        case CmdType::kFlushObjectStorageQueue: {
+            const auto & foq = cmd.flush_object_storage_queue();
+            ret += "FLUSH OBJECT STORAGE QUEUE ";
+            ExprSchemaTableToString(ret, foq.table());
+            ret += " PATH ";
+            appendSQLStringLiteral(ret, foq.path());
+            break;
+        }
         case CmdType::kUnlockSnapshot:
             ret += "UNLOCK SNAPSHOT ";
             appendSQLStringLiteral(ret, cmd.unlock_snapshot().name());

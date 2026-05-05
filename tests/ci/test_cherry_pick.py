@@ -56,8 +56,17 @@ class _PR:
 
 
 class IsBotActorTest(unittest.TestCase):
-    def test_none_actor(self):
-        self.assertFalse(_is_bot_actor(None))
+    def test_none_actor_is_treated_as_bot(self):
+        # Fail-closed: when the timeline API does not attribute the `labeled`
+        # event to any actor, we cannot prove it was a human, so the label
+        # must not drive backporting.
+        self.assertTrue(_is_bot_actor(None))
+
+    def test_empty_login_is_treated_as_bot(self):
+        # Same fail-closed reasoning as `test_none_actor_is_treated_as_bot`:
+        # an actor object without a login is unattributable.
+        self.assertTrue(_is_bot_actor(_Actor("")))
+        self.assertTrue(_is_bot_actor(_Actor(None)))
 
     def test_github_app_bot(self):
         self.assertTrue(_is_bot_actor(_Actor("dependabot[bot]", type_="Bot")))
@@ -146,6 +155,26 @@ class BotAddedLabelsTest(unittest.TestCase):
             _bot_added_labels(pr, [self.LABEL, self.OTHER_LABEL]),
             {self.OTHER_LABEL},
         )
+
+    def test_label_with_unknown_actor_is_flagged(self):
+        # If the most recent `labeled` event for the label has no actor in the
+        # timeline API response, fail closed: drop the label from the
+        # human-added set so it cannot trigger an unintended backport.
+        pr = self._pr(
+            _Event("labeled", _Label(self.LABEL), None),
+        )
+        self.assertEqual(_bot_added_labels(pr, [self.LABEL]), {self.LABEL})
+
+    def test_human_then_unknown_actor_re_add_is_flagged(self):
+        # A human applied the label first, then it was re-applied with no
+        # attributable actor. The most recent event is the unattributable one,
+        # so fail closed.
+        pr = self._pr(
+            _Event("labeled", _Label(self.LABEL), _Actor("alexey-milovidov")),
+            _Event("unlabeled", _Label(self.LABEL), _Actor("alexey-milovidov")),
+            _Event("labeled", _Label(self.LABEL), None),
+        )
+        self.assertEqual(_bot_added_labels(pr, [self.LABEL]), {self.LABEL})
 
     def test_events_api_failure_propagates(self):
         # We must fail closed: if the events API errors out we cannot safely

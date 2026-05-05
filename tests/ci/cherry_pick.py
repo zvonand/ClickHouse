@@ -66,12 +66,17 @@ _AUTOMATED_LOGINS = frozenset({"groeneai", "clickgapai"})
 
 
 def _is_bot_actor(actor) -> bool:
-    """Return True if `actor` is a GitHub App or a known automated account."""
+    """Return True if `actor` is a GitHub App, a known automated account, or
+    has unknown identity. Fail closed: if we cannot attribute the action to a
+    human, do not let the label drive a backport — treat it as non-human.
+    """
     if actor is None:
-        return False
+        return True
     if getattr(actor, "type", None) == "Bot":
         return True
     login = (getattr(actor, "login", "") or "").lower()
+    if not login:
+        return True
     if login.endswith("[bot]"):
         return True
     if login in _AUTOMATED_LOGINS:

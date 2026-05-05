@@ -1956,7 +1956,7 @@ StorageURL::Configuration StorageURL::getConfiguration(ASTs & args, const Contex
         {
             configuration.format = FormatFactory::instance().tryGetFormatFromFileName(Poco::URI(configuration.url).getPath()).value_or("auto");
         }
-        catch (const Poco::Exception &)
+        catch (const Poco::Exception &) // NOLINT(bugprone-empty-catch)
         {
         }
     }

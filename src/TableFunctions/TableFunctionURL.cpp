@@ -103,7 +103,7 @@ void TableFunctionURL::parseArgumentsImpl(ASTs & args, const ContextPtr & contex
         {
             format = FormatFactory::instance().tryGetFormatFromFileName(Poco::URI(filename).getPath()).value_or("auto");
         }
-        catch (const Poco::Exception &)
+        catch (const Poco::Exception &) // NOLINT(bugprone-empty-catch)
         {
         }
     }

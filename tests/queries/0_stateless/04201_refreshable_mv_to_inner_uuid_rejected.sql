@@ -1,4 +1,21 @@
--- Tags: atomic-database
+-- Tags: atomic-database, no-parallel, no-random-settings
+-- no-parallel: the APPEND cross-check below creates an inner table with a fixed,
+-- server-wide unique UUID ('11111111-2222-3333-4444-555555555556'). When the
+-- flaky-check runner schedules this test to multiple parallel workers (50 reruns,
+-- workers = nproc-1), two concurrent runs would hit the global UUID registry at
+-- the same time and one CREATE would fail with TABLE_ALREADY_EXISTS (Code 57)
+-- before the test's `serverError BAD_ARGUMENTS` assertion is reached. Forcing
+-- sequential execution removes the cross-run UUID collision while keeping the
+-- assertion observable across reruns (Atomic engine releases the UUID on
+-- `DROP TABLE … SYNC`, which is verified to allow safe sequential reuse).
+-- no-random-settings: this test asserts a parse-time BAD_ARGUMENTS from CREATE
+-- MATERIALIZED VIEW with REFRESH + TO INNER UUID (without APPEND). The flaky-check
+-- runner randomizes `session_timezone` from a list that includes `get_localzone()`,
+-- which on hosts where /etc/localtime is a direct symlink returns the malformed
+-- string "zoneinfo/UTC". The server then rejects the very first query with an
+-- unrelated `Invalid time zone: zoneinfo/UTC. (BAD_ARGUMENTS)` (verified in the
+-- failing stderr) and the targeted assertion is never reached. Disabling random
+-- settings keeps the timezone valid so the test exercises only the parse-time check.
 -- Test: refreshable materialized view (without APPEND) must reject explicit `TO INNER UUID`.
 -- Refresh in non-APPEND mode swaps the inner table on each refresh (different UUID each time),
 -- so a user-fixed inner UUID is nonsensical. The check guards against silent confusion or

@@ -209,6 +209,10 @@ CONV_FN(JSONColumn, jcol)
     {
         ret += "^";
     }
+    else if (jcol.has_jcombined())
+    {
+        ret += "@";
+    }
     ret += "`";
     ColumnToString(ret, 1, jcol.col());
     ret += "`";

@@ -1942,6 +1942,7 @@ message JSONColumn {
     oneof jcol_oneof {
         bool jcol = 2;
         uint32 jarray = 3;
+        bool jcombined = 4;
     }
 }
 

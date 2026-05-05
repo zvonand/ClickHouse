@@ -19,8 +19,7 @@ instance = cluster.add_instance(
 
 # Runs custom python-based S3 endpoint.
 def run_endpoint(cluster):
-    logging.info("Starting custom S3 endpoint")
-    # container_id = cluster.get_container_id("instance")
+    logging.info("Starting metadata mock services")
     container_id = cluster.get_container_id("resolver")
     current_dir = os.path.dirname(__file__)
     cluster.copy_file_to_container(
@@ -28,31 +27,40 @@ def run_endpoint(cluster):
         os.path.join(current_dir, "s3_endpoint", "endpoint.py"),
         "endpoint.py",
     )
-    logging.info("Before executing")
-    ret = cluster.exec_in_container(
-        container_id, ["python", "endpoint.py"], detach=True
+    cluster.exec_in_container(
+        container_id,
+        ["python", "endpoint.py", "--service", "aws", "--port", "8080"],
+        detach=True,
     )
-    logging.info(f"Executed in container with output {ret}")
+    cluster.exec_in_container(
+        container_id,
+        ["python", "endpoint.py", "--service", "gcp", "--port", "80"],
+        detach=True,
+    )
 
-    # Wait for S3 endpoint start
-    num_attempts = 100
-    for attempt in range(num_attempts):
-        logging.info(f"attempt {attempt}")
-        ping_response = cluster.exec_in_container(
-            container_id,
-            ["curl", "-s", "http://localhost:8080/ping"],
-            nothrow=True,
-        )
-        if ping_response != "OK":
+    for port in [8080, 80]:
+        num_attempts = 100
+        for attempt in range(num_attempts):
+            logging.info(f"waiting for metadata service on port {port}, attempt {attempt}")
+            ping_response = cluster.exec_in_container(
+                container_id,
+                ["curl", "-s", f"http://localhost:{port}/ping"],
+                nothrow=True,
+            )
+            if ping_response == "OK":
+                break
             if attempt == num_attempts - 1:
                 assert ping_response == "OK", 'Expected "OK", but got "{}"'.format(
                     ping_response
                 )
-            else:
-                time.sleep(1)
-        else:
-            break
-    logging.info("S3 endpoint started")
+            time.sleep(1)
+
+    logging.info("Metadata mock services started")
+
+    # `getGCPAvailabilityZoneOrException` is hardcoded to `metadata.google.internal`.
+    # Overriding `/etc/hosts` here keeps the test aligned with the production path
+    # instead of introducing a test-only dependency on a hypothetical `GCE_METADATA_HOST`.
+    instance.append_hosts("metadata.google.internal", cluster.get_instance_ip("resolver"))
 
 
 def produce_test_messages(kafka_cluster, topic_name):
@@ -196,7 +204,7 @@ def test_kafka_zone_awareness(kafka_cluster, create_query_generator):
 @pytest.mark.parametrize(
     ("autodetect_facility", "expected_rack", "topic_name"),
     [
-        ("AWS_ZONE_NAME_THEN_GCP_ZONE", "eu-central-1a", "zone_awareness_auto"),
+        ("AWS_ZONE_NAME_THEN_GCP_ZONE", "europe-central2-a", "zone_awareness_gcp_fallback"),
         ("CLICKHOUSE", "clickhouse-test-az", "zone_awareness_clickhouse"),
     ],
 )

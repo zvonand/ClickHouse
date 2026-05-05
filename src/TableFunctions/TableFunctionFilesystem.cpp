@@ -164,14 +164,12 @@ StoragePtr TableFunctionFilesystem::executeImpl(const ASTPtr &, ContextPtr conte
 {
     bool local_mode = context->getApplicationType() == Context::ApplicationType::LOCAL;
 
-    /// `fs::canonical` requires the path to exist. In `clickhouse-local` mode,
-    /// `user_files_path` may not exist, so fall back to a lexically-normalized absolute path.
+    /// Keep `user_files_path` in the same lexical namespace as user input: `fileOrSymlinkPathStartsWith`
+    /// compares lexically-normalized absolute paths, so canonicalizing the prefix would reject otherwise
+    /// valid absolute paths whenever `user_files_path` itself is a symlink. This also removes the
+    /// requirement that `user_files_path` exist on disk (relevant for `clickhouse-local`).
     fs::path user_files_path(context->getUserFilesPath());
-    std::error_code ec;
-    auto canonical_user_files_path = fs::canonical(user_files_path, ec);
-    String user_files_absolute_path_string = ec
-        ? fs::absolute(user_files_path).lexically_normal().string()
-        : canonical_user_files_path.string();
+    String user_files_absolute_path_string = fs::absolute(user_files_path).lexically_normal().string();
 
     StoragePtr res = std::make_shared<StorageFilesystem>(
         StorageID(getDatabaseName(), table_name), getActualTableStructure(context, is_insert_query), ConstraintsDescription(), String{},

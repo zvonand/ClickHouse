@@ -1,4 +1,4 @@
--- Tags: no-ordinary-database, no-async-insert, no-fasttest
+-- Tags: no-ordinary-database, no-async-insert, no-fasttest, no-object-storage, no-s3-storage
 -- UNIQUE KEY: mutation-guard coverage.
 --
 -- `MergeTreeData::checkMutationIsPossible` must reject every mutation-class

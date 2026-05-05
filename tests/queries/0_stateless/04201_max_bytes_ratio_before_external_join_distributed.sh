@@ -55,6 +55,12 @@ $CLICKHOUSE_CLIENT --user "${USER}" -q "
 #    those settings as a ratio (not as an absolute byte value collapsed
 #    on the coordinator) so that each shard recomputes the spill
 #    threshold from its own memory limits and actually spills.
+#
+#    `prefer_localhost_replica = 0` forces a real secondary query to be
+#    spawned for every shard (otherwise the coordinator's local replica
+#    would absorb one of the shards and only the initial query would be
+#    logged), which is what makes the per-executor assertion below
+#    meaningful.
 $CLICKHOUSE_CLIENT --user "${USER}" -q "
     SELECT count()
     FROM cluster('test_cluster_two_shards', currentDatabase(), t_left_04201) AS t1
@@ -64,6 +70,7 @@ $CLICKHOUSE_CLIENT --user "${USER}" -q "
         serialize_query_plan = 1,
         join_algorithm = 'hash',
         max_threads = 1,
+        prefer_localhost_replica = 0,
         max_bytes_before_external_join = 0,
         max_bytes_ratio_before_external_join = 0.0001,
         log_comment = '${LOG_DIST}'
@@ -72,10 +79,9 @@ $CLICKHOUSE_CLIENT --user "${USER}" -q "
 
 $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS query_log"
 
-# Verify spilling via profile events. We look at every QueryFinish row
-# whose log_comment matches (the initiator's row plus any remote leaves
-# inheriting the same log_comment), and require at least one of them to
-# have `JoinSpillingHashJoinSwitchedToGraceJoin > 0`.
+# Verify spilling via profile events. The local query is a single execution,
+# so requiring its `QueryFinish` row to record
+# `JoinSpillingHashJoinSwitchedToGraceJoin > 0` is sufficient.
 $CLICKHOUSE_CLIENT -q "
     SELECT
         'local',
@@ -87,14 +93,23 @@ $CLICKHOUSE_CLIENT -q "
         AND event_date >= yesterday()
 "
 
+# For the distributed query, the ratio must reach every executor that
+# actually runs the JOIN, not just one of them. We restrict the check to
+# remote leaf rows (`is_initial_query = 0`) and require at least two of
+# them to record a switch to grace join. The 2-shard cluster spawns one
+# JOIN-running secondary query per shard; with the original
+# `countIf(...) > 0` check, a regression that ran the JOIN on only one
+# shard (e.g. by collapsing the plan to a single executor) would still
+# pass.
 $CLICKHOUSE_CLIENT -q "
     SELECT
         'distributed',
-        countIf(ProfileEvents['JoinSpillingHashJoinSwitchedToGraceJoin'] > 0) > 0
+        countIf(ProfileEvents['JoinSpillingHashJoinSwitchedToGraceJoin'] > 0) >= 2
     FROM system.query_log
     WHERE current_database = currentDatabase()
         AND log_comment = '${LOG_DIST}'
         AND type = 'QueryFinish'
+        AND is_initial_query = 0
         AND event_date >= yesterday()
 "
 

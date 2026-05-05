@@ -4,6 +4,9 @@
 #include <Storages/MergeTree/DataPartStorageOnDiskFull.h>
 #include <Storages/MergeTree/MergeTreeData.h>
 
+#include <Common/Jemalloc.h>
+#include <Common/JemallocPartsArena.h>
+
 namespace DB
 {
 
@@ -60,6 +63,14 @@ std::shared_ptr<IMergeTreeDataPart> MergeTreeDataPartBuilder::build()
         part_info = MergeTreePartInfo::fromPartName(name, data.format_version);
 
     auto data_settings = data.getSettings(projection);
+
+    /// Route the part's heap allocations (the `IMergeTreeDataPart` object itself plus its
+    /// initializer-list members: `Poco::LRUCache<String, ColumnSize>`, the `ColumnSize` and
+    /// `IndexSize` maps, `MinMaxIndex`, `VersionMetadataOnDisk`, `index_granularity_info`)
+    /// into the dedicated parts arena. These all share the part's lifetime — much longer than a
+    /// query — and pollute the default arena's pages otherwise.
+    ScopedJemallocThreadArena parts_arena_scope(JemallocPartsArena::getArenaIndex());
+
     switch (part_type->getValue())
     {
         case PartType::Wide:

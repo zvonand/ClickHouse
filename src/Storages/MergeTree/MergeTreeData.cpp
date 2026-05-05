@@ -97,6 +97,8 @@
 #include <Common/Config/ConfigHelper.h>
 #include <Common/CurrentMetrics.h>
 #include <Common/Increment.h>
+#include <Common/Jemalloc.h>
+#include <Common/JemallocPartsArena.h>
 #include <Common/ProfileEventsScope.h>
 #include <Common/StackTrace.h>
 #include <Common/Stopwatch.h>
@@ -10361,6 +10363,10 @@ static void updateSerializationHintsForPart(const DataPartPtr & part, const Colu
 
 void MergeTreeData::resetSerializationHints(const DataPartsLock & /*lock*/)
 {
+    /// `serialization_hints` is a per-table aggregation of the active parts' `SerializationInfoByName`
+    /// — same lifetime profile as the per-part metadata. Route into the parts arena.
+    ScopedJemallocThreadArena parts_arena_scope(JemallocPartsArena::getArenaIndex());
+
     SerializationInfo::Settings settings
     {
         (*getSettings())[MergeTreeSetting::ratio_of_defaults_for_sparse_serialization],
@@ -10385,6 +10391,10 @@ void MergeTreeData::resetSerializationHints(const DataPartsLock & /*lock*/)
 template <typename AddedParts, typename RemovedParts>
 void MergeTreeData::updateSerializationHints(const AddedParts & added_parts, const RemovedParts & removed_parts, const DataPartsLock & /*lock*/)
 {
+    /// Same rationale as `resetSerializationHints`: incremental updates to the per-table hints
+    /// belong in the parts arena.
+    ScopedJemallocThreadArena parts_arena_scope(JemallocPartsArena::getArenaIndex());
+
     const auto metadata_snapshot = getInMemoryMetadataPtr(getContext(), false);
     const auto & storage_columns = metadata_snapshot->getColumns();
 

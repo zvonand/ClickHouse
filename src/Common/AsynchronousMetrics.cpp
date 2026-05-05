@@ -12,7 +12,9 @@
 #include <Common/MemoryWorker.h>
 #include <Common/formatReadable.h>
 #include <Common/Jemalloc.h>
+#include <base/getPageSize.h>
 #include <Common/JemallocCacheArena.h>
+#include <Common/JemallocPartsArena.h>
 #include <Common/MemoryTracker.h>
 #include <Common/PageCache.h>
 #include <Common/logger_useful.h>
@@ -1157,6 +1159,34 @@ void AsynchronousMetrics::update(TimePoint update_time, bool force_update)
         saveJemallocMetricImpl<size_t>(new_values,
             fmt::format("stats.arenas.{}.pdirty", cache_arena),
             "jemalloc.cache_arena.pdirty");
+    }
+
+    /// Per-arena metrics for the dedicated MergeTree per-part metadata arena (allocations from
+    /// `IMergeTreeDataPart::setColumns` / `setColumnsSubstreams` / `loadColumnsChecksumsIndexes`
+    /// and from `MergeTreeDataPartBuilder::doBuild` — these all live for the part's lifetime).
+    /// jemalloc reports per-arena `pactive`/`pdirty` as a count of jemalloc pages. The
+    /// `*_bytes` variants below multiply by the runtime page size (`getPageSize()`) so the values
+    /// are correct on any host (4 KiB on x86_64, 16 KiB on Apple Silicon, 64 KiB on some ARM64).
+    if (JemallocPartsArena::isEnabled())
+    {
+        unsigned parts_arena = JemallocPartsArena::getArenaIndex();
+        size_t parts_pactive = saveJemallocMetricImpl<size_t>(new_values,
+            fmt::format("stats.arenas.{}.pactive", parts_arena),
+            "jemalloc.parts_arena.pactive");
+        size_t parts_pdirty = saveJemallocMetricImpl<size_t>(new_values,
+            fmt::format("stats.arenas.{}.pdirty", parts_arena),
+            "jemalloc.parts_arena.pdirty");
+
+        Int64 page_size = getPageSize();
+        new_values["jemalloc.parts_arena.active_bytes"] = { parts_pactive * page_size,
+            "Active bytes in the dedicated jemalloc parts arena. Holds per-part metadata that lives "
+            "as long as the part: `NamesAndTypesList`/`SerializationInfoByName`, the `serializations` map, "
+            "`column_name_to_position`, `MergeTreeDataPartChecksums` tree, the `Poco::LRUCache<String, ColumnSize>` "
+            "delegates inside each `IMergeTreeDataPart`, the per-part `ColumnSize`/`IndexSize` maps, and the "
+            "`MergeTreeDataPart{Compact,Wide}` object itself. Active parts and outdated parts pending cleanup "
+            "both contribute. Disjoint from the cache arena and JIT arena."};
+        new_values["jemalloc.parts_arena.dirty_bytes"] = { parts_pdirty * page_size,
+            "Dirty bytes in the parts arena that are eligible for purging back to the OS."};
     }
 #endif
 

@@ -18,6 +18,57 @@ instance = cluster.add_instance(
 )
 
 # Runs custom python-based S3 endpoint.
+def start_metadata_service(cluster, service, port, extra_args=None):
+    container_id = cluster.get_container_id("resolver")
+    args = ["python", "endpoint.py", "--service", service, "--port", str(port)]
+    if extra_args:
+        args.extend(extra_args)
+    cluster.exec_in_container(
+        container_id,
+        args,
+        detach=True,
+    )
+
+    num_attempts = 100
+    for attempt in range(num_attempts):
+        logging.info(f"waiting for metadata service {service} on port {port}, attempt {attempt}")
+        ping_response = cluster.exec_in_container(
+            container_id,
+            ["curl", "-s", f"http://localhost:{port}/ping"],
+            nothrow=True,
+        )
+        if ping_response == "OK":
+            return
+        if attempt == num_attempts - 1:
+            assert ping_response == "OK", 'Expected "OK", but got "{}"'.format(
+                ping_response
+            )
+        time.sleep(1)
+
+
+def restart_aws_metadata_service(cluster, aws_zone_name_response):
+    container_id = cluster.get_container_id("resolver")
+    cluster.exec_in_container(
+        container_id,
+        ["bash", "-c", "pkill -f '[p]ython endpoint.py --service aws --port 8080' || true"],
+        nothrow=True,
+    )
+    cluster.exec_in_container(
+        container_id,
+        [
+            "bash",
+            "-c",
+            "timeout 30 bash -c 'while pgrep -f \"[p]ython endpoint.py --service aws --port 8080\" >/dev/null; do sleep 0.1; done'",
+        ],
+    )
+    start_metadata_service(
+        cluster,
+        "aws",
+        8080,
+        ["--aws-zone-name-response", aws_zone_name_response],
+    )
+
+
 def run_endpoint(cluster):
     logging.info("Starting metadata mock services")
     container_id = cluster.get_container_id("resolver")
@@ -27,33 +78,9 @@ def run_endpoint(cluster):
         os.path.join(current_dir, "s3_endpoint", "endpoint.py"),
         "endpoint.py",
     )
-    cluster.exec_in_container(
-        container_id,
-        ["python", "endpoint.py", "--service", "aws", "--port", "8080"],
-        detach=True,
-    )
-    cluster.exec_in_container(
-        container_id,
-        ["python", "endpoint.py", "--service", "gcp", "--port", "80"],
-        detach=True,
-    )
 
-    for port in [8080, 80]:
-        num_attempts = 100
-        for attempt in range(num_attempts):
-            logging.info(f"waiting for metadata service on port {port}, attempt {attempt}")
-            ping_response = cluster.exec_in_container(
-                container_id,
-                ["curl", "-s", f"http://localhost:{port}/ping"],
-                nothrow=True,
-            )
-            if ping_response == "OK":
-                break
-            if attempt == num_attempts - 1:
-                assert ping_response == "OK", 'Expected "OK", but got "{}"'.format(
-                    ping_response
-                )
-            time.sleep(1)
+    start_metadata_service(cluster, "aws", 8080, ["--aws-zone-name-response", "ok"])
+    start_metadata_service(cluster, "gcp", 80)
 
     logging.info("Metadata mock services started")
 
@@ -202,10 +229,11 @@ def test_kafka_zone_awareness(kafka_cluster, create_query_generator):
 
 
 @pytest.mark.parametrize(
-    ("autodetect_facility", "expected_rack", "topic_name"),
+    ("autodetect_facility", "expected_rack", "topic_name", "aws_zone_name_response"),
     [
-        ("AWS_ZONE_NAME_THEN_GCP_ZONE", "europe-central2-a", "zone_awareness_gcp_fallback"),
-        ("CLICKHOUSE", "clickhouse-test-az", "zone_awareness_clickhouse"),
+        ("AWS_ZONE_NAME", "eu-central-1a", "zone_awareness_aws_zone_name", "ok"),
+        ("AWS_ZONE_NAME_THEN_GCP_ZONE", "europe-central2-a", "zone_awareness_gcp_fallback", "fail"),
+        ("CLICKHOUSE", "clickhouse-test-az", "zone_awareness_clickhouse", "ok"),
     ],
 )
 @pytest.mark.parametrize(
@@ -216,12 +244,13 @@ def test_kafka_zone_awareness(kafka_cluster, create_query_generator):
     ],
 )
 def test_kafka_zone_awareness_additional_providers(
-    kafka_cluster, create_query_generator, autodetect_facility, expected_rack, topic_name
+    kafka_cluster, create_query_generator, autodetect_facility, expected_rack, topic_name, aws_zone_name_response
 ):
     suffix = k.random_string(6)
     kafka_table = f"kafka_{suffix}"
     instance.rotate_logs()
 
+    restart_aws_metadata_service(kafka_cluster, aws_zone_name_response)
     produce_test_messages(kafka_cluster, topic_name)
     create_kafka_mv(create_query_generator, kafka_table, topic_name, autodetect_facility)
     wait_for_messages(kafka_table)

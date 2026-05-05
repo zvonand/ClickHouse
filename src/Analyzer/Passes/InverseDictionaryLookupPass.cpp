@@ -127,6 +127,21 @@ void resolveNode(const Node & node, const ContextPtr & context)
     QueryAnalysisPass(/*only_analyze*/ false).run(querytree_node, context);
 }
 
+bool hasNullableComponentInComplexKey(const QueryTreeNodePtr & key_expr_node)
+{
+    auto type = removeNullable(key_expr_node->getResultType());
+    const auto * tuple_type = typeid_cast<const DataTypeTuple *>(type.get());
+    if (!tuple_type)
+        return false;
+
+    for (const auto & element : tuple_type->getElements())
+    {
+        if (isNullableOrLowCardinalityNullable(element))
+            return true;
+    }
+    return false;
+}
+
 
 class InverseDictionaryLookupVisitor : public InDepthQueryTreeVisitorWithContext<InverseDictionaryLookupVisitor>
 {
@@ -233,6 +248,17 @@ public:
         {
             return;
         }
+
+        /// For complex-key dictionaries, `dictGet` and `IN` don't have the same `NULL` key semantics.
+        /// e.g: `dictGet(..., (k1, k2))` vs `(k1, k2) IN (SELECT k1, k2 FROM dictionary(...))`
+        /// Example: if `k1` is `Nullable(UInt64)` and the dictionary has `(NULL, 'a')`,
+        /// `dictGet(..., (k1, k2))` can match it, but `(NULL, 'a') IN (...)` is not a match
+        /// with `transform_null_in = 0`.
+        /// Single-key dictionaries are not affected. Example: if `id` is `Nullable(UInt64)`,
+        /// `dictGet(..., id) = 'x'` gives `NULL` for `id = NULL`, and `id IN (...)` also gives
+        /// `NULL` for `id = NULL`.
+        if (dict_structure.key && hasNullableComponentInComplexKey(dictget_function_info.key_expr_node))
+            return;
 
         const String attr_col_name = dictget_function_info.attr_col_name_node->getValue().safeGet<String>();
 

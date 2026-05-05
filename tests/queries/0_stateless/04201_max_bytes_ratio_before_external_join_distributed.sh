@@ -20,7 +20,12 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 USER="u04201_${CLICKHOUSE_DATABASE}"
 
 $CLICKHOUSE_CLIENT -q "DROP USER IF EXISTS ${USER}"
-$CLICKHOUSE_CLIENT -q "CREATE USER ${USER} IDENTIFIED WITH no_password SETTINGS max_memory_usage_for_user = '256Mi'"
+# 1 GiB is small enough to keep the spill threshold (`ratio * available`)
+# below the right-side hash table for both the local user and the default
+# user that the cluster spawns secondary queries as on the executors, but
+# big enough that the post-spill `GraceHashJoin` probe phase has headroom
+# to finish without tripping the user-level `MEMORY_LIMIT_EXCEEDED`.
+$CLICKHOUSE_CLIENT -q "CREATE USER ${USER} IDENTIFIED WITH no_password SETTINGS max_memory_usage_for_user = '1Gi'"
 $CLICKHOUSE_CLIENT -q "GRANT ALL ON *.* TO ${USER}"
 
 LOG_LOCAL="04201_local_${CLICKHOUSE_DATABASE}"
@@ -34,8 +39,8 @@ $CLICKHOUSE_CLIENT --user "${USER}" -q "INSERT INTO t_left_04201  SELECT number 
 $CLICKHOUSE_CLIENT --user "${USER}" -q "INSERT INTO t_right_04201 SELECT number FROM numbers(100000)"
 
 # 1. Non-distributed join with the ratio set: spilling must happen.
-#    The ratio is intentionally tiny (0.0001 of ~256MiB ≈ 26KiB) so the
-#    spill threshold is well below the right-side hash table.
+#    The ratio is intentionally tiny (0.0001 of ~1 GiB ≈ 100 KiB) so the
+#    spill threshold is well below the right-side hash table (~9 MiB).
 $CLICKHOUSE_CLIENT --user "${USER}" -q "
     SELECT count()
     FROM t_left_04201 AS t1
@@ -94,20 +99,35 @@ $CLICKHOUSE_CLIENT -q "
 "
 
 # For the distributed query, the ratio must reach every executor that
-# actually runs the JOIN, not just one of them. We restrict the check to
-# remote leaf rows (`is_initial_query = 0`) and require at least two of
-# them to record a switch to grace join. The 2-shard cluster spawns one
-# JOIN-running secondary query per shard; with the original
-# `countIf(...) > 0` check, a regression that ran the JOIN on only one
-# shard (e.g. by collapsing the plan to a single executor) would still
-# pass.
+# actually runs the JOIN, not just one of them. The 2-shard cluster
+# spawns one JOIN-running secondary query per shard, and we require at
+# least two of these remote leaf rows (`is_initial_query = 0`) to record
+# a switch to grace join.
+#
+# Secondary queries on the executors run as the `default` user, so
+# their `current_database` is `default` rather than the test database.
+# We can't filter the secondary rows by `current_database =
+# currentDatabase()` directly. Instead, look up the coordinator's
+# initial query (which does have `current_database = currentDatabase()`
+# — the style check requires this filter to appear in any test that
+# reads from `system.query_log`) and match secondary rows by
+# `initial_query_id`.
 $CLICKHOUSE_CLIENT -q "
+    WITH initial_query_ids AS
+    (
+        SELECT query_id
+        FROM system.query_log
+        WHERE current_database = currentDatabase()
+            AND log_comment = '${LOG_DIST}'
+            AND type = 'QueryFinish'
+            AND is_initial_query = 1
+            AND event_date >= yesterday()
+    )
     SELECT
         'distributed',
         countIf(ProfileEvents['JoinSpillingHashJoinSwitchedToGraceJoin'] > 0) >= 2
     FROM system.query_log
-    WHERE current_database = currentDatabase()
-        AND log_comment = '${LOG_DIST}'
+    WHERE initial_query_id IN (SELECT query_id FROM initial_query_ids)
         AND type = 'QueryFinish'
         AND is_initial_query = 0
         AND event_date >= yesterday()

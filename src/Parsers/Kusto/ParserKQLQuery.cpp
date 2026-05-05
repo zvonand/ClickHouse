@@ -882,14 +882,13 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
             /// count operator may have no arguments - handle specially
             if (kql_operator == "count")
             {
-                /// pos currently points to "count" keyword
+                /// Store a valid position for count (the keyword itself, not what follows).
+                /// `count` may have no arguments, so we cannot store the post-`count` position:
+                /// `npos.isValid()` checks below would reject bare `T | count` at end-of-stream.
+                /// `ParserKQLCount` skips a leading `count` token before reading any `as <alias>`.
                 auto count_pos = pos;
                 ++pos;
-                /// Store a valid position for count (the keyword itself, not what follows)
                 operation_pos.push_back(std::make_pair(kql_operator, count_pos));
-                /// If at end of query/pipe, just continue
-                if (!isValidKQLPos(pos) || pos->type == TokenType::Semicolon || pos->type == TokenType::PipeMark)
-                    continue;
                 continue;
             }
 

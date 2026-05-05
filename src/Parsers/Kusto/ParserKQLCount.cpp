@@ -17,6 +17,13 @@ bool ParserKQLCount::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     /// Optionally: count as <alias>
     String alias = "Count";
 
+    /// `pos` may point at the `count` keyword itself: the operator-dispatch path in
+    /// `ParserKQLQuery` stores the keyword position rather than what follows, so that
+    /// bare `T | count` still produces a valid token even at end-of-stream. Skip the
+    /// keyword here so the optional `as <alias>` is parsed correctly.
+    if (isValidKQLPos(pos) && Poco::toLower(String(pos->begin, pos->end)) == "count")
+        ++pos;
+
     if (isValidKQLPos(pos) && pos->type != TokenType::Semicolon && pos->type != TokenType::PipeMark)
     {
         String token(pos->begin, pos->end);

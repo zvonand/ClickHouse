@@ -66,7 +66,7 @@ MergeTreeReadTaskPtr MergeTreeReadPoolInOrder::getTask(size_t task_idx, MergeTre
         mark_ranges_for_task.emplace_back(std::move(all_mark_ranges.back()));
         all_mark_ranges.pop_back();
     }
-    else if (has_limit_below_one_block)
+    else if (has_limit_below_one_block || !previous_task)
     {
         /// If we need to read few rows, set one range per task to reduce number of read data.
         mark_ranges_for_task.emplace_back(std::move(all_mark_ranges.front()));

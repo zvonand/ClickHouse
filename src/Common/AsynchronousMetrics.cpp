@@ -1184,7 +1184,11 @@ void AsynchronousMetrics::update(TimePoint update_time, bool force_update)
             "`column_name_to_position`, `MergeTreeDataPartChecksums` tree, the `Poco::LRUCache<String, ColumnSize>` "
             "delegates inside each `IMergeTreeDataPart`, the per-part `ColumnSize`/`IndexSize` maps, and the "
             "`MergeTreeDataPart{Compact,Wide}` object itself. Active parts and outdated parts pending cleanup "
-            "both contribute. Disjoint from the cache arena and JIT arena."};
+            "both contribute. Disjoint from the cache arena and JIT arena. The per-part columns "
+            "`system.parts.primary_key_bytes_in_memory[_allocated]` and "
+            "`system.parts.index_granularity_bytes_in_memory[_allocated]` are subsets of this metric "
+            "(when their values are non-zero — they can also live in `PrimaryIndexCacheBytes` instead, "
+            "which is in the cache arena and not counted here)."};
         new_values["jemalloc.parts_arena.dirty_bytes"] = { parts_pdirty * page_size,
             "Dirty bytes in the parts arena that are eligible for purging back to the OS."};
     }

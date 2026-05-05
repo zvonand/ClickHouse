@@ -35,13 +35,15 @@ ASTPtr timeSeriesTimestampToAST(DateTime64 timestamp, const DataTypePtr & timest
         if (scale == 0)
             return timeSeriesTimestampASTCast(make_intrusive<ASTLiteral>(timestamp.value), timestamp_data_type);
 
-        /// Wrap with `toDecimal64` so the literal is parsed as a decimal number first and only then
+        /// Wrap with `toDecimal128` so the literal is parsed as a decimal number first and only then
         /// converted to `DateTime64`. This avoids two pitfalls of string-to-`DateTime64` parsing:
         ///   1. Small numbers (e.g. "1000") would otherwise be parsed as a year by basic mode.
         ///   2. Numeric timestamp strings are not accepted by `cast_string_to_date_time_mode = best_effort`.
+        /// `Decimal128` is used (rather than `Decimal64`) because `Decimal64`'s precision of 18
+        /// digits is not enough for `DateTime64(9)` past 2001-09-09 (raw value > 10^18).
         String str = toString(timestamp, scale);
         return timeSeriesTimestampASTCast(
-            makeASTFunction("toDecimal64", make_intrusive<ASTLiteral>(std::move(str)), make_intrusive<ASTLiteral>(scale)),
+            makeASTFunction("toDecimal128", make_intrusive<ASTLiteral>(std::move(str)), make_intrusive<ASTLiteral>(scale)),
             timestamp_data_type);
     }
     else if (isDecimal(timestamp_data_type))

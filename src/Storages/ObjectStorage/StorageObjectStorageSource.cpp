@@ -1356,7 +1356,11 @@ StorageObjectStorageSource::ReadTaskIterator::ReadTaskIterator(
                         if (!key.empty())
                         {
                             iceberg_info->setResolvedStorage(storage_to_use);
-                            iceberg_info->relative_path_with_metadata.relative_path = key;
+                            /// For base storage, keep the key already resolved by the coordinator
+                            /// via `IcebergPathResolver` — the 5-arg resolver here does not apply
+                            /// `table_location` -> `table_root` translation and can diverge.
+                            if (storage_to_use != object_storage)
+                                iceberg_info->relative_path_with_metadata.relative_path = key;
                         }
                     }
                 }
@@ -1393,7 +1397,11 @@ ObjectInfoPtr StorageObjectStorageSource::ReadTaskIterator::next(size_t)
                     if (!key.empty())
                     {
                         iceberg_info->setResolvedStorage(storage_to_use);
-                        iceberg_info->relative_path_with_metadata.relative_path = key;
+                        /// For base storage, keep the key already resolved by the coordinator
+                        /// via `IcebergPathResolver` — the 5-arg resolver here does not apply
+                        /// `table_location` -> `table_root` translation and can diverge.
+                        if (storage_to_use != object_storage)
+                            iceberg_info->relative_path_with_metadata.relative_path = key;
                     }
                 }
             }

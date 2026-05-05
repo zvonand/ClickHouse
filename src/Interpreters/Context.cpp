@@ -4110,10 +4110,12 @@ void Context::updateIndexUncompressedCacheConfiguration(const Poco::Util::Abstra
     shared->index_uncompressed_cache_enabled = shared->index_uncompressed_cache->maxSizeInBytes() != 0;
 }
 
-UncompressedCachePtr Context::getIndexUncompressedCache() const
+UncompressedCachePtr Context::getIndexUncompressedCache(bool only_if_enabled) const
 {
     SharedLockGuard lock(shared->mutex);
-    return shared->index_uncompressed_cache_enabled ? shared->index_uncompressed_cache : nullptr;
+    if (only_if_enabled && !shared->index_uncompressed_cache_enabled)
+        return nullptr;
+    return shared->index_uncompressed_cache;
 }
 
 void Context::clearIndexUncompressedCache() const

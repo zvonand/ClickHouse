@@ -21,6 +21,11 @@ if (NOT NASM_PATH)
 endif ()
 
 set(CMAKE_ASM_NASM_COMPILER "${NASM_PATH}")
+# Skip CMake's compiler verification step for ASM_NASM. The verification path
+# in `CMakeTestASM_NASMCompiler.cmake` can fall back to `try_compile`, which is
+# blocked project-wide by `cmake/block_build_time_checks.cmake`. NASM was already
+# located by `find_program` above, so the compiler is known to work.
+set(CMAKE_ASM_NASM_COMPILER_WORKS TRUE)
 enable_language(ASM_NASM)
 
 set(ISAL_C_SRC

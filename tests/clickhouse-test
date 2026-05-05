@@ -3994,10 +3994,6 @@ class TestSuite:
         return TestSuite(args, suite_path, suite_tmp_path, suite)
 
 
-class ServerDied(Exception):
-    pass
-
-
 class GlobalTimeout(Exception):
     pass
 
@@ -4229,7 +4225,7 @@ def run_tests_array(
 
         if server_died.is_set():
             stop_tests()
-            raise ServerDied("Server died")
+            break
 
         if args.stop_time and time() > args.stop_time:
             print("\nStop tests run because global time limit is exceeded.\n")
@@ -4312,15 +4308,17 @@ def run_tests_array(
                 failures_total += 1
                 failures_chain += 1
                 if test_result.reason == FailureReason.SERVER_DIED:
+                    print_stacktraces()
                     stop_tests()
                     server_died.set()
-                    raise ServerDied("Server died")
+                    break
                 if args.max_failures > 0:
                     with total_failures_shared.get_lock():
                         total_failures_shared.value += 1
                         if total_failures_shared.value >= args.max_failures:
+                            print(f"\nReached --max-failures limit ({args.max_failures}), stopping.")
                             stop_tests()
-                            raise ServerDied(f"Reached --max-failures limit ({args.max_failures})")
+                            break
             elif test_result.status == TestStatus.SKIPPED:
                 skipped_total += 1
 
@@ -4330,8 +4328,9 @@ def run_tests_array(
             raise e
 
         if failures_chain >= args.max_failures_chain:
+            print(f"\nMax failures chain ({args.max_failures_chain}) reached, stopping.")
             stop_tests()
-            raise ServerDied("Max failures chain")
+            break
 
     if failures_total > 0:
         print(
@@ -4769,6 +4768,7 @@ def do_run_tests(
             if args.hung_check:
                 if not check_server_liveness(args):
                     print("Hung check failed: server is not responding")
+                    print_stacktraces()
                     server_died.set()
 
             if server_died.is_set():
@@ -6440,10 +6440,6 @@ if __name__ == "__main__":
 
     try:
         main(args)
-    except ServerDied as e:
-        print(f"{e}", file=sys.stderr)
-        traceback.print_exc()
-        sys.exit(1)
     except Terminated as e:
         print(f"Terminated with {e.signal} signal", file=sys.stderr)
         sys.exit(128 + e.signal)

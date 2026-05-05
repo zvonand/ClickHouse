@@ -46,6 +46,7 @@
             <allow_distributed_ddl>1</allow_distributed_ddl>
             <allow_drop_detached>1</allow_drop_detached>
             <allow_dynamic_type_in_join_keys>1</allow_dynamic_type_in_join_keys>
+            <allow_experimental_ai_functions>1</allow_experimental_ai_functions>
             <allow_experimental_alias_table_engine>1</allow_experimental_alias_table_engine>
             <allow_experimental_bfloat16_type>1</allow_experimental_bfloat16_type>
             <allow_experimental_codecs>1</allow_experimental_codecs>
@@ -61,6 +62,7 @@
             <allow_experimental_dynamic_type>1</allow_experimental_dynamic_type>
             <allow_experimental_expire_snapshots>1</allow_experimental_expire_snapshots>
             <allow_experimental_funnel_functions>1</allow_experimental_funnel_functions>
+            <allow_experimental_geo_types_in_iceberg>1</allow_experimental_geo_types_in_iceberg>
             <allow_experimental_hash_functions>1</allow_experimental_hash_functions>
             <allow_experimental_iceberg_compaction>1</allow_experimental_iceberg_compaction>
             <allow_experimental_inverted_index>1</allow_experimental_inverted_index>
@@ -91,6 +93,7 @@
             <allow_experimental_ytsaurus_dictionary_source>1</allow_experimental_ytsaurus_dictionary_source>
             <allow_experimental_ytsaurus_table_engine>1</allow_experimental_ytsaurus_table_engine>
             <allow_experimental_ytsaurus_table_function>1</allow_experimental_ytsaurus_table_function>
+            <allow_iceberg_remove_orphan_files>1</allow_iceberg_remove_orphan_files>
             <allow_introspection_functions>1</allow_introspection_functions>
             <allow_materialized_view_with_bad_select>1</allow_materialized_view_with_bad_select>
             <allow_named_collection_override_by_default>1</allow_named_collection_override_by_default>

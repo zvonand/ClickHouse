@@ -91,6 +91,7 @@ static std::unordered_map<String, CHSetting> mergeTreeTableSettings = {
     {"compact_parts_merge_max_bytes_to_prefetch_part", bytesRangeSetting},
     {"compatibility_allow_sampling_expression_not_in_primary_key", trueOrFalseSetting},
     {"compress_marks", trueOrFalseSetting},
+    {"compress_per_column_in_compact_parts", trueOrFalseSetting},
     {"compress_primary_key", trueOrFalseSetting},
     {"concurrent_part_removal_threshold",
      CHSetting(
@@ -480,6 +481,7 @@ static std::unordered_map<String, CHSetting> mergeTreeTableSettings = {
          },
          {"'basic'", "'with_types'"},
          false)},
+    {"share_nested_offsets", trueOrFalseSetting},
     /// ClickHouse cloud setting
     {"shared_merge_tree_activate_coordinated_merges_tasks", trueOrFalseSetting},
     /// ClickHouse cloud setting

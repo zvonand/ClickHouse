@@ -44,7 +44,7 @@ def test_query_condition_cache(started_cluster_iceberg_with_spark, storage_type)
 
     instance.query("SYSTEM DROP QUERY CONDITION CACHE")
 
-    filter_condition = "WHERE id >= 7"
+    filter_condition = "WHERE id % 7 = 0"
     select_query = f"SELECT * FROM {creation_expression} {filter_condition} ORDER BY id"
     settings = {
         "use_query_condition_cache": 1,

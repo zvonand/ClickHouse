@@ -46,7 +46,7 @@
 #include <Common/FailPoint.h>
 #include <Common/FieldAccurateComparison.h>
 #include <Common/Jemalloc.h>
-#include <Common/JemallocPartsArena.h>
+#include <Common/JemallocMergeTreeArena.h>
 #include <Common/MemoryTrackerBlockerInThread.h>
 #include <Common/SipHash.h>
 #include <Common/StringUtils.h>
@@ -639,7 +639,7 @@ void IMergeTreeDataPart::setColumns(const NamesAndTypesList & new_columns, const
     /// long as the part — i.e. far longer than a query. Routing these allocations to the dedicated
     /// parts arena keeps them off the default arena's pages, which would otherwise be pinned by
     /// per-part survivors and unable to be returned to the OS while query allocations come and go.
-    ScopedJemallocThreadArena parts_arena_scope(JemallocPartsArena::getArenaIndex());
+    ScopedJemallocThreadArena mergetree_arena_scope(JemallocMergeTreeArena::getArenaIndex());
 
     columns = new_columns;
     serialization_infos = new_infos;
@@ -1191,7 +1191,7 @@ void IMergeTreeDataPart::loadColumnsChecksumsIndexes(bool require_columns_checks
     /// allocations into the dedicated parts arena. This block is on the hot server-startup path
     /// (`MergeTreeData::loadDataPart` → `loadColumnsChecksumsIndexes`), so per-part metadata
     /// allocated at boot also lands in the arena from the start.
-    ScopedJemallocThreadArena parts_arena_scope(JemallocPartsArena::getArenaIndex());
+    ScopedJemallocThreadArena mergetree_arena_scope(JemallocMergeTreeArena::getArenaIndex());
 
     try
     {
@@ -1302,7 +1302,7 @@ void IMergeTreeDataPart::loadProjections(
     /// scoped by their own helpers belong in the parts arena. This is also the entry point used
     /// directly by `MutateTask`, where the surrounding `loadColumnsChecksumsIndexes` scope is not
     /// in effect; without this guard those calls would land in the default arena.
-    ScopedJemallocThreadArena parts_arena_scope(JemallocPartsArena::getArenaIndex());
+    ScopedJemallocThreadArena mergetree_arena_scope(JemallocMergeTreeArena::getArenaIndex());
 
     auto metadata_snapshot = storage.getInMemoryMetadataPtr(storage.getContext(), false);
     for (const auto & projection : metadata_snapshot->projections)
@@ -1689,7 +1689,7 @@ void IMergeTreeDataPart::loadChecksums(bool require)
 {
     /// `MergeTreeDataPartChecksums` is a `std::map<String, MergeTreeDataPartChecksum>` that lives as
     /// long as the part. Its tree-node allocations belong in the parts arena.
-    ScopedJemallocThreadArena parts_arena_scope(JemallocPartsArena::getArenaIndex());
+    ScopedJemallocThreadArena mergetree_arena_scope(JemallocMergeTreeArena::getArenaIndex());
 
     if (auto buf = readFileIfExists("checksums.txt"))
     {
@@ -2045,7 +2045,7 @@ void IMergeTreeDataPart::setColumnsSubstreams(const ColumnsSubstreams & columns_
     /// `ColumnsSubstreams::operator=` is one of the heaviest per-part allocators (deep copy of nested
     /// vector-of-pair-of-string-of-strings + per-substream maps). Route into the parts arena, same
     /// rationale as `setColumns` above.
-    ScopedJemallocThreadArena parts_arena_scope(JemallocPartsArena::getArenaIndex());
+    ScopedJemallocThreadArena mergetree_arena_scope(JemallocMergeTreeArena::getArenaIndex());
 
     columns_substreams_.validateColumns(getColumns().getNames());
     columns_substreams = columns_substreams_;

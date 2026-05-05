@@ -1,4 +1,4 @@
-#include <Common/JemallocPartsArena.h>
+#include <Common/JemallocMergeTreeArena.h>
 
 #if USE_JEMALLOC
 
@@ -25,7 +25,7 @@ namespace ErrorCodes
 }
 }
 
-namespace DB::JemallocPartsArena
+namespace DB::JemallocMergeTreeArena
 {
 
 namespace
@@ -37,7 +37,7 @@ unsigned createArena()
     size_t arena_index_size = sizeof(arena_index);
     int err = je_mallctl("arenas.create", &arena_index, &arena_index_size, nullptr, 0);
     if (err)
-        throw DB::Exception(DB::ErrorCodes::CANNOT_ALLOCATE_MEMORY, "JemallocPartsArena: Failed to create jemalloc arena, error: {}", err);
+        throw DB::Exception(DB::ErrorCodes::CANNOT_ALLOCATE_MEMORY, "JemallocMergeTreeArena: Failed to create jemalloc arena, error: {}", err);
     return arena_index;
 }
 
@@ -68,7 +68,7 @@ void purge()
 
 #else
 
-namespace DB::JemallocPartsArena
+namespace DB::JemallocMergeTreeArena
 {
 
 unsigned getArenaIndex() { return 0; }

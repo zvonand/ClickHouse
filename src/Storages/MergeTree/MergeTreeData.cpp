@@ -98,7 +98,7 @@
 #include <Common/CurrentMetrics.h>
 #include <Common/Increment.h>
 #include <Common/Jemalloc.h>
-#include <Common/JemallocPartsArena.h>
+#include <Common/JemallocMergeTreeArena.h>
 #include <Common/ProfileEventsScope.h>
 #include <Common/StackTrace.h>
 #include <Common/Stopwatch.h>
@@ -1211,6 +1211,12 @@ void MergeTreeData::setProperties(
     bool attach,
     ContextPtr local_context)
 {
+    /// Route the table-level metadata clones produced here (the new `StorageInMemoryMetadata`
+    /// stored in `metadata.set(...)`, the cloned `ColumnsDescription`, `VirtualColumnsDescription`,
+    /// and key/index AST trees, plus any expressions built by `checkProperties`) into the
+    /// dedicated MergeTree arena. This state lives as long as the table object itself.
+    ScopedJemallocThreadArena mergetree_arena_scope(JemallocMergeTreeArena::getArenaIndex());
+
     checkProperties(
         new_metadata,
         old_metadata,
@@ -4879,6 +4885,11 @@ void MergeTreeData::changeSettings(
             = (*storage_settings.get())[MergeTreeSetting::refresh_statistics_interval].totalSeconds() != (*copy)[MergeTreeSetting::refresh_statistics_interval].totalSeconds();
 
         storage_settings.set(std::move(copy));
+
+        /// Route the new `StorageInMemoryMetadata` clone (and the deeper clone produced by
+        /// `setInMemoryMetadata`) into the dedicated MergeTree arena.
+        ScopedJemallocThreadArena mergetree_arena_scope(JemallocMergeTreeArena::getArenaIndex());
+
         StorageInMemoryMetadata new_metadata = *getInMemoryMetadataPtr(getContext(), false);
         new_metadata.setSettingsChanges(new_settings);
 
@@ -10365,7 +10376,7 @@ void MergeTreeData::resetSerializationHints(const DataPartsLock & /*lock*/)
 {
     /// `serialization_hints` is a per-table aggregation of the active parts' `SerializationInfoByName`
     /// — same lifetime profile as the per-part metadata. Route into the parts arena.
-    ScopedJemallocThreadArena parts_arena_scope(JemallocPartsArena::getArenaIndex());
+    ScopedJemallocThreadArena mergetree_arena_scope(JemallocMergeTreeArena::getArenaIndex());
 
     SerializationInfo::Settings settings
     {
@@ -10393,7 +10404,7 @@ void MergeTreeData::updateSerializationHints(const AddedParts & added_parts, con
 {
     /// Same rationale as `resetSerializationHints`: incremental updates to the per-table hints
     /// belong in the parts arena.
-    ScopedJemallocThreadArena parts_arena_scope(JemallocPartsArena::getArenaIndex());
+    ScopedJemallocThreadArena mergetree_arena_scope(JemallocMergeTreeArena::getArenaIndex());
 
     const auto metadata_snapshot = getInMemoryMetadataPtr(getContext(), false);
     const auto & storage_columns = metadata_snapshot->getColumns();

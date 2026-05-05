@@ -29,6 +29,10 @@
 
 #include <AggregateFunctions/AggregateFunctionFactory.h>
 
+#include <Disks/DiskType.h>
+#include <Disks/IDisk.h>
+#include <Disks/StoragePolicy.h>
+
 #include <Interpreters/Context.h>
 #include <Interpreters/DatabaseCatalog.h>
 #include <Interpreters/FunctionNameNormalizer.h>
@@ -41,6 +45,7 @@ namespace DB
 namespace Setting
 {
     extern const SettingsBool allow_deprecated_syntax_for_merge_tree;
+    extern const SettingsBool allow_experimental_unique_key;
     extern const SettingsBool allow_suspicious_primary_key;
     extern const SettingsBool allow_suspicious_ttl_expressions;
     extern const SettingsBool create_table_empty_primary_key_by_default;
@@ -60,6 +65,8 @@ namespace MergeTreeSetting
     extern const MergeTreeSettingsBool add_minmax_index_for_temporal_columns;
     extern const MergeTreeSettingsString auto_statistics_types;
     extern const MergeTreeSettingsBool escape_index_filenames;
+    extern const MergeTreeSettingsString disk;
+    extern const MergeTreeSettingsString storage_policy;
 }
 
 namespace ServerSetting
@@ -709,6 +716,65 @@ static StoragePtr create(const StorageFactory::Arguments & args)
         if (args.storage_def->sample_by)
             metadata.sampling_key = KeyDescription::getKeyFromAST(args.storage_def->sample_by->ptr(), metadata.columns, metadata.virtuals, context);
 
+        if (args.storage_def->unique_key)
+        {
+            /// Gate on CREATE only; ATTACH must load existing metadata regardless of session setting.
+            if (args.mode <= LoadingStrictnessLevel::CREATE
+                && !local_settings[Setting::allow_experimental_unique_key])
+            {
+                throw Exception(ErrorCodes::SUPPORT_IS_DISABLED,
+                    "UNIQUE KEY is an experimental feature. "
+                    "Set the session setting `allow_experimental_unique_key = 1` to enable it.");
+            }
+
+            /// Reject expression-shaped elements at parse time: runtime consumers
+            /// look up keys via `block.getByName(<column name>)`, so an
+            /// expression-shaped UK passes DDL but crashes the first INSERT.
+            {
+                const ASTPtr & uk_ast = args.storage_def->unique_key->ptr();
+                auto is_plain_identifier = [](const ASTPtr & node) -> bool
+                {
+                    return node && node->as<ASTIdentifier>() != nullptr;
+                };
+
+                const auto * as_function = uk_ast->as<ASTFunction>();
+                if (as_function && as_function->name == "tuple")
+                {
+                    if (as_function->arguments)
+                    {
+                        for (const auto & child : as_function->arguments->children)
+                        {
+                            if (!is_plain_identifier(child))
+                            {
+                                throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                                    "UNIQUE KEY must be a list of column identifiers. "
+                                    "Expression-shaped elements such as `{}` are not yet supported; "
+                                    "only bare column names are allowed.",
+                                    child ? child->formatForErrorMessage() : String("<null>"));
+                            }
+                        }
+                    }
+                }
+                else if (!is_plain_identifier(uk_ast))
+                {
+                    throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                        "UNIQUE KEY must be a list of column identifiers. "
+                        "Expression-shaped keys such as `{}` are not yet supported; "
+                        "only bare column names are allowed.",
+                        uk_ast->formatForErrorMessage());
+                }
+            }
+
+            metadata.unique_key = KeyDescription::getKeyFromAST(
+                args.storage_def->unique_key->ptr(), metadata.columns, metadata.virtuals, context);
+
+            if (metadata.unique_key.column_names.empty())
+            {
+                throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                    "UNIQUE KEY must contain at least one column");
+            }
+        }
+
         bool allow_suspicious_ttl
             = LoadingStrictnessLevel::SECONDARY_CREATE <= args.mode || local_settings[Setting::allow_suspicious_ttl_expressions];
 
@@ -726,6 +792,41 @@ static StoragePtr create(const StorageFactory::Arguments & args)
             if (args.mode <= LoadingStrictnessLevel::CREATE)
                 args.getLocalContext()->checkMergeTreeSettingsConstraints(initial_storage_settings, storage_settings->changes());
             metadata.settings_changes = args.storage_def->settings->ptr();
+        }
+
+        /// UNIQUE KEY tables must reside on local-only storage policies.
+        /// CREATE only; ATTACH must still load existing tables.
+        if (metadata.hasUniqueKey() && args.mode <= LoadingStrictnessLevel::CREATE)
+        {
+            StoragePolicyPtr resolved_storage_policy;
+            try
+            {
+                if ((*storage_settings)[MergeTreeSetting::disk].changed)
+                    resolved_storage_policy = context->getStoragePolicyFromDisk((*storage_settings)[MergeTreeSetting::disk]);
+                else
+                    resolved_storage_policy = context->getStoragePolicy((*storage_settings)[MergeTreeSetting::storage_policy]);
+            }
+            catch (...)
+            {
+                /// Unresolvable policy: let the downstream MergeTree constructor surface it.
+                resolved_storage_policy.reset();
+            }
+
+            if (resolved_storage_policy)
+            {
+                for (const auto & disk : resolved_storage_policy->getDisks())
+                {
+                    const auto & desc = disk->getDataSourceDescription();
+                    if (desc.type != DataSourceType::Local)
+                    {
+                        throw Exception(ErrorCodes::SUPPORT_IS_DISABLED,
+                            "UNIQUE KEY on non-local disks is not yet supported "
+                            "(disk `{}` has source type `{}`). "
+                            "UNIQUE KEY tables must currently reside on a local-only storage policy.",
+                            disk->getName(), desc.toString());
+                    }
+                }
+            }
         }
 
         metadata.add_minmax_index_for_numeric_columns = (*storage_settings)[MergeTreeSetting::add_minmax_index_for_numeric_columns];

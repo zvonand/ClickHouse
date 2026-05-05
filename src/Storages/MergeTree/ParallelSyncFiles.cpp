@@ -32,9 +32,10 @@ void parallelSyncImpl(const Container & items, SyncFn && sync_fn)
     ThreadPoolCallbackRunnerLocal<void> runner(getIOThreadPool().get(), ThreadName::DEFAULT_THREAD_POOL);
     for (const auto & item : items)
     {
-        /// Capture item by value (it is a pointer); sync_fn lives on the caller's stack
-        /// and is alive until waitForAllToFinishAndRethrowFirstError() returns.
-        runner.enqueueAndKeepTrack([item, &sync_fn]() { sync_fn(item); });
+        /// Capture both `item` (a pointer) and `sync_fn` by value: `ThreadPoolCallbackRunnerLocal`
+        /// forbids capturing locals by reference, since an exception while enqueuing could unwind
+        /// the caller's stack before the runner's destructor waits for already-running tasks.
+        runner.enqueueAndKeepTrack([item, sync_fn]() { sync_fn(item); });
     }
     runner.waitForAllToFinishAndRethrowFirstError();
 }

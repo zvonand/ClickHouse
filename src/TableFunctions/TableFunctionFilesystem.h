@@ -24,8 +24,16 @@ protected:
 
     ColumnsDescription getActualTableStructure(ContextPtr /* context */, bool /* is_insert_query */) const override;
 
+    /// Override directly because `Filesystem` is not registered as a storage engine
+    /// (the storage is an implementation detail of this table function).
+    std::optional<AccessTypeObjects::Source> getSourceAccessObject() const override
+    {
+        return AccessTypeObjects::Source::FILE;
+    }
+
 private:
-    const char * getStorageEngineName() const override { return "Filesystem"; }
+    /// Unused: storage is constructed directly by `executeImpl`, not via `StorageFactory`.
+    const char * getStorageEngineName() const override { return ""; }
 
     StoragePtr executeImpl(
         const ASTPtr & /* ast_function */,

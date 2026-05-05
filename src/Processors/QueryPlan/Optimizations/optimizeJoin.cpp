@@ -1,4 +1,5 @@
 #include <Common/logger_useful.h>
+#include <Common/SipHash.h>
 #include <Common/safe_cast.h>
 
 #include <Core/Joins.h>
@@ -154,7 +155,14 @@ void remapColumnStats(std::unordered_map<String, ColumnStats> & mapped, const Ac
 
 struct RuntimeHashStatisticsContext
 {
+    /// Final cache key (matches what `ConcurrentHashJoin` writes into `HashTablesStatistics`):
+    ///   raw_hash[N] XOR <per-side contribution of N's parent join>.
+    /// Populated for every node by `calculateHashTableCacheKeys`. Mutated during join reorder
+    /// to reflect the post-reorder parent of each node.
     std::unordered_map<const QueryPlan::Node *, UInt64> cache_keys;
+    /// Raw bottom-up hash, independent of the node's parent join. Used by join-reorder code
+    /// in `chooseJoinOrder` to derive the cache key for sub-join nodes built during reorder.
+    std::unordered_map<const QueryPlan::Node *, UInt64> raw_hashes;
     StatsCollectingParams params;
 
     RuntimeHashStatisticsContext(const QueryPlanOptimizationSettings & optimization_settings, const QueryPlan::Node & root_node)
@@ -166,13 +174,20 @@ struct RuntimeHashStatisticsContext
     {
         if (optimization_settings.collect_hash_table_stats_during_joins)
         {
-            cache_keys = calculateHashTableCacheKeys(root_node);
+            calculateHashTableCacheKeys(root_node, cache_keys, raw_hashes);
         }
     }
 
     UInt64 getCachedKey(const QueryPlan::Node * node)
     {
         if (auto it = cache_keys.find(node); it != cache_keys.end())
+            return it->second;
+        return 0;
+    }
+
+    UInt64 getRawHash(const QueryPlan::Node * node) const
+    {
+        if (auto it = raw_hashes.find(node); it != raw_hashes.end())
             return it->second;
         return 0;
     }
@@ -1152,11 +1167,49 @@ QueryPlan::Node chooseJoinOrder(QueryGraphBuilder query_graph_builder, QueryPlan
 
             join_step->setOptimized(entry->estimated_rows, lhs_estimation, rhs_estimation, entry->column_stats);
 
-            auto right_table_key = query_graph_builder.context->statistics_context.getCachedKey(right_child_node);
+            auto & new_node = nodes.emplace_back();
+
+            /// Derive the right-side `HashTablesStatistics` cache key for this freshly-built
+            /// join step, mirroring what `calculateHashTableCacheKeys` would have produced for
+            /// an equivalent join in the original tree.
+            ///
+            /// For each child (original leaf or a sub-join we built earlier in this loop),
+            /// `raw_hashes` already holds the child's parent-independent bottom-up hash. We
+            /// XOR the new join's per-side contribution into that to get the child's final
+            /// cache key, and SipHash-combine the two final keys to record THIS join's raw
+            /// hash so any outer join we emit later can do the same derivation.
+            ///
+            /// Going through `raw_hashes` instead of mutating the previously-xored values in
+            /// `cache_keys` is what keeps the derived key matching the cache write path: in
+            /// the no-reorder case both keys equal `raw_child XOR contribution`; in the
+            /// reorder case the new join's contribution is correctly applied on top of the
+            /// child's clean raw hash rather than on top of whatever the original tree's
+            /// parent had stamped.
+            auto & ctx = query_graph_builder.context->statistics_context;
+            UInt64 right_table_key = 0;
+            if (!ctx.cache_keys.empty())
+            {
+                UInt64 raw_left = ctx.getRawHash(left_child_node);
+                UInt64 raw_right = ctx.getRawHash(right_child_node);
+                UInt64 left_key = raw_left ^ calculateJoinStepCacheKeyContribution(*join_step, JoinTableSide::Left);
+                UInt64 right_key = raw_right ^ calculateJoinStepCacheKeyContribution(*join_step, JoinTableSide::Right);
+                right_table_key = right_key;
+
+                /// Update cache_keys to reflect the new parent for these children (in case any
+                /// downstream code reads them back via getCachedKey).
+                ctx.cache_keys[left_child_node] = left_key;
+                ctx.cache_keys[right_child_node] = right_key;
+
+                SipHash node_hash;
+                node_hash.update(left_key);
+                node_hash.update(right_key);
+                UInt64 raw_new = node_hash.get64();
+                ctx.raw_hashes[&new_node] = raw_new;
+                ctx.cache_keys[&new_node] = raw_new;
+            }
             if (right_table_key)
                 join_step->setRightHashTableCacheKey(right_table_key);
 
-            auto & new_node = nodes.emplace_back();
             new_node.step = std::move(join_step);
             new_node.children = {left_child_node, right_child_node};
             nodeStack.push(&new_node);

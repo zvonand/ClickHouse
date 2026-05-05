@@ -21,7 +21,11 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 opts=(
     --enable_analyzer=1
     --join_algorithm='parallel_hash'
-    --query_plan_join_swap_table='auto'
+    # `query_plan_join_swap_table=true` forces every join to swap sides during reorder so the
+    # right children are reorder-built sub-join nodes (rather than the left-deep originals).
+    # This is precisely the case the fix targets — without `true` the tied row counts of the
+    # four tables here can let the optimizer keep the syntactic order, weakening the test.
+    --query_plan_join_swap_table=true
     # The test relies on join reorder building intermediate sub-joins, so explicitly
     # enable it: random settings can otherwise pick `query_plan_optimize_join_order_limit=0`
     # which keeps the original left-deep tree and yields prealloc=0 even with the fix.

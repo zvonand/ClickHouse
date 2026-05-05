@@ -199,9 +199,7 @@ std::unordered_map<const QueryPlan::Node *, UInt64> calculateHashTableCacheKeys(
 ///   raw_hashes[N]  = bottom-up hash of the sub-plan rooted at N, independent of N's parent.
 ///   cache_keys[N]  = raw_hashes[N] XOR (the per-side contribution of N's parent join step).
 /// `raw_hashes` is what the join reorder pass needs to derive cache keys for sub-join nodes
-/// it builds itself; `cache_keys` matches the value `HashTablesStatistics` is keyed by when
-/// `ConcurrentHashJoin::onBuildPhaseFinish` writes (and what `JoinStepLogical` reads via
-/// `setRightHashTableCacheKey`).
+/// it builds itself; `cache_keys` matches the value `HashTablesStatistics` is keyed by.
 void calculateHashTableCacheKeys(
     const QueryPlan::Node & root,
     std::unordered_map<const QueryPlan::Node *, UInt64> & cache_keys,

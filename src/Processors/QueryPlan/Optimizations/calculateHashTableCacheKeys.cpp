@@ -152,7 +152,7 @@ void calculateHashTableCacheKeys(
                     cache_keys[node.children.at(1)] ^= calculateJoinStepCacheKeyContribution(*join_step, JoinTableSide::Right);
                     frame.hash.update(cache_keys[node.children.at(0)]);
                     frame.hash.update(cache_keys[node.children.at(1)]);
-                    UInt64 raw = frame.hash.get64();
+                    const auto raw = frame.hash.get64();
                     raw_hashes[&node] = raw;
                     cache_keys[&node] = raw;
 
@@ -183,7 +183,7 @@ void calculateHashTableCacheKeys(
             if (auto hash = calculateHashFromStep(*transform))
                 frame.hash.update(hash);
 
-        UInt64 raw = frame.hash.get64();
+        const auto raw = frame.hash.get64();
         raw_hashes[&node] = raw;
         cache_keys[&node] = raw;
 

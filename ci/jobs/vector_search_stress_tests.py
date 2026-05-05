@@ -224,8 +224,8 @@ test_params_cohere_wiki_20m = {
     TRUTH_SET_COUNT: 25000,
     RECALL_K: 10,
     # Let's have more than 1 part for this dataset (7 - 9 parts)
-    MERGE_TREE_SETTINGS: "max_bytes_to_merge_at_max_space_in_pool=11811160064, min_insert_block_size_rows = 3000000, min_insert_block_size_bytes=11737418240",
-    OTHER_SETTINGS: None,
+    MERGE_TREE_SETTINGS: "max_bytes_to_merge_at_max_space_in_pool=11811160064",
+    OTHER_SETTINGS: "min_insert_block_size_rows = 3000000, min_insert_block_size_bytes=11737418240",
     CONCURRENCY_TEST: True,
 }
 
@@ -301,6 +301,10 @@ class RunTest:
                     insert
                     + f" ORDER BY {self._id_column} LIMIT {self._test_params[LIMIT_N]}"
                 )
+
+            if self._test_params[OTHER_SETTINGS] is not None:
+                insert += f" SETTINGS {self._test_params[OTHER_SETTINGS]}"
+
             self._chclient.query(insert)
 
             result = self._chclient.query(f"SELECT count() FROM {self._table}")

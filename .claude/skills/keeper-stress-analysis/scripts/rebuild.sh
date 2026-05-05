@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# rebuild.sh — fetch CI staging data and run the full Keeper-stress analysis pipeline.
+#
+# Usage:
+#   rebuild.sh [WORK_DIR] [TS_FILTER]
+#
+# Args:
+#   WORK_DIR   Where to drop staging/ and outputs. Default: ./tmp/keeper_stress_skill
+#   TS_FILTER  Lower-bound ts (ISO yyyy-mm-dd[Thh:mm:ss]). Default: 2026-03-25
+#
+# The skill home is determined automatically from the script location.
+set -euo pipefail
+
+SKILL_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WORK_DIR="${1:-./tmp/keeper_stress_skill}"
+TS_FILTER="${2:-2026-03-25}"
+
+WORK_DIR="$(realpath -m "$WORK_DIR")"
+mkdir -p "$WORK_DIR/staging" "$WORK_DIR/queries"
+
+# Copy scripts and queries into WORK_DIR so the Python scripts find their
+# staging/ siblings (the scripts use Path(__file__).parent as ROOT).
+cp -f "$SKILL_HOME"/scripts/*.py        "$WORK_DIR/"
+cp -f "$SKILL_HOME"/queries/*.sql       "$WORK_DIR/queries/"
+
+echo "== Skill home: $SKILL_HOME"
+echo "== Work dir:   $WORK_DIR"
+echo "== Lower-bound ts filter: $TS_FILTER"
+echo
+
+PLAY_URL='https://play.clickhouse.com/?user=play'
+fetch() {
+  local sql_file="$1"
+  local out_file="$2"
+  local sql_text
+  # Substitute {{TS_FILTER}} placeholder if present, else apply default >= filter.
+  sql_text=$(sed "s|{{TS_FILTER}}|$TS_FILTER|g" "$sql_file")
+  curl -sG "$PLAY_URL" --data-urlencode "query=$sql_text" > "$out_file"
+}
+
+echo "== 1/8 Pull bench_summary"
+fetch "$WORK_DIR/queries/01_bench_summary.sql" "$WORK_DIR/staging/bench_summary.tsv"
+echo "== 2/8 Pull prom_rates"
+fetch "$WORK_DIR/queries/02_prom_rates.sql"    "$WORK_DIR/staging/prom_rates.tsv"
+echo "== 3/8 Pull prom_gauges"
+fetch "$WORK_DIR/queries/03_prom_gauges.sql"   "$WORK_DIR/staging/prom_gauges.tsv"
+echo "== 4/8 Pull mntr"
+fetch "$WORK_DIR/queries/04_mntr.sql"          "$WORK_DIR/staging/mntr.tsv"
+echo "== 5/8 Pull container"
+fetch "$WORK_DIR/queries/05_container.sql"     "$WORK_DIR/staging/container.tsv"
+echo "== 6/8 Pull pr_branches (optional, only if PR analysis is needed)"
+fetch "$WORK_DIR/queries/06_pr_branch.sql"     "$WORK_DIR/staging/pr_branches.tsv" || true
+
+echo
+echo "== Build merged_metrics.tsv"
+( cd "$WORK_DIR" && python3 build_metrics_table.py )
+
+# pr_meta.tsv must be supplied by caller in WORK_DIR's parent (../pr_meta.tsv)
+# if PR-set analysis is requested. The scripts gracefully handle its absence.
+if [[ -f "$WORK_DIR/../pr_meta.tsv" ]]; then
+  echo "== Build PR -> nightly map"
+  ( cd "$WORK_DIR" && python3 build_pr_nightly_map.py )
+  echo "== Compute per-PR + per-nightly deltas"
+  ( cd "$WORK_DIR" && python3 compute_deltas.py )
+  echo "== Build per_pr_metrics_long.tsv"
+  ( cd "$WORK_DIR" && python3 build_per_pr_metrics_tsv.py )
+  echo "== Build per-PR markdown matrix"
+  ( cd "$WORK_DIR" && python3 build_per_pr_metrics.py )
+  echo "== Build PR-branch isolated effects"
+  ( cd "$WORK_DIR" && python3 build_pr_branch_isolated.py ) || true
+fi
+
+echo "== Build cumulative_gains.tsv"
+( cd "$WORK_DIR" && python3 build_cumulative_gains.py )
+
+echo
+echo "Outputs in $WORK_DIR:"
+ls -la "$WORK_DIR"/*.tsv "$WORK_DIR"/*.md 2>/dev/null || true

@@ -43,10 +43,21 @@ private:
     /// Apply HTTP Basic Auth credentials extracted from the base URL.
     void applyAuth(const Poco::URI & url, Poco::Net::HTTPRequest & request) const;
 
+    /// Cached schema registration. The full `schema_json` is kept alongside the
+    /// id so we can compare it on every lookup and detect hash collisions on
+    /// the cache key.
+    struct CachedSchemaRegistration
+    {
+        std::string schema_json;
+        uint32_t schema_id;
+    };
+
     Poco::URI base_url;
     CacheBase<uint32_t, avro::ValidSchema> schema_cache;
-    /// Cache of (subject, schema_json) -> schema_id, populated on successful registration.
-    CacheBase<std::string, uint32_t> register_cache;
+    /// Cache keyed on `subject + hash(schema_json)`, populated on successful
+    /// registration. The cached value carries the full schema string so we can
+    /// verify equality on hit before trusting the id.
+    CacheBase<std::string, CachedSchemaRegistration> register_cache;
 };
 
 /// Global cache of ConfluentSchemaRegistry instances, keyed by base URL.

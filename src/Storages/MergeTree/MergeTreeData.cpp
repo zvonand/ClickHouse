@@ -4285,6 +4285,53 @@ void MergeTreeData::checkAlterIsPossible(const AlterCommands & commands, Context
     removeImplicitStatistics(new_metadata.columns);
     commands.apply(new_metadata, local_context);
 
+    /// UNIQUE KEY tables must remain on a local-only storage policy. Mirror the
+    /// CREATE-time check from registerStorageMergeTree.cpp here so ALTER ...
+    /// MODIFY/RESET SETTING storage_policy|disk cannot bypass the gate. Runs on
+    /// the post-apply new_metadata so a MODIFY_SETTING that injects
+    /// settings_changes into a previously-empty old_metadata is also covered.
+    if (old_metadata.hasUniqueKey())
+    {
+        for (const auto & command : commands)
+        {
+            if (command.type == AlterCommand::RESET_SETTING
+                && (command.settings_resets.contains("storage_policy")
+                    || command.settings_resets.contains("disk")))
+            {
+                throw Exception(ErrorCodes::SUPPORT_IS_DISABLED,
+                    "ALTER TABLE ... RESET SETTING storage_policy|disk is not supported "
+                    "on tables with UNIQUE KEY: the table must remain on a local-only "
+                    "storage policy.");
+            }
+        }
+
+        if (new_metadata.settings_changes)
+        {
+            const auto & new_changes = new_metadata.settings_changes->as<const ASTSetQuery &>().changes;
+            for (const auto & changed : new_changes)
+            {
+                StoragePolicyPtr new_policy;
+                if (changed.name == "storage_policy")
+                    new_policy = local_context->getStoragePolicy(changed.value.safeGet<String>());
+                else if (changed.name == "disk")
+                    new_policy = local_context->getStoragePolicyFromDisk(changed.value.safeGet<String>());
+                else
+                    continue;
+
+                for (const auto & disk : new_policy->getDisks())
+                {
+                    const auto & desc = disk->getDataSourceDescription();
+                    if (desc.type != DataSourceType::Local)
+                        throw Exception(ErrorCodes::SUPPORT_IS_DISABLED,
+                            "UNIQUE KEY on non-local disks is not yet supported "
+                            "(disk `{}` has source type `{}`). "
+                            "UNIQUE KEY tables must currently reside on a local-only storage policy.",
+                            disk->getName(), desc.toString());
+                }
+            }
+        }
+    }
+
     auto [auto_statistics_types, statistics_changed] = getNewImplicitStatisticsTypes(new_metadata, *settings_from_storage);
     addImplicitStatistics(new_metadata.columns, auto_statistics_types);
 
@@ -4711,34 +4758,14 @@ void MergeTreeData::checkAlterIsPossible(const AlterCommands & commands, Context
                     throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Can't change settings. Reason: {}", reason);
             }
 
-            auto reject_non_local_for_unique_key = [&](const StoragePolicyPtr & new_policy)
-            {
-                if (!old_metadata.hasUniqueKey())
-                    return;
-                for (const auto & disk : new_policy->getDisks())
-                {
-                    const auto & desc = disk->getDataSourceDescription();
-                    if (desc.type != DataSourceType::Local)
-                        throw Exception(ErrorCodes::SUPPORT_IS_DISABLED,
-                            "UNIQUE KEY on non-local disks is not yet supported "
-                            "(disk `{}` has source type `{}`). "
-                            "UNIQUE KEY tables must currently reside on a local-only storage policy.",
-                            disk->getName(), desc.toString());
-                }
-            };
-
             if (setting_name == "storage_policy")
             {
-                auto new_policy = local_context->getStoragePolicy(new_value.safeGet<String>());
-                checkStoragePolicy(new_policy);
-                reject_non_local_for_unique_key(new_policy);
+                checkStoragePolicy(local_context->getStoragePolicy(new_value.safeGet<String>()));
                 found_storage_policy_setting = true;
             }
             else if (setting_name == "disk")
             {
-                auto new_policy = local_context->getStoragePolicyFromDisk(new_value.safeGet<String>());
-                checkStoragePolicy(new_policy);
-                reject_non_local_for_unique_key(new_policy);
+                checkStoragePolicy(local_context->getStoragePolicyFromDisk(new_value.safeGet<String>()));
                 found_disk_setting = true;
             }
         }

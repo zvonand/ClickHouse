@@ -246,20 +246,27 @@ def compute_pr_deltas():
             "server_failures": server_failures,
         })
 
-    # Write deltas
+    # Write deltas. Always emit at least a header — if `deltas_rows` is empty
+    # (e.g. every PR is `not-yet-tested` because no comparable pre/post nightly
+    # exists), downstream consumers should still find a well-formed TSV.
     out_deltas = ROOT / "per_pr_scenario_deltas.tsv"
+    base_cols = ["pr", "title", "scenario", "backend", "pre_sha8", "post_sha8", "server_failures_post"]
     if deltas_rows:
         all_keys = set()
         for r in deltas_rows:
             all_keys.update(r.keys())
-        cols = ["pr", "title", "scenario", "backend", "pre_sha8", "post_sha8", "server_failures_post"] + \
-               sorted([c for c in all_keys if c not in {"pr", "title", "scenario", "backend", "pre_sha8", "post_sha8", "server_failures_post"}])
-        with open(out_deltas, "w") as f:
-            w = csv.DictWriter(f, fieldnames=cols, delimiter="\t")
-            w.writeheader()
-            for r in deltas_rows:
-                w.writerow(r)
-    print(f"Wrote {out_deltas} ({len(deltas_rows)} rows)", file=sys.stderr)
+        cols = base_cols + sorted([c for c in all_keys if c not in set(base_cols)])
+    else:
+        cols = base_cols
+    with open(out_deltas, "w") as f:
+        w = csv.DictWriter(f, fieldnames=cols, delimiter="\t")
+        w.writeheader()
+        for r in deltas_rows:
+            w.writerow(r)
+    if not deltas_rows:
+        print(f"Wrote {out_deltas} (header-only — no comparable pre/post nightlies)", file=sys.stderr)
+    else:
+        print(f"Wrote {out_deltas} ({len(deltas_rows)} rows)", file=sys.stderr)
 
     # Write PR summary
     out_summary = ROOT / "per_pr_summary.tsv"

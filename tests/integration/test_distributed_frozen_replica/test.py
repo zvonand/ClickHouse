@@ -91,6 +91,36 @@ def test_cluster_all_replicas_query(
     node3.query("SYSTEM DROP DNS CACHE")
     error = ""
     with cluster.pause_container("node1"):
+        # `cluster.pause_container` uses Docker's cgroup freezer to suspend
+        # `node1`'s process tree. The freezer takes effect quickly but not
+        # synchronously with respect to in-flight TCP traffic, so the SELECT
+        # below can race it: `node1` can complete the TCP handshake and the
+        # tiny ClickHouse server greeting before being fully suspended, the
+        # per-replica shard then succeeds, the whole `clusterAllReplicas`
+        # query returns `count()` cleanly with `error == ''`, and the
+        # assertion below fails spuriously (chronic flake — see issues
+        # #103819 and #103820). Gate the actual probe on a deterministic
+        # check that connections to `node1` are failing.
+        deadline = time.time() + 30
+        pause_effective = False
+        while time.time() < deadline:
+            try:
+                node3.query(
+                    "SELECT 1 FROM remote('node1:9000', system.one) "
+                    "SETTINGS connect_timeout_with_failover_ms=200, "
+                    "handshake_timeout_ms=200, "
+                    "connections_with_failover_max_tries=1",
+                    timeout=2,
+                )
+            except QueryRuntimeException:
+                pause_effective = True
+                break
+            time.sleep(0.1)
+        assert pause_effective, (
+            "cluster.pause_container('node1') did not become effective within 30s — "
+            "connections to node1 still succeed"
+        )
+
         try:
             node3.query(
                 f"""

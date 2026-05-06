@@ -31,17 +31,18 @@
 #include <Storages/SelectQueryDescription.h>
 #include <Storages/VirtualColumnUtils.h>
 
-#include <Common/typeid_cast.h>
-#include <Common/checkStackSize.h>
-#include <Common/randomSeed.h>
 #include <Core/ServerSettings.h>
 #include <Core/Settings.h>
-#include <QueryPipeline/Pipe.h>
-#include <Processors/QueryPlan/QueryPlan.h>
-#include <Processors/QueryPlan/ExpressionStep.h>
 #include <Processors/QueryPlan/BuildQueryPipelineSettings.h>
+#include <Processors/QueryPlan/ExpressionStep.h>
 #include <Processors/QueryPlan/Optimizations/QueryPlanOptimizationSettings.h>
+#include <Processors/QueryPlan/QueryPlan.h>
 #include <Processors/Sinks/SinkToStorage.h>
+#include <QueryPipeline/Pipe.h>
+#include <Common/checkStackSize.h>
+#include <Common/typeid_cast.h>
+#include <Common/randomSeed.h>
+#include <Core/UUID.h>
 
 #include <Backups/BackupEntriesCollector.h>
 
@@ -79,6 +80,13 @@ namespace ActionLocks
 {
     extern const StorageActionBlockType ViewRefresh;
     extern const StorageActionBlockType ViewRefreshPause;
+}
+
+String StorageMaterializedView::generateInnerTableName(const StorageID & view_id)
+{
+    if (view_id.hasUUID())
+        return ".inner_id." + toString(view_id.uuid);
+    return ".inner." + view_id.getTableName();
 }
 
 /// Remove columns from target_header that does not exist in src_header
@@ -175,12 +183,12 @@ StorageMaterializedView::StorageMaterializedView(
     if (point_to_itself_by_uuid || point_to_itself_by_name)
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Materialized view {} cannot point to itself", table_id_.getFullTableName());
 
+    auto db_engine = DatabaseCatalog::instance().getDatabase(table_id_.database_name)->getEngineName();
+    bool is_replicated_db = db_engine == "Replicated";
+
     if (query.refresh_strategy)
     {
         fixed_uuid = query.refresh_strategy->append;
-
-        auto db = DatabaseCatalog::instance().getDatabase(getStorageID().database_name);
-        bool is_replicated_db = db->getEngineName() == "Replicated";
 
         /// Decide whether to enable coordination.
         if (is_replicated_db)
@@ -995,13 +1003,6 @@ void StorageMaterializedView::updateTargetTableId(std::optional<String> database
         target_table_id.database_name = *std::move(database_name);
     if (table_name)
         target_table_id.table_name = *std::move(table_name);
-}
-
-String StorageMaterializedView::generateInnerTableName(const StorageID & view_id)
-{
-    if (view_id.hasUUID())
-        return ".inner_id." + toString(view_id.uuid);
-    return ".inner." + view_id.getTableName();
 }
 
 std::optional<NameSet> StorageMaterializedView::supportedPrewhereColumns() const

@@ -3286,7 +3286,7 @@ def test_query_condition_cache(started_cluster):
         INSERT INTO {table_name}
         SELECT number AS id, toString(number) AS val
         FROM numbers(1000)
-        SETTINGS output_format_parquet_row_group_size = 100
+        SETTINGS output_format_parquet_row_group_size = 10
         """
     )
 

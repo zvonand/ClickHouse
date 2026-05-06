@@ -128,10 +128,13 @@ jobs:
         run: |
           python3 ./tests/ci/create_release.py --set-progress-started --progress "update changelog, docker version, security"
 
-          # On a rerun the branch and PR already exist — skip generation to avoid
-          # redundant docker pulls and changelog regeneration.
-          if git ls-remote --exit-code --heads origin "auto/${{ env.RELEASE_TAG }}" >/dev/null 2>&1; then
-            echo "ChangeLog branch auto/${{ env.RELEASE_TAG }} already exists — skipping generation on rerun"
+          # On a rerun the PR may already exist or be merged (the branch is deleted
+          # on merge, so a branch-existence check is not sufficient).
+          # Skip generation when any PR with this head branch exists in any state.
+          if gh pr list --repo "${{ github.repository }}" \
+              --head "auto/${{ env.RELEASE_TAG }}" --state all \
+              --json number --jq '.[0].number' 2>/dev/null | grep -q .; then
+            echo "ChangeLog PR for auto/${{ env.RELEASE_TAG }} already exists or was merged — skipping generation on rerun"
             exit 0
           fi
 

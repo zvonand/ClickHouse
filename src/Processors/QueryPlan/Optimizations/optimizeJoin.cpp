@@ -22,6 +22,9 @@
 #include <Processors/QueryPlan/JoinStepLogical.h>
 #include <Processors/QueryPlan/LimitStep.h>
 #include <Processors/QueryPlan/Optimizations/actionsDAGUtils.h>
+#if CLICKHOUSE_CLOUD
+#include <Processors/QueryPlan/LogicalExchangeStep.h>
+#endif
 #include <Processors/QueryPlan/Optimizations/Optimizations.h>
 #include <Processors/QueryPlan/Optimizations/Utils.h>
 #include <Processors/QueryPlan/QueryPlan.h>
@@ -352,6 +355,10 @@ RelationStats estimateReadRowsCount(QueryPlan::Node & node, const ActionsDAG::No
         }
         return stats;
     }
+#if CLICKHOUSE_CLOUD
+    if (dynamic_cast<LogicalExchangeStep *>(step))
+        return estimateReadRowsCount(*node.children.front(), filter);
+#endif
 
     return {};
 }

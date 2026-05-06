@@ -5572,6 +5572,27 @@ CONV_FN(SystemCommand, cmd)
             appendSQLStringLiteral(ret, foq.path());
             break;
         }
+        case CmdType::kStopVirtualPartsUpdate:
+            SystemCommandOnCluster(ret, "STOP VIRTUAL PARTS UPDATE", cmd, cmd.stop_virtual_parts_update());
+            break;
+        case CmdType::kStartVirtualPartsUpdate:
+            SystemCommandOnCluster(ret, "START VIRTUAL PARTS UPDATE", cmd, cmd.start_virtual_parts_update());
+            break;
+        case CmdType::kStopReduceBlockingParts:
+            SystemCommandOnCluster(ret, "STOP REDUCE BLOCKING PARTS", cmd, cmd.stop_reduce_blocking_parts());
+            break;
+        case CmdType::kStartReduceBlockingParts:
+            SystemCommandOnCluster(ret, "START REDUCE BLOCKING PARTS", cmd, cmd.start_reduce_blocking_parts());
+            break;
+        case CmdType::kWaitBlobsCleanup:
+            ret += "WAIT BLOBS CLEANUP";
+            if (cmd.has_cluster())
+            {
+                ClusterToString(ret, true, cmd.cluster());
+            }
+            ret += " ";
+            ret += cmd.wait_blobs_cleanup();
+            break;
         case CmdType::kUnlockSnapshot:
             ret += "UNLOCK SNAPSHOT ";
             appendSQLStringLiteral(ret, cmd.unlock_snapshot().name());

@@ -4273,6 +4273,11 @@ message SystemCommand {
         bool drop_distributed_cache = 98;
         UnlockSnapshot unlock_snapshot = 99;
         FlushObjectStorageQueue flush_object_storage_queue = 100;
+        ExprSchemaTable stop_virtual_parts_update = 101;
+        ExprSchemaTable start_virtual_parts_update = 102;
+        ExprSchemaTable stop_reduce_blocking_parts = 103;
+        ExprSchemaTable start_reduce_blocking_parts = 104;
+        string wait_blobs_cleanup = 105;
     }
 }
 

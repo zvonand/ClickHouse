@@ -38,6 +38,9 @@ def started_cluster():
 
         # Create a controlled directory outside user_files for symlink testing.
         # Using /var/log/clickhouse-server/ would include an unpredictable number of log files.
+        # Reset the directory to avoid stale entries from a reused container, which would
+        # break the exact row-count assertions below.
+        node.exec_in_container(["rm", "-rf", "/tmp/link_target"])
         node.exec_in_container(["mkdir", "-p", "/tmp/link_target"])
         node.exec_in_container(["touch", "/tmp/link_target/test.log"])
         node.exec_in_container(

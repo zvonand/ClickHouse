@@ -38,6 +38,21 @@ HEADLINE_METRICS = [
     ("OutstandingRequests_max", "lower_better"),
 ]
 
+# Significance bands per metric, in percent. Must mirror the rubric in
+# references/methodology.md. Format: metric -> (clean_band, watch_band).
+# Throughput metrics are tighter (5/15) because the bench is repeatable;
+# tail latency and memory are wider (10/30) because they're noisier.
+CLASSIFY_BANDS = {
+    "rps":          (5, 15),
+    "read_rps":     (5, 15),
+    "write_rps":    (5, 15),
+    "read_p99_ms":  (10, 30),
+    "write_p99_ms": (10, 30),
+    "peak_mem_gb":  (10, 30),
+    "avg_mem_gb":   (10, 30),
+}
+DEFAULT_BANDS = (5, 15)
+
 # Significance bands relative to baseline (deltas in percent unless absolute)
 def classify(metric, pre, post):
     if pre is None or post is None:
@@ -57,15 +72,16 @@ def classify(metric, pre, post):
         return "watch"  # was zero, now non-zero
     pct = (post - pre) / abs(pre) * 100.0
     direction = HEADLINE_LOOKUP.get(metric, "lower_better")
+    clean_band, watch_band = CLASSIFY_BANDS.get(metric, DEFAULT_BANDS)
     if direction == "higher_better":
-        # higher_better: pct < 0 is bad
-        if pct >= -5: return "clean"
-        if pct >= -15: return "watch"
+        # higher_better: negative pct is bad
+        if pct >= -clean_band: return "clean"
+        if pct >= -watch_band: return "watch"
         return "regression"
     else:
-        # lower_better: pct > 0 is bad
-        if pct <= 5: return "clean"
-        if pct <= 15: return "watch"
+        # lower_better: positive pct is bad
+        if pct <= clean_band: return "clean"
+        if pct <= watch_band: return "watch"
         return "regression"
 
 

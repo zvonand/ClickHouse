@@ -102,18 +102,17 @@ For PR-set work, the user needs to provide a `pr_meta.tsv` mapping PR number →
 
 ### Phase 4 — Generate output
 
-Pick the deliverable that matches the request. Templates live in `examples/sample_outputs/`:
+Pick the deliverable that matches the request:
 
-| User wants | Template |
+| User wants | Where to look |
 |---|---|
-| Slack message | `references/slack_templates.md` (full / tight / one-liner) |
-| Per-PR Markdown table | `examples/sample_outputs/PR_PERF_TABLE.md` |
-| Per-PR mover matrix | `examples/sample_outputs/PER_PR_METRICS.md` |
-| Cumulative-gains write-up | `examples/sample_outputs/PERFORMANCE_GAINS.md` |
-| Full validation report | `examples/sample_outputs/REPORT.md` (2044-line gold reference) |
-| Per-PR progress attribution | `examples/sample_outputs/PR_PROGRESS.md` |
+| Slack message | `references/slack_templates.md` (full / tight / one-liner templates with placeholders) |
+| Per-PR Markdown table | `examples/sample_outputs/PR_PERF_TABLE.md` (canonical example: data-backed per-PR table with co-merge attribution and noise-floor caveats) |
+| Cumulative-gains write-up | Build from `cumulative_gains_summary.tsv` using `references/slack_templates.md` formatting |
+| Per-PR mover matrix / progress attribution | Build from `per_pr_metrics_long.tsv` (produced by `build_per_pr_metrics_tsv.py`) and `per_pr_summary.tsv` (from `compute_deltas.py`) |
+| Full validation report | Compose from the per-PR table + cumulative-gains + caveats sections; mirror the structure of `examples/sample_outputs/PR_PERF_TABLE.md` |
 
-Cross-reference the templates' structure when filling them. Never invent prose without a backing data source.
+Cross-reference the canonical example when filling templates. Never invent prose without a backing data source.
 
 ### Phase 5 — Apply learned-the-hard-way checks
 
@@ -216,7 +215,7 @@ Process:
 1. Run `rebuild.sh` with TS filter `2026-04-01`.
 2. Run `build_cumulative_gains.py` — produces `cumulative_gains_summary.tsv` with median-of-3 vs median-of-3 deltas.
 3. Apply Phase 5 checks — flag the bench-harness changes from `known_confounds.md` that landed in this window (none if 2026-04-01 → 2026-05-01; both bench changes were earlier).
-4. Output: PERFORMANCE_GAINS.md-style table with conservative deltas + caveats.
+4. Output: a cumulative-gains write-up built from `cumulative_gains_summary.tsv` using `references/slack_templates.md` formatting, with conservative deltas + caveats (always include the bench-harness confound notes from `references/known_confounds.md` if any of those PR dates fall in the window).
 
 ### Example 3 — Slack summary
 

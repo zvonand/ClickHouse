@@ -15,6 +15,7 @@
 #include <csignal>
 #include <pthread.h>
 #include <sanitizer/common_interface_defs.h>
+#include <sys/poll.h>
 #include <unistd.h>
 
 #include <new>
@@ -194,6 +195,11 @@ void runnerStackTraceHandler(int /*sig*/, siginfo_t * /*info*/, void * /*context
     runner_stack_printed.store(true, std::memory_order_release);
 }
 
+inline void signal_safe_sleep_ms(int ms)
+{
+     (void)poll(nullptr, 0, ms);
+}
+
 /// When libfuzzer's timeout fires SIGALRM, it lands on the main thread.
 /// We first dump the runner thread's stack trace (via SIGUSR1), then call
 /// libfuzzer's original handler which will print the main thread stack and _Exit.
@@ -224,10 +230,9 @@ void fuzzerSigalrmHandler(int /*sig*/, siginfo_t * /*info*/, void * /*context*/)
 
     /// Wait for the runner thread to print its stack, with nanosleep to yield CPU.
     constexpr int max_iterations = 3000;
-    const struct timespec ts = {0, 1000000}; /// 1ms
     int i = 0;
     for (; i < max_iterations && !runner_stack_printed.load(std::memory_order_acquire); ++i)
-        nanosleep(&ts, nullptr);
+        signal_safe_sleep_ms(1);
 
     if (i == max_iterations)
         signalSafeWrite("[fuzzer] Timed out waiting for runner thread stack trace\n");

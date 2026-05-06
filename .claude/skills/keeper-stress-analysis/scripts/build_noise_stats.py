@@ -56,12 +56,18 @@ def main():
                 if len(values) < MIN_RUNS:
                     continue
                 med = statistics.median(values)
-                sd = statistics.stdev(values) if len(values) >= 2 else 0.0
+                # `len(values) >= MIN_RUNS = 3` here, so `stdev` is always defined.
+                sd = statistics.stdev(values)
                 # `cv` is undefined when the median is exactly zero (which
                 # is common for `error_pct` on healthy windows). Emit "" to
                 # mark "no scale to normalise against" rather than 0.
                 cv = (sd / abs(med)) if med > 0 else None
-                p95 = statistics.quantiles(values, n=20)[18] if len(values) >= 4 else max(values)
+                # `quantiles(n=20)` returns 19 cut points splitting the data
+                # into 20 equal buckets; index 18 is the cut between buckets
+                # 19 and 20 → the 95th percentile. For `len < 4` we don't have
+                # enough points to estimate a p95, so fall back to `max`.
+                p95 = (statistics.quantiles(values, n=20)[18]
+                       if len(values) >= 4 else max(values))
                 w.writerow([
                     sc, be, metric, len(values),
                     f"{med:.4f}", f"{sd:.4f}",

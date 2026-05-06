@@ -33,6 +33,15 @@ def _resolve_sha(prefix, by_sha8):
     return None
 
 
+def _common_prefix(a, b):
+    """Length of the longest common prefix of two strings."""
+    n = min(len(a), len(b))
+    i = 0
+    while i < n and a[i] == b[i]:
+        i += 1
+    return a[:i]
+
+
 def main(sha_a_arg, sha_b_arg):
     by_sha8 = defaultdict(dict)  # sha8 -> {(scenario, backend) -> row}
     with open(ROOT / "merged_metrics.tsv") as f:
@@ -43,13 +52,23 @@ def main(sha_a_arg, sha_b_arg):
     sha_a = _resolve_sha(sha_a_arg, by_sha8)
     sha_b = _resolve_sha(sha_b_arg, by_sha8)
     if sha_a is None or sha_b is None:
-        # List a handful of nearby SHAs to help the user spot a typo.
-        nearby = sorted(by_sha8.keys())[:8]
+        # Suggest by-prefix-similarity rather than alphabetical order so a
+        # typo like `a1b2c3d5` -> `a1b2c3d4` actually surfaces the close match.
+        def _suggest(arg):
+            p = arg.lower()[:8]
+            scored = sorted(
+                by_sha8.keys(),
+                key=lambda k: (-len(_common_prefix(k, p)), k),
+            )
+            return scored[:5]
+        miss = []
+        if sha_a is None:
+            miss.append(f"{sha_a_arg!r} → suggestions: {_suggest(sha_a_arg)}")
+        if sha_b is None:
+            miss.append(f"{sha_b_arg!r} → suggestions: {_suggest(sha_b_arg)}")
         print(
-            f"build_commit_diff: SHA not found in merged_metrics.tsv "
-            f"(asked for {sha_a_arg!r}, {sha_b_arg!r}; "
-            f"resolved to a={sha_a}, b={sha_b}). "
-            f"First few SHAs in the dataset: {nearby}",
+            "build_commit_diff: SHA not found in merged_metrics.tsv:\n  "
+            + "\n  ".join(miss),
             file=sys.stderr,
         )
         return 2
@@ -83,6 +102,11 @@ def main(sha_a_arg, sha_b_arg):
                 if va is None and vb is None:
                     continue
                 delta_abs = "" if (va is None or vb is None) else f"{vb - va:.4f}"
+                # delta_pct semantics:
+                #   missing data → "" (don't fabricate a percentage)
+                #   0 → 0         → "" (no change, no scale to report against)
+                #   0 → positive  → "inf" (unbounded relative change)
+                #   else          → standard (post - pre) / |pre| * 100
                 if va is None or vb is None:
                     delta_pct = ""
                 elif va == 0:

@@ -123,12 +123,23 @@ def main():
                     neighbour_wk = iso_week(head["dt"] + datetime.timedelta(days=delta_days))
                     neighbours += pool[scenario].get(neighbour_wk, [])
                 same_week_pool += [t for t in neighbours if t[4] != head["branch"]]
-            if not same_week_pool:
+            # Emit an explicit "no-baseline" row if we have a head value but
+            # no usable comparison pool — better than silently dropping the
+            # (PR, scenario) and making the PR look cleaner than it is.
+            no_baseline = (not same_week_pool) or all(t[2] <= 0 for t in same_week_pool)
+            if no_baseline:
+                out_rows.append({
+                    "pr": pr, "name": name, "branch": branch, "scenario": scenario,
+                    "head_date": head["run_ended"][:10], "head_sha8": head["sha8"],
+                    "head_rps": f"{head['rps_v']:.0f}",
+                    "pool_med_rps": "", "iso_d_rps_pct": "",
+                    "head_p99": f"{head['p99_v']:.1f}" if head["p99_v"] else "",
+                    "pool_med_p99": "", "iso_d_p99_pct": "",
+                    "n_pool": 0,
+                })
                 continue
             pool_rps = [t[2] for t in same_week_pool if t[2] > 0]
             pool_p99 = [t[3] for t in same_week_pool if t[3] > 0]
-            if not pool_rps:
-                continue
             pool_med_rps = statistics.median(pool_rps)
             pool_med_p99 = statistics.median(pool_p99) if pool_p99 else None
             d_rps = (head["rps_v"] - pool_med_rps) / pool_med_rps * 100 if pool_med_rps else 0

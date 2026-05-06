@@ -284,11 +284,23 @@ def compute_nightly_summary():
         for p in pr_meta:
             if prev_ts < p["merged_dt"] <= info["earliest"] and p["merged_dt"] >= THRESHOLD:
                 prs_landed.append(p["pr"])
+        # Most nightlies run both fault and no-fault scenarios. Distinguish
+        # `fault`-only / `no-fault`-only / `mixed` so downstream consumers
+        # (e.g. kind-matched baseline picking in `build_per_pr_metrics_tsv`)
+        # don't conflate a mixed nightly with a fault-only one.
+        has_fault = any(is_fault_scenario(s) for s in info["scenarios"])
+        has_nofault = any(not is_fault_scenario(s) for s in info["scenarios"])
+        if has_fault and has_nofault:
+            kind = "mixed"
+        elif has_fault:
+            kind = "fault"
+        else:
+            kind = "no-fault"
         rows.append({
             "sha8": sha8,
             "earliest_ts": info["earliest"].isoformat(),
             "scenarios_count": len(info["scenarios"]),
-            "kind": "fault" if any(is_fault_scenario(s) for s in info["scenarios"]) else "no-fault",
+            "kind": kind,
             "prs_landed": ",".join(prs_landed),
         })
         prev_ts = info["earliest"]

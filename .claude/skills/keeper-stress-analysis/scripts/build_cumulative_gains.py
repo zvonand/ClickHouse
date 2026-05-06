@@ -144,15 +144,24 @@ def main():
             print(f"  {sc} [{be}]: {n} run(s)", file=sys.stderr)
 
     sum_path = ROOT / "cumulative_gains_summary.tsv"
-    if not summary_rows:
-        print(f"No (scenario,backend) had >= 2*WINDOW_SIZE={2*WINDOW_SIZE} runs in the window — skipping summary", file=sys.stderr)
-        return
+    summary_cols = [
+        "scenario", "backend", "n_runs",
+        "baseline_window", "current_window",
+        "rps_pct", "read_p99_pct", "write_p99_pct",
+        "error_pct_diff", "peak_mem_pct", "lockwait_pct",
+    ]
     with open(sum_path, "w", newline="") as f:
-        cols = list(summary_rows[0].keys())
-        w = csv.DictWriter(f, fieldnames=cols, delimiter="\t", lineterminator="\n")
+        w = csv.DictWriter(f, fieldnames=summary_cols, delimiter="\t", lineterminator="\n")
         w.writeheader()
         w.writerows(sorted(summary_rows, key=lambda r: (r["scenario"], r["backend"])))
-    print(f"Wrote {sum_path} ({len(summary_rows)} rows)", file=sys.stderr)
+    if not summary_rows:
+        print(
+            f"Wrote {sum_path} (header-only — no (scenario,backend) had "
+            f">= 2*WINDOW_SIZE={2*WINDOW_SIZE} runs in the window)",
+            file=sys.stderr,
+        )
+    else:
+        print(f"Wrote {sum_path} ({len(summary_rows)} rows)", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -10140,6 +10140,15 @@ MergeTreeData::MergingParams MergeTreeData::getMergingParamsForPatchParts()
 
 std::expected<void, PreformattedMessage> MergeTreeData::supportsLightweightUpdate() const
 {
+    /// Lightweight updates rewrite stored row bytes via patch parts, bypassing
+    /// MergeTreeSinkUniqueKeyCommit::run. Allowing them on UNIQUE KEY tables
+    /// would produce duplicate live keys. Reject here so the rewrite path in
+    /// InterpreterAlterQuery::tryRewriteToLightweightUpdate falls back through
+    /// the heavy path, which is rejected by checkMutationIsPossible.
+    if (auto uk_metadata = getInMemoryMetadataPtr(getContext(), false); uk_metadata->hasUniqueKey())
+        return std::unexpected(PreformattedMessage::create(
+            "Lightweight updates are not supported on tables with UNIQUE KEY"));
+
     if (format_version < MERGE_TREE_DATA_MIN_FORMAT_VERSION_WITH_CUSTOM_PARTITIONING)
         return std::unexpected(PreformattedMessage::create(
             "Lightweight updates are supported only for tables with custom partitioning"));

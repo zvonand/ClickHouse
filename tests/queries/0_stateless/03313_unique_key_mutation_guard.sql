@@ -16,6 +16,32 @@ ENGINE = MergeTree ORDER BY (c) UNIQUE KEY (a, b);
 
 INSERT INTO uk_mut_guard VALUES (1, 10, 100, 'x'), (2, 20, 200, 'y');
 
+-- ALTER DELETE / ALTER UPDATE on a UK table must be rejected: both rewrite
+-- rows without going through UNIQUE KEY dedup, which would produce duplicate
+-- live keys. Error code SUPPORT_IS_DISABLED = 344.
+SELECT 'alter_delete_uk' AS step;
+ALTER TABLE uk_mut_guard DELETE WHERE a = 1; -- { serverError SUPPORT_IS_DISABLED }
+
+SELECT 'alter_update_uk_column' AS step;
+ALTER TABLE uk_mut_guard UPDATE a = 99 WHERE a = 1; -- { serverError SUPPORT_IS_DISABLED }
+
+SELECT 'alter_update_non_uk_column' AS step;
+ALTER TABLE uk_mut_guard UPDATE d = 'z' WHERE a = 1; -- { serverError SUPPORT_IS_DISABLED }
+
+-- Lightweight-update bypass coverage: ALTER ... UPDATE under
+-- alter_update_mode='lightweight' is rewritten to a patch-part path before
+-- checkMutationIsPossible runs. The UK rejection inside
+-- supportsLightweightUpdate causes the lightweight rewrite to fall back to
+-- the heavy path, which is then rejected; under lightweight_force the
+-- rewrite throws directly. Both end with SUPPORT_IS_DISABLED.
+SELECT 'lightweight_update_uk' AS step;
+ALTER TABLE uk_mut_guard UPDATE d = 'z' WHERE a = 1
+SETTINGS alter_update_mode = 'lightweight', enable_lightweight_update = 1; -- { serverError SUPPORT_IS_DISABLED }
+
+SELECT 'lightweight_force_update_uk' AS step;
+ALTER TABLE uk_mut_guard UPDATE d = 'z' WHERE a = 1
+SETTINGS alter_update_mode = 'lightweight_force', enable_lightweight_update = 1; -- { serverError SUPPORT_IS_DISABLED }
+
 -- MATERIALIZE COLUMN on a UK column must be rejected (error code
 -- SUPPORT_IS_DISABLED = 344). Error message must name the column and reference
 -- UNIQUE KEY.

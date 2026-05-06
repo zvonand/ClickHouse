@@ -99,8 +99,9 @@ ALTER TABLE uk_t MODIFY ORDER BY (id); -- { serverError SUPPORT_IS_DISABLED }
 
 -- 12. INSERT ... SETTINGS async_insert = 1 on a unique-key table — allowed.
 
--- 13. ALTER DELETE on a unique-key table -> error.
+-- 13. ALTER DELETE / ALTER UPDATE on a unique-key table -> error.
 ALTER TABLE uk_t DELETE WHERE id = 1; -- { serverError SUPPORT_IS_DISABLED }
+ALTER TABLE uk_t UPDATE v = 'x' WHERE id = 1; -- { serverError SUPPORT_IS_DISABLED }
 
 -- 14. All ALTER ... PARTITION operations are blocked on UK tables.
 CREATE TABLE uk_t_src (id UInt64, user_id UInt32, v String)

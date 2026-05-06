@@ -85,6 +85,7 @@ All Python steps are dispatched through `keeper_stress.py`:
 | Date-range window | `python3 keeper_stress.py cumulative` |
 | PR set | `python3 keeper_stress.py prmap` + `deltas` + `prmetrics` (requires `pr_meta.tsv`) |
 | PR-branch isolation | `python3 keeper_stress.py prisol` (reads PR list + branch from `pr_to_nightly.tsv`) |
+| Two-commit Δ | `python3 keeper_stress.py diff <shaA> <shaB>` (8-char prefix or full; reads `merged_metrics.tsv`) |
 | Free-form | none — query `merged_metrics.tsv` directly with `awk`/`python` |
 
 The individual step files (`build_metrics_table.py`, `build_pr_nightly_map.py`, etc.) are still importable modules; `keeper_stress.py` dispatches to their `main()` entrypoints.

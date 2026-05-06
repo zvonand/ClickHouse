@@ -1,7 +1,7 @@
 import argparse
 import time
 from pathlib import Path
-from shutil import copy2
+from shutil import copy2, rmtree
 from typing import Optional
 
 from ci_utils import Shell, WithIter
@@ -235,7 +235,7 @@ class RpmArtifactory:
         stale_repodata = dest_dir / ".repodata"
         if stale_repodata.exists():
             print(f"Removing stale temp repodata directory: {stale_repodata}")
-            Shell.check(f"rm -rf {stale_repodata}", strict=True)
+            rmtree(stale_repodata)
 
         # switching between different fuse providers invalidates --update option (apparently some fuse(s) can mess around with mtime)
         #   add --skip-stat to skip mtime check

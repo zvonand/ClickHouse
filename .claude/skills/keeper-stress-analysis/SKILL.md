@@ -86,6 +86,7 @@ All Python steps are dispatched through `keeper_stress.py`:
 | PR set | `python3 keeper_stress.py prmap` + `deltas` + `prmetrics` (requires `pr_meta.tsv`) |
 | PR-branch isolation | `python3 keeper_stress.py prisol` (reads PR list + branch from `pr_to_nightly.tsv`) |
 | Two-commit Δ | `python3 keeper_stress.py diff <shaA> <shaB>` (8-char prefix or full; reads `merged_metrics.tsv`) |
+| Noise calibration | `python3 keeper_stress.py noise` (per-(scenario, backend, metric) median / stddev / cv / p95 across the window) |
 | Free-form | none — query `merged_metrics.tsv` directly with `awk`/`python` |
 
 The individual step files (`build_metrics_table.py`, `build_pr_nightly_map.py`, etc.) are still importable modules; `keeper_stress.py` dispatches to their `main()` entrypoints.
@@ -137,6 +138,12 @@ awk -F'\t' '$1=="<PR>" && $3=="prod-mix-no-fault[default]"' tmp/keeper_stress_sk
 # Co-merge diagnosis when a PR's delta looks suspicious — check the `co_merged`
 # column in per_pr_summary; if non-empty, the delta is jointly attributable.
 awk -F'\t' 'NR==1 || $1=="<PR>"' tmp/keeper_stress_skill/per_pr_summary.tsv
+
+# Per-commit time-series for one (scenario, backend, metric) — emits
+# `run_ended\tsha8\tvalue` rows sorted ascending by ts.
+awk -F'\t' 'NR==1 {for(i=1;i<=NF;i++) if($i=="<METRIC>") c=i; next}
+            $1=="<scenario>" && $2=="<backend>" && $c!="" {print $5, $4, $c}' \
+   tmp/keeper_stress_skill/merged_metrics.tsv | sort
 ```
 
 These three patterns cover the bulk of "drill into one slice of the data" requests; reach for the pipeline only when the slice doesn't already exist as a column or row in `merged_metrics.tsv` / `per_pr_*.tsv`.

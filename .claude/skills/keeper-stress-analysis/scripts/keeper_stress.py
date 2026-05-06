@@ -20,6 +20,9 @@ Subcommands:
                    (See `build_cumulative_gains.py`.)
     diff A B       Build `commit_diff.tsv` comparing two arbitrary SHAs
                    (8-char prefix or full). (See `build_commit_diff.py`.)
+    noise          Build `noise_stats.tsv` with per-(scenario, backend, metric)
+                   median / stddev / cv / p95 across all runs in the window.
+                   (See `build_noise_stats.py`.)
 
 Each subcommand operates on files in this script's directory (where
 `rebuild.sh` copies the SQL queries and scripts before running).
@@ -29,6 +32,7 @@ import sys
 import build_commit_diff
 import build_cumulative_gains
 import build_metrics_table
+import build_noise_stats
 import build_per_pr_metrics_tsv
 import build_pr_branch_isolated
 import build_pr_nightly_map
@@ -56,6 +60,7 @@ SUBCOMMANDS = {
     "prisol":     lambda args: build_pr_branch_isolated.main(),
     "cumulative": lambda args: build_cumulative_gains.main(),
     "diff":       _diff,
+    "noise":      lambda args: build_noise_stats.main(),
 }
 
 

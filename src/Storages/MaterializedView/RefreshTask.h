@@ -61,7 +61,7 @@ public:
     /// Ok to call even if startup() wasn't called or failed.
     void shutdown();
     /// Call when dropping the table, after shutdown(). Removes coordination znodes if needed.
-    void drop(ContextPtr context);
+    void drop(ContextPtr context, bool is_shared_db);
     /// Call when renaming the materialized view.
     void rename(StorageID new_id, StorageID new_inner_table_id);
     /// Call when changing refresh params (ALTER MODIFY REFRESH).

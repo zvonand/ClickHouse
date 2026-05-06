@@ -478,6 +478,14 @@ void StorageMaterializedView::drop()
     if (getInMemoryMetadataPtr(getContext(), false)->sql_security_type == SQLSecurityType::DEFINER)
         ViewDefinerDependencies::instance().removeViewDependencies(table_id);
 
+    bool is_shared_catalog = false;
+
+    if (refresher)
+        refresher->drop(getContext(), is_shared_catalog);
+
+    if (is_shared_catalog)
+        return;
+
     /// Sync flag and the setting make sense for Atomic databases only.
     /// However, with Atomic databases, IStorage::drop() can be called only from a background task in DatabaseCatalog.
     /// Running synchronous DROP from that task leads to deadlock.
@@ -488,9 +496,6 @@ void StorageMaterializedView::drop()
     /// but DROP acquires DDLGuard for the name of MV. And we cannot acquire second DDLGuard for the inner name in DROP,
     /// because it may lead to lock-order-inversion (DDLGuards must be acquired in lexicographical order).
     dropInnerTableIfAny(/* sync */ false, getContext());
-
-    if (refresher)
-        refresher->drop(getContext());
 }
 
 void StorageMaterializedView::dropInnerTableIfAny(bool sync, ContextPtr local_context)

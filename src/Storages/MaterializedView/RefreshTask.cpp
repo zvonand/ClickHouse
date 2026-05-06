@@ -274,7 +274,7 @@ void RefreshTask::shutdown()
     refresh_cv.notify_all();
 }
 
-void RefreshTask::drop(ContextPtr context)
+void RefreshTask::drop(ContextPtr context, bool is_shared_db)
 {
     if (!coordination.coordinated)
         return;
@@ -283,6 +283,11 @@ void RefreshTask::drop(ContextPtr context)
     auto zookeeper = context->getZooKeeper();
 
     zookeeper->tryRemove(coordination.path + "/replicas/" + coordination.replica_name);
+
+    /// If no replicas left, remove the coordination znode.
+    /// In Shared DB, let SharedDatabaseCatalog handle it.
+    if (is_shared_db)
+        return;
 
     /// If no replicas left, remove the coordination znode.
     Coordination::Requests ops;

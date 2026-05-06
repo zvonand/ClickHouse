@@ -135,6 +135,15 @@ SELECT 'LowCardinality key bail out';
 SELECT tupleElement(dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(toLowCardinality(1)), ('Default', 'Default')), 'city');
 SELECT tupleElement(dictGet(currentDatabase() || '.test_dict', ('country', 'city'), toUInt64(toLowCardinality(2))), 'country');
 
+-- `dictGetOrDefault` casts the entire default tuple to the attribute tuple type at execution.
+-- When an un-selected default element is invalid for its attribute type (here `'not_a_number'`
+-- for the `UInt64` `population` attribute), the original cast throws `CANNOT_PARSE_TEXT`. The
+-- pass must bail out so this exception is preserved instead of being suppressed by extracting
+-- only the selected element.
+SELECT 'dictGetOrDefault default tuple element type mismatch bail out';
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'population'), toUInt64(999), ('Default', 'not_a_number')).country; -- { serverError CANNOT_PARSE_TEXT }
+SELECT dictGetOrDefault(currentDatabase() || '.test_dict', ('country', 'population'), toUInt64(999), tuple('Default', 'not_a_number')).country; -- { serverError CANNOT_PARSE_TEXT }
+
 DROP TABLE test_keys;
 DROP DICTIONARY test_dict;
 DROP TABLE dict_source;

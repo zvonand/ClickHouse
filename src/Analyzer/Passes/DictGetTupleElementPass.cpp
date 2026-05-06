@@ -7,6 +7,8 @@
 
 #include <Core/Settings.h>
 
+#include <DataTypes/DataTypeTuple.h>
+
 namespace DB
 {
 
@@ -158,6 +160,26 @@ public:
         {
             size_t default_arg_idx = dict_get_args.size() - 1;
             const auto & default_arg = dict_get_args[default_arg_idx];
+
+            /// `dictGetOrDefault` casts the entire default tuple to the dict's attribute tuple type at
+            /// execution (see `castColumnAccurate` in `FunctionDictGetNoType::executeImpl`). If the
+            /// element types of the default tuple don't match the dict's attribute types, that cast
+            /// can throw on an un-selected element (for example, a string default for a `UInt64`
+            /// attribute). After rewriting to a single-attribute call only the selected element is
+            /// cast, so such exceptions are suppressed. Bail out unless element types match exactly
+            /// (names may differ — they don't affect cast semantics).
+            const auto * default_tuple_type = typeid_cast<const DataTypeTuple *>(default_arg->getResultType().get());
+            const auto * result_tuple_type = typeid_cast<const DataTypeTuple *>(dict_get_function->getResultType().get());
+            if (!default_tuple_type || !result_tuple_type)
+                return;
+
+            const auto & default_elems = default_tuple_type->getElements();
+            const auto & result_elems = result_tuple_type->getElements();
+            if (default_elems.size() != result_elems.size())
+                return;
+            for (size_t i = 0; i < default_elems.size(); ++i)
+                if (!default_elems[i]->equals(*result_elems[i]))
+                    return;
 
             if (const auto * default_constant = default_arg->as<ConstantNode>())
             {

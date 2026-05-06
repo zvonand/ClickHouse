@@ -59,3 +59,4 @@ Tokyo
 LowCardinality key bail out
 New York
 FR
+dictGetOrDefault default tuple element type mismatch bail out

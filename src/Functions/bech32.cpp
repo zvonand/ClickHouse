@@ -139,7 +139,7 @@ public:
         if (arguments.size() > 3)
             throw Exception(
                 ErrorCodes::TOO_MANY_ARGUMENTS_FOR_FUNCTION,
-                "A maximum of 3 arguments (human_readable_part, data, witness_version) are allowed for function {}",
+                "A maximum of 3 arguments (human_readable_part, data, witness_version | 'bech32' | 'bech32m') are allowed for function {}",
                 getName());
 
         /// check first two args, human_readable_part and input string
@@ -508,24 +508,24 @@ public:
             }
             else
             {
-            String mode(mode_col->getDataAt(0));
-            /// Validate all rows have the same value (guards against non-const column expressions)
-            for (size_t row = 1; row < input_rows_count; ++row)
-            {
-                if (mode_col->getDataAt(row) != mode)
+                String mode(mode_col->getDataAt(0));
+                /// Validate all rows have the same value (guards against non-const column expressions)
+                for (size_t row = 1; row < input_rows_count; ++row)
+                {
+                    if (mode_col->getDataAt(row) != mode)
+                        throw Exception(
+                            ErrorCodes::BAD_ARGUMENTS,
+                            "Decode mode must be constant for function {}, got different values in rows",
+                            getName());
+                }
+                if (mode == "raw")
+                    raw_mode = true;
+                else
                     throw Exception(
                         ErrorCodes::BAD_ARGUMENTS,
-                        "Decode mode must be constant for function {}, got different values in rows",
+                        "Invalid mode '{}' for function {}, expected 'raw'",
+                        mode,
                         getName());
-            }
-            if (mode == "raw")
-                raw_mode = true;
-            else
-                throw Exception(
-                    ErrorCodes::BAD_ARGUMENTS,
-                    "Invalid mode '{}' for function {}, expected 'raw'",
-                    mode,
-                    getName());
             }
         }
 

@@ -596,7 +596,19 @@ class ReleaseInfo:
                     retries=5,
                     retry_delay=2,
                 ), f"Failed to create release {self.release_tag}"
-            for cmd in cmds_upload:
+            # On a rerun some assets may already be uploaded. Fetch the list and
+            # skip those files to avoid redundant uploads.
+            uploaded = set(
+                Shell.get_output(
+                    f"gh release view --repo {repo} {self.release_tag} "
+                    f"--json assets --jq '[.assets[].name][]'"
+                ).splitlines()
+            )
+            for file, cmd in zip(packages_files, cmds_upload):
+                name = Path(file).name
+                if name in uploaded:
+                    print(f"Asset {name} already uploaded — skipping")
+                    continue
                 Shell.check(cmd, strict=True, verbose=True, retries=5, retry_delay=2)
             self.release_url = (
                 f"https://github.com/{repo}/releases/tag/{self.release_tag}"

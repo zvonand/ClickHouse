@@ -85,6 +85,8 @@ primary baseline is usable.
 | `peak_mem_gb` | lower better | Δ ≤ +10 % | +10 % to +30 % | > +30 % |
 | Hard-failure counters | absolute | exactly 0 | n/a | any non-zero |
 
+**Why these specific numbers.** Calibration came from PR `#102739` (a typos-only PR that cannot affect Keeper performance): it showed ~5 % rps swing and ~10 % p99 swing under PR-branch isolation. So 5 % is the rps noise floor and 10 % is the p99/mem noise floor; the bands above set "clean" at the noise floor and "watch" at 3× the noise floor. If the dataset's noise characteristics change, recalibrate against the next clean-PR control.
+
 **Hard-failure counters** are the trump card: any non-zero value of any of these means the cluster broke a guarantee:
 - `KeeperCommitsFailed`
 - `KeeperSnapshotCreationsFailed`

@@ -276,3 +276,13 @@ When the user is asking for analysis (not a Slack post), produce:
 Never produce confident per-PR percentages below 5 % effect size without explicit isolation evidence.
 
 When the user has been pushing for rigor, default to the conservative method (median-of-3 + PR-branch isolation) and report ranges, not point estimates.
+
+## Editing this skill
+
+If you change anything in `scripts/_common.py` — particularly `classify`, `iso_week`, `CLASSIFY_BANDS`, or `HEADLINE_METRICS` — run the unit-test harness before pushing:
+
+```bash
+cd <skill_home>/scripts && python3 -m unittest tests.test_common -v
+```
+
+The 18 cases gate the per-metric significance bands and the ISO-year-boundary widening. If they fail, methodology and code have drifted apart — fix one to match the other (the `references/methodology.md` rubric is the binding contract).

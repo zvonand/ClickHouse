@@ -30,6 +30,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+from _common import iso_week
+
 ROOT = Path(__file__).parent
 
 
@@ -58,11 +60,6 @@ def load_pr_set():
                 continue
             out.append((str(r["pr"]), r.get("title", ""), branch))
     return out
-
-
-def iso_week(dt):
-    yr, wk, _ = dt.isocalendar()
-    return f"{yr}-W{wk:02d}"
 
 
 def main():

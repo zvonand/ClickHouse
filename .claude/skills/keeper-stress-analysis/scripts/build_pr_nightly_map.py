@@ -10,6 +10,8 @@ import os
 import sys
 from pathlib import Path
 
+from _common import is_fault_scenario
+
 ROOT = Path(__file__).parent
 
 _threshold_str = os.environ.get("KEEPER_SKILL_THRESHOLD", "2026-03-25")
@@ -44,10 +46,7 @@ def parse_nightlies() -> list[dict]:
         for r in reader:
             sha = r["commit_sha"]
             ended = datetime.datetime.fromisoformat(r["run_ended"]).replace(tzinfo=datetime.timezone.utc)
-            # Scenario name contains "-fault[" (e.g. "prod-mix-fault[default]") for fault sweeps
-            # and "-no-fault[" for no-fault sweeps. We need to distinguish carefully because
-            # both backend tags (`[default]`/`[rocks]`) end with "]" and "default" contains "fault".
-            kind = "fault" if ("-fault[" in r["scenario"] and "-no-fault[" not in r["scenario"]) else "no-fault"
+            kind = "fault" if is_fault_scenario(r["scenario"]) else "no-fault"
             if sha not in by_sha:
                 by_sha[sha] = {"commit_sha": sha, "sha8": r["sha8"], "earliest": ended, "latest": ended, "kinds": set([kind])}
             else:

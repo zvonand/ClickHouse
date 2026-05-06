@@ -14,6 +14,16 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+from _common import (
+    CLASSIFY_BANDS,
+    DEFAULT_BANDS,
+    HEADLINE_LOOKUP,
+    HEADLINE_METRICS,
+    classify,
+    is_fault_scenario,
+    to_float,
+)
+
 ROOT = Path(__file__).parent
 
 # Threshold below which PRs are considered out-of-window. Read from env var
@@ -23,69 +33,6 @@ _threshold_str = os.environ.get("KEEPER_SKILL_THRESHOLD", "2026-03-25")
 THRESHOLD = datetime.datetime.fromisoformat(_threshold_str).replace(tzinfo=datetime.timezone.utc)
 
 PER_NIGHTLY_FIELDS = ["sha8", "earliest_ts", "scenarios_count", "kind", "prs_landed"]
-
-# Headline metrics to track per scenario+backend
-HEADLINE_METRICS = [
-    ("rps",                    "higher_better"),
-    ("read_p99_ms",            "lower_better"),
-    ("write_p99_ms",           "lower_better"),
-    ("error_pct",              "lower_better"),
-    ("peak_mem_gb",            "lower_better"),
-    ("p95_cpu_cores",          "lower_better"),
-    ("zk_max_latency_max",     "lower_better"),
-    ("FileSync_us_per_s_avg",  "lower_better"),
-    ("StorageLockWait_us_per_s_avg", "lower_better"),
-    ("OutstandingRequests_max", "lower_better"),
-]
-
-# Significance bands per metric, in percent. Must mirror the rubric in
-# references/methodology.md. Format: metric -> (clean_band, watch_band).
-# Throughput metrics are tighter (5/15) because the bench is repeatable;
-# tail latency and memory are wider (10/30) because they're noisier.
-CLASSIFY_BANDS = {
-    "rps":          (5, 15),
-    "read_rps":     (5, 15),
-    "write_rps":    (5, 15),
-    "read_p99_ms":  (10, 30),
-    "write_p99_ms": (10, 30),
-    "peak_mem_gb":  (10, 30),
-    "avg_mem_gb":   (10, 30),
-}
-DEFAULT_BANDS = (5, 15)
-
-# Significance bands relative to baseline (deltas in percent unless absolute)
-def classify(metric, pre, post):
-    if pre is None or post is None:
-        return "no-data"
-    if metric == "error_pct":
-        # Special: track error_pct in absolute pp terms
-        if pre == 0 and post == 0:
-            return "clean"
-        if post < pre + 0.05:  # <0.05pp worsening = noise
-            return "clean"
-        if post < pre + 0.5:
-            return "watch"
-        return "regression"
-    if pre == 0 and post == 0:
-        return "clean"
-    if pre == 0:
-        return "watch"  # was zero, now non-zero
-    pct = (post - pre) / abs(pre) * 100.0
-    direction = HEADLINE_LOOKUP.get(metric, "lower_better")
-    clean_band, watch_band = CLASSIFY_BANDS.get(metric, DEFAULT_BANDS)
-    if direction == "higher_better":
-        # higher_better: negative pct is bad
-        if pct >= -clean_band: return "clean"
-        if pct >= -watch_band: return "watch"
-        return "regression"
-    else:
-        # lower_better: positive pct is bad
-        if pct <= clean_band: return "clean"
-        if pct <= watch_band: return "watch"
-        return "regression"
-
-
-HEADLINE_LOOKUP = dict(HEADLINE_METRICS)
 
 
 def load_metrics():
@@ -115,13 +62,6 @@ def load_pr_map():
         for r in csv.DictReader(f, delimiter="\t"):
             rows.append(r)
     return rows
-
-
-def parse_float(s):
-    try:
-        return float(s)
-    except (ValueError, TypeError):
-        return None
 
 
 def compute_pr_deltas():
@@ -182,20 +122,20 @@ def compute_pr_deltas():
             }
 
             # Server-side failures
-            sf_pre = (parse_float(pre_r.get("CommitsFailed_max",0)) or 0) + \
-                     (parse_float(pre_r.get("SnapshotApplysFailed_max",0)) or 0) + \
-                     (parse_float(pre_r.get("SnapshotCreationsFailed_max",0)) or 0) + \
-                     (parse_float(pre_r.get("RejectedSoftMemLimit_max",0)) or 0)
-            sf_post = (parse_float(post_r.get("CommitsFailed_max",0)) or 0) + \
-                      (parse_float(post_r.get("SnapshotApplysFailed_max",0)) or 0) + \
-                      (parse_float(post_r.get("SnapshotCreationsFailed_max",0)) or 0) + \
-                      (parse_float(post_r.get("RejectedSoftMemLimit_max",0)) or 0)
+            sf_pre = (to_float(pre_r.get("CommitsFailed_max",0)) or 0) + \
+                     (to_float(pre_r.get("SnapshotApplysFailed_max",0)) or 0) + \
+                     (to_float(pre_r.get("SnapshotCreationsFailed_max",0)) or 0) + \
+                     (to_float(pre_r.get("RejectedSoftMemLimit_max",0)) or 0)
+            sf_post = (to_float(post_r.get("CommitsFailed_max",0)) or 0) + \
+                      (to_float(post_r.get("SnapshotApplysFailed_max",0)) or 0) + \
+                      (to_float(post_r.get("SnapshotCreationsFailed_max",0)) or 0) + \
+                      (to_float(post_r.get("RejectedSoftMemLimit_max",0)) or 0)
             row["server_failures_post"] = int(sf_post)
             server_failures += int(sf_post)
 
             for metric, _ in HEADLINE_METRICS:
-                pre_v = parse_float(pre_r.get(metric))
-                post_v = parse_float(post_r.get(metric))
+                pre_v = to_float(pre_r.get(metric))
+                post_v = to_float(post_r.get(metric))
                 row[f"{metric}_pre"]  = pre_v if pre_v is not None else ""
                 row[f"{metric}_post"] = post_v if post_v is not None else ""
                 if pre_v is not None and post_v is not None:
@@ -329,8 +269,7 @@ def compute_nightly_summary():
             "sha8": sha8,
             "earliest_ts": info["earliest"].isoformat(),
             "scenarios_count": len(info["scenarios"]),
-            # See note in build_pr_nightly_map.py — must match "-fault[" not "fault]"
-            "kind": "fault" if any(("-fault[" in s and "-no-fault[" not in s) for s in info["scenarios"]) else "no-fault",
+            "kind": "fault" if any(is_fault_scenario(s) for s in info["scenarios"]) else "no-fault",
             "prs_landed": ",".join(prs_landed),
         })
         prev_ts = info["earliest"]

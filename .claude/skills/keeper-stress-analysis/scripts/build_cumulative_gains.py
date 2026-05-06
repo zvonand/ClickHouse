@@ -13,6 +13,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+from _common import to_float
+
 ROOT = Path(__file__).parent
 
 # Headline metrics & their "good direction"
@@ -41,11 +43,6 @@ METRICS = {
 }
 
 WINDOW_SIZE = 3  # take median of N earliest / N latest nightlies per scenario+backend
-
-
-def to_float(s):
-    try: return float(s)
-    except (ValueError, TypeError): return None
 
 
 def main():

@@ -5,6 +5,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+from _common import is_fault_scenario, to_float
+
 ROOT = Path(__file__).parent
 
 METRICS = [
@@ -25,11 +27,6 @@ METRICS = [
     "CommitsFailed_max", "SnapshotCreationsFailed_max",
     "SnapshotApplysFailed_max", "RejectedSoftMemLimit_max",
 ]
-
-
-def to_float(s):
-    try: return float(s)
-    except (ValueError, TypeError): return None
 
 
 def main():
@@ -62,7 +59,7 @@ def main():
             fault_post   = pr.get("post_fault_sha8", "")
 
             for (sc, be), sha_map in by_sb_sha.items():
-                is_fault = ("-fault[" in sc and "-no-fault[" not in sc)
+                is_fault = is_fault_scenario(sc)
                 # Pick the baseline pair appropriate for this scenario kind
                 pre_sha  = fault_pre  if is_fault else nofault_pre
                 post_sha = fault_post if is_fault else nofault_post

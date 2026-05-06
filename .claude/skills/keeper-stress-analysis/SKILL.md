@@ -122,6 +122,24 @@ Pick the deliverable that matches the request:
 
 Cross-reference the canonical example when filling templates. Never invent prose without a backing data source.
 
+#### Free-form recipes
+
+Common questions that don't need a new pipeline — just `awk` over an existing TSV:
+
+```bash
+# Did <PR> regress fault scenarios specifically?
+awk -F'\t' '$1=="<PR>" && $3 ~ /-fault\[/' tmp/keeper_stress_skill/per_pr_scenario_deltas.tsv
+
+# Single-scenario validation (one row, all metric Δs):
+awk -F'\t' '$1=="<PR>" && $3=="prod-mix-no-fault[default]"' tmp/keeper_stress_skill/per_pr_scenario_deltas.tsv
+
+# Co-merge diagnosis when a PR's delta looks suspicious — check the `co_merged`
+# column in per_pr_summary; if non-empty, the delta is jointly attributable.
+awk -F'\t' 'NR==1 || $1=="<PR>"' tmp/keeper_stress_skill/per_pr_summary.tsv
+```
+
+These three patterns cover the bulk of "drill into one slice of the data" requests; reach for the pipeline only when the slice doesn't already exist as a column or row in `merged_metrics.tsv` / `per_pr_*.tsv`.
+
 ### Phase 5 — Apply learned-the-hard-way checks
 
 **Before quoting any number**, run these checks:
@@ -154,6 +172,8 @@ If a metric changes as a single-day step across multiple unrelated scenarios, it
 #### Noise-floor check
 
 The single-nightly Δ noise floor is **±3-5 % on rps/p99**. The typos PR `#102739` (which cannot affect Keeper performance) shows ±5 % rps Δ via PR-branch isolation — that's the floor. Never claim sub-3 % per-PR effects without an isolation method.
+
+The PR-branch isolation pool widens to ±1 ISO week if the same-week pool has fewer than 2 entries (using `datetime` arithmetic so year/W01/W52-53 boundaries are handled). Same-branch runs are excluded from the pool so prior WIP commits don't bias the median toward the PR's own change. Full method in `references/methodology.md` Method C and the docstring at the top of `scripts/build_pr_branch_isolated.py`.
 
 #### CPU spike check
 

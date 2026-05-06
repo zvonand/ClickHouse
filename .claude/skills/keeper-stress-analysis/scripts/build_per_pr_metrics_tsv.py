@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Flat TSV: one row per (PR, scenario, backend, metric) with pre, post, delta_pct, delta_pp."""
+"""Flat TSV: one row per (PR, scenario, backend, metric) with pre, post, delta_abs, delta_pct.
+
+`delta_abs` is the unitful absolute change (`post - pre`); `delta_pct` is the
+relative change in percent. The output file is `per_pr_metrics_long.tsv` and
+its header is the canonical schema for downstream consumers (the per-PR
+markdown table is composed from it).
+"""
 import csv
 import sys
 from collections import defaultdict

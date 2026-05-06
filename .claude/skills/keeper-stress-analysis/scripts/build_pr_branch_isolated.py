@@ -94,9 +94,14 @@ def main():
         if key not in pr_head or r["dt"] > pr_head[key]["dt"]:
             pr_head[key] = r
 
+    # Scenario set is derived from the data so the script picks up any new
+    # PR-branch CI scenario without a code change. Sorted for deterministic
+    # output ordering.
+    scenarios = sorted(pool.keys())
+
     out_rows = []
     for pr, name, branch in pr_set:
-        for scenario in ("prod-mix-no-fault[default]", "read-multi-no-fault[default]", "write-multi-no-fault[default]"):
+        for scenario in scenarios:
             head = pr_head.get((branch, scenario))
             if not head:
                 out_rows.append({

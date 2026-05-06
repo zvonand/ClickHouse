@@ -122,10 +122,10 @@ def compute_pr_deltas():
             }
 
             # Server-side failures
-            sf_pre = (to_float(pre_r.get("CommitsFailed_max",0)) or 0) + \
-                     (to_float(pre_r.get("SnapshotApplysFailed_max",0)) or 0) + \
-                     (to_float(pre_r.get("SnapshotCreationsFailed_max",0)) or 0) + \
-                     (to_float(pre_r.get("RejectedSoftMemLimit_max",0)) or 0)
+            # Per-PR check is post-merge only — we count failures present in
+            # the first nightly that includes the PR. The "across the entire
+            # window must be zero" gate documented in SKILL.md Phase 5 is a
+            # separate pass over `prom_gauges.tsv`.
             sf_post = (to_float(post_r.get("CommitsFailed_max",0)) or 0) + \
                       (to_float(post_r.get("SnapshotApplysFailed_max",0)) or 0) + \
                       (to_float(post_r.get("SnapshotCreationsFailed_max",0)) or 0) + \
@@ -157,15 +157,18 @@ def compute_pr_deltas():
             regressions.sort(key=lambda x: abs(x[5]) if x[5] != float("inf") else 1e18, reverse=True)
             worst = regressions[0]
 
-        improvements = [v for v in scenario_verdicts if v[6] == "clean"]
-        # rank improvements by negative-delta on lower_better OR positive on higher_better
+        # Rank improvements that exceed the per-metric clean band — i.e. the
+        # mirror of `classify`'s regression threshold. Reading `CLASSIFY_BANDS`
+        # directly keeps presentation consistent with the per-metric bands
+        # documented in `references/methodology.md` (and used by `classify`).
         ranked_improvements = []
         for v in scenario_verdicts:
             metric, sc, be, pre, post, pct, vd = v
             direction = HEADLINE_LOOKUP[metric]
-            if direction == "lower_better" and pct < -10:
+            clean_band, _watch_band = CLASSIFY_BANDS.get(metric, DEFAULT_BANDS)
+            if direction == "lower_better" and pct < -clean_band:
                 ranked_improvements.append((v, -pct))
-            elif direction == "higher_better" and pct > 5:
+            elif direction == "higher_better" and pct > clean_band:
                 ranked_improvements.append((v, pct))
         if ranked_improvements:
             ranked_improvements.sort(key=lambda x: x[1], reverse=True)

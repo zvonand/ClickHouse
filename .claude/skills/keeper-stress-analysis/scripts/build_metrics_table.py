@@ -1,6 +1,23 @@
 #!/usr/bin/env python3
-"""Build a wide per-(scenario, backend, commit_sha) metrics table by joining the
-five staging files. Output: merged_metrics.tsv with one row per (scenario, backend, commit).
+"""Join the five staging TSVs into a wide per-(scenario, backend, commit_sha)
+metrics table. Output: `merged_metrics.tsv`, one row per (scenario, backend,
+commit), with one column per tracked metric.
+
+Inputs (all under `staging/`, produced by the SQL queries in `queries/`):
+
+  1. `bench_summary.tsv` (from `01_bench_summary.sql`) — seeds the row set;
+     defines which (scenario, backend, commit) keys exist in the output.
+  2. `container.tsv`    (`05_container.sql`)   — adds container memory + CPU.
+  3. `prom_rates.tsv`   (`02_prom_rates.sql`)  — adds Keeper-prom rate metrics.
+  4. `prom_gauges.tsv`  (`03_prom_gauges.sql`) — adds Keeper-prom gauge metrics
+     including the four `*Failed_max` failure counters.
+  5. `mntr.tsv`         (`04_mntr.sql`)        — adds ZK 4LW `mntr` metrics.
+
+Join semantics: each loader updates a row only if `(scenario, backend,
+commit_sha)` already exists in the seed set from `bench_summary.tsv`. So a
+commit that appears only in container/prom/mntr but not in bench_summary is
+silently dropped — by design, the bench summary is authoritative for which
+runs to include.
 """
 import csv
 import sys

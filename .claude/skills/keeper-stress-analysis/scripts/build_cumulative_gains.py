@@ -56,9 +56,11 @@ def main():
     # For each (scenario, backend), sort by run_ended and take medians of edges
     out_rows = []  # one per (scenario, backend, metric)
     summary_rows = []  # one per (scenario, backend)
+    skipped = []
     for (sc, be), runs in by_sb.items():
         runs.sort(key=lambda x: x[0])
         if len(runs) < 2 * WINDOW_SIZE:
+            skipped.append((sc, be, len(runs)))
             continue
         baseline_runs = runs[:WINDOW_SIZE]
         current_runs  = runs[-WINDOW_SIZE:]
@@ -132,6 +134,14 @@ def main():
         w.writeheader()
         w.writerows(out_rows)
     print(f"Wrote {out_path} ({len(out_rows)} rows)", file=sys.stderr)
+    if skipped:
+        print(
+            f"Skipped {len(skipped)} (scenario,backend) pair(s) with "
+            f"< 2*WINDOW_SIZE={2*WINDOW_SIZE} runs in the window:",
+            file=sys.stderr,
+        )
+        for sc, be, n in sorted(skipped):
+            print(f"  {sc} [{be}]: {n} run(s)", file=sys.stderr)
 
     sum_path = ROOT / "cumulative_gains_summary.tsv"
     if not summary_rows:

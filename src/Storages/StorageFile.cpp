@@ -37,7 +37,6 @@
 
 #include <Formats/FormatFactory.h>
 #include <Formats/ReadSchemaUtils.h>
-#include <Disks/DiskObjectStorage/ObjectStorages/IObjectStorage.h>
 #include <Processors/Formats/IInputFormat.h>
 #include <Processors/Formats/IOutputFormat.h>
 #include <Processors/Sinks/SinkToStorage.h>
@@ -1601,30 +1600,12 @@ Chunk StorageFileSource::generate()
 
             chassert(file_num > 0);
 
-            /// For real local files, build a synthetic RelativePathWithMetadata so the
-            /// format-level metadata cache (e.g. Parquet footer cache) is reachable. The
-            /// "etag" is just any version identifier the cache compares for equality —
-            /// for local files we use mtime+size, which is enough to invalidate the cache
-            /// when the file is overwritten in place.
-            std::optional<RelativePathWithMetadata> object_with_metadata;
-            if (!storage->use_table_fd && !storage->archive_info && !current_path.empty()
-                && current_file_size.has_value() && current_file_last_modified.has_value())
-            {
-                ObjectMetadata md;
-                md.size_bytes = *current_file_size;
-                md.last_modified = *current_file_last_modified;
-                md.etag = std::to_string(current_file_last_modified->raw())
-                    + "_" + std::to_string(*current_file_size);
-                object_with_metadata.emplace(current_path, std::move(md));
-            }
-
-            input_format = FormatFactory::instance().getInputWithMetadata(
+            input_format = FormatFactory::instance().getInput(
                 storage->format_name,
                 *read_buf,
                 block_for_format,
                 getContext(),
                 max_block_size,
-                object_with_metadata,
                 storage->format_settings,
                 parser_shared_resources,
                 format_filter_info,

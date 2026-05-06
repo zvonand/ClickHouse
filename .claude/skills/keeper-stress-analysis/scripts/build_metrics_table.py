@@ -47,6 +47,8 @@ def load_container(rows):
             key = (r["scenario"], r["backend"], r["commit_sha"])
             if key in rows:
                 rows[key]["peak_mem_gb"]    = float(r.get("peak_mem_gb") or 0)
+                rows[key]["avg_mem_gb"]     = float(r.get("avg_mem_gb") or 0)
+                rows[key]["avg_cpu_cores"]  = float(r.get("avg_cpu_cores") or 0)
                 rows[key]["p95_cpu_cores"]  = float(r.get("p95_cpu_cores") or 0)
                 rows[key]["max_cpu_cores"]  = float(r.get("max_cpu_cores") or 0)
     return rows

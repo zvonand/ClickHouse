@@ -56,8 +56,15 @@ echo "== 4/8 Pull mntr"
 fetch "$WORK_DIR/queries/04_mntr.sql"          "$WORK_DIR/staging/mntr.tsv"
 echo "== 5/8 Pull container"
 fetch "$WORK_DIR/queries/05_container.sql"     "$WORK_DIR/staging/container.tsv"
-echo "== 6/8 Pull pr_branches (optional, only if PR analysis is needed)"
-fetch "$WORK_DIR/queries/06_pr_branch.sql"     "$WORK_DIR/staging/pr_branches.tsv" || true
+echo "== 6/8 Pull pr_branches"
+# In PR mode (caller supplied pr_meta.tsv) this fetch is required — fail fast.
+# In date-range mode it's unused; tolerate failure so an outage on this single
+# query doesn't block a window analysis that doesn't need it.
+if [[ -f "$WORK_DIR/../pr_meta.tsv" ]]; then
+  fetch "$WORK_DIR/queries/06_pr_branch.sql"   "$WORK_DIR/staging/pr_branches.tsv"
+else
+  fetch "$WORK_DIR/queries/06_pr_branch.sql"   "$WORK_DIR/staging/pr_branches.tsv" || true
+fi
 
 echo
 echo "== Build merged_metrics.tsv"
@@ -73,7 +80,7 @@ if [[ -f "$WORK_DIR/../pr_meta.tsv" ]]; then
   echo "== Build per_pr_metrics_long.tsv"
   ( cd "$WORK_DIR" && python3 build_per_pr_metrics_tsv.py )
   echo "== Build PR-branch isolated effects"
-  ( cd "$WORK_DIR" && python3 build_pr_branch_isolated.py ) || true
+  ( cd "$WORK_DIR" && python3 build_pr_branch_isolated.py )
 fi
 
 echo "== Build cumulative_gains.tsv"

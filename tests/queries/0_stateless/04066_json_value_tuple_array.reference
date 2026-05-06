@@ -37,4 +37,10 @@ hello
 [[1,2]]
 [{"c":3}]
 2
+--JSON_VALUE multi-path matches single-path for function_json_value_return_type_allow_complex--
+\N	(NULL)
+\N	(NULL)
+(NULL,'hello')
+[1,2]	('[1,2]')
+{"x":1}	('{"x":1}')
 --Error cases--

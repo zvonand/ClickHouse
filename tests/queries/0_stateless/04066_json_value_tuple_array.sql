@@ -57,6 +57,19 @@ SELECT tupleElement(JSON_QUERY('{"a":[1,2], "b":{"c":3}}', CAST(tuple('$.a', '$.
 -- Nested named tuple: names are preserved at every level.
 SELECT tupleElement(tupleElement(JSON_VALUE('{"a":1, "b":2}', CAST(tuple(tuple('$.a', '$.b')) AS Tuple(inner Tuple(x String, y String)))), 'inner'), 'y');
 
+SELECT '--JSON_VALUE multi-path matches single-path for function_json_value_return_type_allow_complex--';
+-- Multi-path must apply the same per-leaf logic as single-path: skip arrays/objects when
+-- function_json_value_return_type_allow_complex = 0, and serialize them when = 1.
+SET function_json_value_return_type_allow_complex = 0;
+SELECT JSON_VALUE('{"a":[1,2]}', '$.a') AS single, JSON_VALUE('{"a":[1,2]}', tuple('$.a')) AS multi;
+SELECT JSON_VALUE('{"a":{"x":1}}', '$.a') AS single, JSON_VALUE('{"a":{"x":1}}', tuple('$.a')) AS multi;
+-- Mixed: the first leaf is a complex value (skipped → NULL), the second is a scalar.
+SELECT JSON_VALUE('{"a":[1,2], "b":"hello"}', tuple('$.a', '$.b')) AS multi_mixed;
+SET function_json_value_return_type_allow_complex = 1;
+SELECT JSON_VALUE('{"a":[1,2]}', '$.a') AS single, JSON_VALUE('{"a":[1,2]}', tuple('$.a')) AS multi;
+SELECT JSON_VALUE('{"a":{"x":1}}', '$.a') AS single, JSON_VALUE('{"a":{"x":1}}', tuple('$.a')) AS multi;
+SET function_json_value_return_type_allow_complex = 0;
+
 SELECT '--Error cases--';
 SELECT JSON_VALUE('{"a":1}', tuple('$..invalid')); -- { serverError BAD_ARGUMENTS }
 SELECT JSON_VALUE('{"a":1}', tuple('$.a', 1)); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }

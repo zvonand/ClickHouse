@@ -117,7 +117,7 @@ The skill's pipeline produces these artefacts from which to extract values:
 | Headline rps Δ% | `cumulative_gains_summary.tsv` | `rps_pct` per `read-no-fault[default]` etc. |
 | Headline p99 Δ% | `cumulative_gains_summary.tsv` | `read_p99_pct`, `write_p99_pct` |
 | Per-PR table | `per_pr_summary.tsv` + `pr_to_nightly.tsv` | one row per PR |
-| Server-failure count | `staging/prom_gauges.tsv` | filter on `*Failed_max > 0` (should be empty) |
+| Server-failure count | `merged_metrics.tsv` | filter on `*Failed_max > 0` across `CommitsFailed_max`, `SnapshotApplysFailed_max`, `SnapshotCreationsFailed_max`, `RejectedSoftMemLimit_max` (should be empty). The raw `staging/prom_gauges.tsv` exposes these as rows with `name = ClickHouseProfileEvents_Keeper*Failed*` and value in `max_value`; filter there if you haven't built `merged_metrics.tsv` yet. |
 | Nightly count | `merged_metrics.tsv` | `count(distinct sha8)` |
 | Scenario+backend count | `merged_metrics.tsv` | `count(distinct (scenario,backend))` |
 | Memory verification | both `container.tsv` AND `prom_gauges.tsv` (look at `KeeperApproximateDataSize`) | confirm Keeper-reported memory matches the claimed Δ |

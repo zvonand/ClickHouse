@@ -43,4 +43,23 @@ hello
 (NULL,'hello')
 [1,2]	('[1,2]')
 {"x":1}	('{"x":1}')
+--Multi-row tests with non-constant JSON and multi-dimensional arrays--
+--JSON_VALUE with Tuple(Array, Array(Array)) over multiple rows--
+(['1'],[['2'],['3']])
+(['x'],[['y'],['z']])
+(['null'],[[NULL],[NULL]])
+([NULL],[[NULL],[NULL]])
+--JSON_VALUE with Array(Array) over multiple rows--
+[['1','2'],['3']]
+[['u','v'],['w']]
+[[NULL,NULL],[NULL]]
+--JSON_EXISTS with Tuple(Array, Array(Array)) over multiple rows--
+([1],[[0],[0]])
+([0],[[1],[1]])
+([1],[[1],[1]])
+([0],[[0],[0]])
+--JSON_QUERY with Array(Array) over multiple rows--
+[['[[1,2]]'],['[{"x":3}]','[42]']]
+[['["hello"]'],['[[1,2,3]]','']]
+[[''],['','']]
 --Error cases--

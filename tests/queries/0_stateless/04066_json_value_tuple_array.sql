@@ -70,6 +70,41 @@ SELECT JSON_VALUE('{"a":[1,2]}', '$.a') AS single, JSON_VALUE('{"a":[1,2]}', tup
 SELECT JSON_VALUE('{"a":{"x":1}}', '$.a') AS single, JSON_VALUE('{"a":{"x":1}}', tuple('$.a')) AS multi;
 SET function_json_value_return_type_allow_complex = 0;
 
+SELECT '--Multi-row tests with non-constant JSON and multi-dimensional arrays--';
+-- The path argument must be constant, but the JSON column can vary per row.
+-- These tests validate that the resulting array offsets are correct in nested
+-- array structures when running over a column with multiple different JSONs.
+
+SELECT '--JSON_VALUE with Tuple(Array, Array(Array)) over multiple rows--';
+SELECT JSON_VALUE(json, tuple(['$.a'], [['$.b'], ['$.c']]))
+FROM VALUES('json String',
+    ('{"a":1, "b":2, "c":3}'),
+    ('{"a":"x", "b":"y", "c":"z"}'),
+    ('{"a":null}'),
+    ('{bad json}'));
+
+SELECT '--JSON_VALUE with Array(Array) over multiple rows--';
+SELECT JSON_VALUE(json, [['$.a', '$.b'], ['$.c']])
+FROM VALUES('json String',
+    ('{"a":1, "b":2, "c":3}'),
+    ('{"a":"u", "b":"v", "c":"w"}'),
+    ('{}'));
+
+SELECT '--JSON_EXISTS with Tuple(Array, Array(Array)) over multiple rows--';
+SELECT JSON_EXISTS(json, tuple(['$.a'], [['$.b'], ['$.c']]))
+FROM VALUES('json String',
+    ('{"a":1}'),
+    ('{"b":2, "c":3}'),
+    ('{"a":1, "b":2, "c":3}'),
+    ('{}'));
+
+SELECT '--JSON_QUERY with Array(Array) over multiple rows--';
+SELECT JSON_QUERY(json, [['$.a'], ['$.b', '$.c']])
+FROM VALUES('json String',
+    ('{"a":[1,2], "b":{"x":3}, "c":42}'),
+    ('{"a":"hello", "b":[1,2,3]}'),
+    ('{}'));
+
 SELECT '--Error cases--';
 SELECT JSON_VALUE('{"a":1}', tuple('$..invalid')); -- { serverError BAD_ARGUMENTS }
 SELECT JSON_VALUE('{"a":1}', tuple('$.a', 1)); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }

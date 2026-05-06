@@ -54,6 +54,27 @@ Limitations:
 - Pool size depends on how many PRs were active that week
 - Sanity-check: PR `#102739` (typos) shows ±5 % rps Δ with this method, so anything below ±5 % is below the noise floor
 
+### Kind-matched baseline + primary fallback (Method A detail)
+
+In Method A (adjacent-nightly Δ) the baseline is the nightly nearest the PR's
+merge time. Some nightlies run only fault-sweep scenarios, others only
+no-fault, so a per-PR `pre`/`post` pair sometimes can't be drawn from the
+matching kind. `build_per_pr_metrics_tsv.py` resolves this in two steps:
+
+1. **Kind-matched first.** For each row's scenario kind (`fault` or
+   `no-fault`), use `pre_fault_sha8` / `post_fault_sha8` (or
+   `pre_nofault_sha8` / `post_nofault_sha8`) from `pr_to_nightly.tsv`.
+2. **Primary fallback.** When the matching-kind nightly is missing, fall
+   back to `pre_sha8` / `post_sha8` (the first post-merge nightly regardless
+   of kind). The `baseline_kind` cell in `per_pr_metrics_long.tsv` reflects
+   this — e.g. `fault(fallback-primary-pre)` means "scenario is fault,
+   pre-baseline came from the kind-agnostic primary because no fault-only
+   pre-nightly was available".
+
+This is intentional behavior, not a bug: cross-kind comparisons are noisier
+than same-kind, so prefer kind-matched but don't drop the row when only the
+primary baseline is usable.
+
 ## Significance bands (when to call something "real")
 
 | Metric | Direction | clean | watch | regression |

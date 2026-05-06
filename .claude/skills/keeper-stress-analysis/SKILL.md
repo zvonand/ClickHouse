@@ -165,8 +165,18 @@ Always verify these four counters are ZERO across the entire window:
 
 Any non-zero value overrides any positive verdict.
 
+There are two scopes to check, with different sources:
+
+- **Per-PR (post-merge only)**: `compute_deltas.py` already counts these in
+  the first nightly that includes the PR and emits `server_failures_post`
+  in `per_pr_summary.tsv`. A non-zero value flips the PR's verdict to
+  `regression(server-failure)`.
+- **Across the entire window**: run the `awk` recipe below against
+  `staging/prom_gauges.tsv` to confirm zero across every master nightly in
+  the window. This is the gate; the per-PR check is the per-PR symptom.
+
 ```bash
-# Check pattern
+# Across-window gate — must produce no rows
 awk -F'\t' '
 NR>1 && $4 ~ /(CommitsFailed|SnapshotCreationsFailed|SnapshotApplysFailed|RejectedSoftMemoryLimit)/ && $5+0 > 0 {
   print

@@ -25,6 +25,7 @@ and works for any PR list, not just the original validation set.
 """
 import csv
 import datetime
+import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -64,13 +65,7 @@ def iso_week(dt):
     return f"{yr}-W{wk:02d}"
 
 
-def import_statistics():
-    import statistics
-    return statistics
-
-
 def main():
-    statistics = import_statistics()
     runs = load_pr_branch_runs()
     print(f"Loaded {len(runs)} PR-branch run-rows", file=sys.stderr)
 
@@ -111,12 +106,12 @@ def main():
             wk = iso_week(head["dt"])
             same_week_pool = [(rps, p99) for rps, p99 in pool[scenario].get(wk, []) if rps != head["rps_v"]]
             if len(same_week_pool) < 2:
-                # Widen to ±1 ISO week
+                # Widen to ±1 ISO week. Use date arithmetic, not week-number ±1, so
+                # we cross year/W01/W52-53 boundaries correctly.
                 neighbours = []
-                yr, wn = wk.split("-W")
-                for delta in (-1, 1):
-                    new_wk = f"{yr}-W{int(wn)+delta:02d}"
-                    neighbours += pool[scenario].get(new_wk, [])
+                for delta_days in (-7, 7):
+                    neighbour_wk = iso_week(head["dt"] + datetime.timedelta(days=delta_days))
+                    neighbours += pool[scenario].get(neighbour_wk, [])
                 same_week_pool += [(rps, p99) for rps, p99 in neighbours if rps != head["rps_v"]]
             if not same_week_pool:
                 continue

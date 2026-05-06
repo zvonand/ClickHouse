@@ -3271,27 +3271,28 @@ def test_gcs_decompressive_transcoding(started_cluster):
 def test_query_condition_cache(started_cluster):
     instance = started_cluster.instances["dummy"]
     bucket = started_cluster.minio_bucket
-    filename = f"test_query_condition_cache_{generate_random_string()}.parquet"
-    url = f"http://{started_cluster.minio_host}:{started_cluster.minio_port}/{bucket}/{filename}"
-    s3_args = f"'{url}', 'minio', '{minio_secret_key}', 'Parquet'"
+    table_name = f"test_qcc_{generate_random_string()}"
+    url = f"http://{started_cluster.minio_host}:{started_cluster.minio_port}/{bucket}/{table_name}.parquet"
 
     instance.query(
         f"""
-        INSERT INTO TABLE FUNCTION s3({s3_args})
+        CREATE TABLE {table_name} (id Int64, val String)
+        ENGINE = S3('{url}', 'minio', '{minio_secret_key}', 'Parquet')
+        """
+    )
+
+    instance.query(
+        f"""
+        INSERT INTO {table_name}
         SELECT number AS id, toString(number) AS val
         FROM numbers(1000)
-        SETTINGS
-            s3_truncate_on_insert = 1,
-            output_format_parquet_row_group_size = 100
+        SETTINGS output_format_parquet_row_group_size = 100
         """
     )
 
     instance.query("SYSTEM DROP QUERY CONDITION CACHE")
 
-    select_query = (
-        f"SELECT * FROM s3({s3_args}, 'id Int64, val String') "
-        f"WHERE id < 100 ORDER BY id"
-    )
+    select_query = f"SELECT * FROM {table_name} WHERE id % 100 = 0 ORDER BY id"
     settings = {
         "use_query_condition_cache": 1,
         "allow_experimental_analyzer": 1,
@@ -3357,4 +3358,6 @@ def test_query_condition_cache(started_cluster):
     )
     assert misses_after_drop > 0, f"Expected cache misses after drop, got {misses_after_drop}"
     assert hits_after_drop == 0, f"Expected no hits after drop, got {hits_after_drop}"
+
+    instance.query(f"DROP TABLE {table_name}")
 

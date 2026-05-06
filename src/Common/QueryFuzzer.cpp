@@ -2018,7 +2018,7 @@ void QueryFuzzer::fuzzExplainSettings(ASTSetQuery & settings_ast, ASTExplainQuer
              "compact",
              "column_structure",
              "pretty"}},
-           {ASTExplainQuery::ExplainKind::QueryPipeline, {"header", "graph", "compact"}},
+           {ASTExplainQuery::ExplainKind::QueryPipeline, {"header", "graph", "compact", "distributed"}},
            {ASTExplainQuery::ExplainKind::QueryEstimates,
             {"header",
              "description",

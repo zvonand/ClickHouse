@@ -3440,7 +3440,7 @@ void StatementGenerator::generateNextExplain(RandomGenerator & rg, bool in_paral
                     this->ids.insert(this->ids.end(), {1, 8, 9, 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22});
                     break;
                 case ExplainQuery_ExplainValues::ExplainQuery_ExplainValues_PIPELINE:
-                    this->ids.insert(this->ids.end(), {0, 15, 16});
+                    this->ids.insert(this->ids.end(), {0, 8, 15, 16});
                     break;
                 case ExplainQuery_ExplainValues::ExplainQuery_ExplainValues_CURRENT_TRANSACTION:
                     break;

@@ -1903,10 +1903,12 @@ void ReadFromFile::initializePipeline(QueryPipelineBuilder & pipeline, const Bui
     /// We use the file list from `files_iterator` rather than `storage->paths`: the
     /// iterator has already pruned files by `_path`/`_file` virtual-column predicates
     /// (`createPathAndFileFilterDAG`), so the optimization respects that pruning. If
-    /// the predicate excludes the only path the file is not read at all.
+    /// the predicate excludes the only path the file is not read at all. It also
+    /// means a query against many paths whose predicate prunes down to a single file
+    /// still benefits from the split.
     std::vector<FileBucketInfoPtr> per_source_buckets;
     String single_file_path;
-    if (num_streams < max_num_streams
+    if (max_num_streams > 1
         && !storage->archive_info
         && !storage->use_table_fd
         && !storage->has_peekable_read_buffer_from_fd.load()

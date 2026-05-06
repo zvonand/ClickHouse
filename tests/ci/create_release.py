@@ -444,6 +444,10 @@ class ReleaseInfo:
             )
             assert diff_rc <= 1, f"`git diff` failed with exit code {diff_rc}"
             files_changed = dry_run or diff_rc == 1
+            if not files_changed:
+                print(
+                    f"Version files already up to date on {self.release_branch} — skipping commit and push (rerun)"
+                )
             if files_changed:
                 Shell.check(
                     cmd_commit_version_upd, strict=True, dry_run=dry_run, verbose=True

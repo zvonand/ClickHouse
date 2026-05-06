@@ -3297,7 +3297,14 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         /// XML encoding (String → String)
         {"encodeXMLComponent", "decodeXMLComponent"},
         /// Text classification (arity mismatch is intentional: naiveBayesClassifier takes (model, text), the rest take (text))
-        {"naiveBayesClassifier", "detectCharset", "detectLanguage", "detectTonality"}};
+        {"naiveBayesClassifier",
+         "detectCharset",
+         "detectLanguage",
+         "detectLanguageUnknown",
+         "detectLanguageMixed",
+         "detectTonality"},
+        /// Word-level NLP (language/extension + word)
+        {"stem", "lemmatize", "synonyms"}};
 
 void QueryFuzzer::fuzz(ASTPtr & ast)
 {

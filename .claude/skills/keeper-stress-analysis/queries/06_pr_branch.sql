@@ -7,7 +7,7 @@ SELECT
   round(maxIf(value, name='rps'), 0)               AS rps,
   round(maxIf(value, name='read_p99_ms'), 1)       AS read_p99,
   round(maxIf(value, name='write_p99_ms'), 1)      AS write_p99,
-  round(maxIf(value, name='error_pct')*100, 4)     AS error_pct,
+  round(maxIf(value, name='error_rate')*100, 4)    AS error_pct,
   round(maxIf(value, name='ops'), 0)               AS ops
 FROM keeper_stress_tests.keeper_metrics_ts
 WHERE source='bench' AND stage='summary'

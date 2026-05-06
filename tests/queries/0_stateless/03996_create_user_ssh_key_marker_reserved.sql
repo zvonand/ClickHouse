@@ -1,4 +1,3 @@
--- Tags: no-parallel
 -- Test: rejects creating users whose name starts with the SSH key authentication marker.
 -- Covers: src/Access/User.cpp:34 — name_.starts_with(SSH_KEY_AUTHENTICAION_MARKER) check.
 -- Marker value (src/Core/Protocol.h:64): " SSH KEY AUTHENTICATION ".

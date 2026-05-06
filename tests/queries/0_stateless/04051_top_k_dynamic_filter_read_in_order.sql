@@ -41,12 +41,14 @@ ORDER BY event_time_microseconds DESC
 LIMIT 1;
 
 -- Sanity check: when sorting by a non-key column, dynamic filtering should
--- still be applied (the plan should contain __topKFilter).
+-- still be applied (the plan should contain `__topKFilter`). Column `y` is
+-- `String`, so dynamic filtering for variable-length types must be enabled
+-- explicitly via `use_top_k_dynamic_filtering_for_variable_length_types`.
 SELECT count() > 0 AS has_topk_filter
 FROM (
     EXPLAIN actions = 1
     SELECT y FROM t_topk_rio ORDER BY y LIMIT 5
-    SETTINGS optimize_read_in_order = 1, use_top_k_dynamic_filtering = 1, query_plan_max_limit_for_top_k_optimization = 100
+    SETTINGS optimize_read_in_order = 1, use_top_k_dynamic_filtering = 1, use_top_k_dynamic_filtering_for_variable_length_types = 1, query_plan_max_limit_for_top_k_optimization = 100
 )
 WHERE explain LIKE '%__topKFilter%';
 

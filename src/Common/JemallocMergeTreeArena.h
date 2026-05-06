@@ -18,18 +18,22 @@ namespace DB::JemallocMergeTreeArena
 ///     `setColumns`.
 ///
 /// Creates the arena on first call (thread-safe via Meyers singleton).
-/// Returns 0 (meaning "use default arena selection") if jemalloc is not available.
+/// Returns 0 (meaning "use default arena selection") if jemalloc is not available, or if
+/// `mallctl("arenas.create", ...)` failed at first call — in which case an error is logged
+/// and `isEnabled` returns false. Passing 0 to `ScopedJemallocThreadArena` is a documented
+/// no-op, so callers do not need to branch on availability.
 ///
 /// Callers route allocations into this arena for a tightly-bounded scope by using
 /// `ScopedJemallocThreadArena` from `Common/Jemalloc.h`. Frees auto-route via jemalloc's
 /// per-extent metadata, so only allocation paths need scoping.
 unsigned getArenaIndex();
 
-/// Whether the dedicated MergeTree arena is available (jemalloc compiled in).
+/// Whether the dedicated MergeTree arena is available (jemalloc compiled in and
+/// `arenas.create` succeeded on first call).
 bool isEnabled();
 
 /// Purge dirty pages only in the MergeTree arena, returning memory to the OS.
-/// No-op if jemalloc is not available.
+/// No-op if the arena is not available (`isEnabled()` returns false).
 void purge();
 
 }

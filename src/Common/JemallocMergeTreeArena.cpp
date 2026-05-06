@@ -2,10 +2,10 @@
 
 #if USE_JEMALLOC
 
-#include <Common/Exception.h>
 #include <Common/Jemalloc.h>
 #include <Common/ProfileEvents.h>
 #include <Common/Stopwatch.h>
+#include <Common/logger_useful.h>
 
 #include <fmt/format.h>
 #include <jemalloc/jemalloc.h>
@@ -17,45 +17,64 @@ namespace ProfileEvents
     extern const Event MemoryAllocatorPurgeTimeMicroseconds;
 }
 
-namespace DB
-{
-namespace ErrorCodes
-{
-    extern const int CANNOT_ALLOCATE_MEMORY;
-}
-}
-
 namespace DB::JemallocMergeTreeArena
 {
 
 namespace
 {
 
-unsigned createArena()
+struct ArenaState
+{
+    unsigned index;
+    bool enabled;
+};
+
+ArenaState createArena()
 {
     unsigned arena_index = 0;
     size_t arena_index_size = sizeof(arena_index);
     int err = je_mallctl("arenas.create", &arena_index, &arena_index_size, nullptr, 0);
     if (err)
-        throw DB::Exception(DB::ErrorCodes::CANNOT_ALLOCATE_MEMORY, "JemallocMergeTreeArena: Failed to create jemalloc arena, error: {}", err);
-    return arena_index;
+    {
+        /// Don't throw: this arena is a fragmentation optimization, not a correctness prerequisite.
+        /// `getArenaIndex` is on every part-loading and table-creating hot path; throwing here
+        /// would brick startup and every CREATE / INSERT / merge. Fall back to arena 0 — passing 0
+        /// to `ScopedJemallocThreadArena` is already a documented no-op that allocates from the
+        /// default arena. The cost is degraded fragmentation, not correctness.
+        LOG_ERROR(
+            &Poco::Logger::get("JemallocMergeTreeArena"),
+            "Failed to create dedicated jemalloc MergeTree arena (mallctl error: {}). "
+            "MergeTree allocations will use the default arena and the fragmentation reduction "
+            "documented for `jemalloc.mergetree_arena.*` is disabled.",
+            err);
+        return {0, false};
+    }
+    return {arena_index, true};
+}
+
+const ArenaState & state()
+{
+    static const ArenaState s = createArena();
+    return s;
 }
 
 }
 
 unsigned getArenaIndex()
 {
-    static unsigned index = createArena();
-    return index;
+    return state().index;
 }
 
 bool isEnabled()
 {
-    return true;
+    return state().enabled;
 }
 
 void purge()
 {
+    if (!isEnabled())
+        return;
+
     static Jemalloc::MibCache<unsigned> purge_mib(fmt::format("arena.{}.purge", getArenaIndex()).c_str());
 
     Stopwatch watch;

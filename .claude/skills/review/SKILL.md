@@ -213,6 +213,10 @@ Workflow:
 
 5. **Verify test coverage.** The PR's tests must include adversarial edge cases that the original caller would never produce: empty inputs, minimal-length inputs, malformed inputs, NULLs, maximum-length inputs.
 
+**12) Shell-command safety in Python / shell scripts**
+- Destructive or privileged commands (`rm -rf`, `mv`, `cp -r`, `find … -delete`, `chmod`, `chown`, `dd`, `kill`, `sudo …`) with substituted arguments passed to `shell=True` (`subprocess.run`/`Popen`, `os.system`) or to in-tree wrappers that use `shell=True` under the hood (ClickHouse's `Shell.check` / `Shell.run` / `Shell.get_output`).
+- Unquoted variables in destructive commands inside `.sh` scripts.
+- Prefer `shutil.rmtree` or argv-list `subprocess.run`; if a shell wrapper is unavoidable, use `shlex.quote` and `--`.
 
 CLICKHOUSE RULES (MANDATORY)
 - **Deletion logging**
@@ -252,6 +256,7 @@ SEVERITY MODEL – WHAT DESERVES A COMMENT
 - Security or privilege issues, or license incompatibility.
 - Server-side file access with user-controlled paths that bypass `user_files_path` or equivalent restrictions.
 - Large binary files (JARs, archives, datasets, compiled artifacts) committed to git — permanent, irreversible repo bloat.
+- Destructive shell commands (`rm -rf`, `mv`, `chmod`, `dd`, `sudo`, …) with unquoted substitution under `shell=True` or in shell scripts.
 
 **Majors** – serious but not catastrophic
 - Under-tested important edge cases or error paths.

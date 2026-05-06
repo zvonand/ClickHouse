@@ -120,9 +120,6 @@ void TableMetadata::setLocation(const std::string & location_)
         bucket = bucket_part.substr(0, at_pos);
         azure_account_with_suffix = bucket_part.substr(at_pos + 1);
 
-        if (force_add_bucket)
-            abfss_has_container_path_prefix = true;
-
         LOG_TEST(getLogger("TableMetadata"),
                  "Parsed Azure location - container: {}, account: {}, path: {}",
                  bucket, azure_account_with_suffix, path);
@@ -170,7 +167,7 @@ std::string TableMetadata::constructLocation(const std::string & endpoint_, DB::
     /// The bucket variable contains the container name for Azure.
     if (!azure_account_with_suffix.empty())
     {
-        if (abfss_has_container_path_prefix && location.find("/" + bucket) != std::string::npos)
+        if (!force_add_bucket && location.find("/" + bucket) != std::string::npos)
             return std::filesystem::path(location) / path / "";
         return std::filesystem::path(location) / bucket / path / "";
     }
@@ -201,7 +198,7 @@ std::string TableMetadata::constructLocation(const std::string & endpoint_, DB::
                 endpoint_uri.getHost(), bucket);
     }
 
-    if (location.ends_with(bucket))
+    if (!force_add_bucket && location.ends_with(bucket))
         return std::filesystem::path(location) / path / "";
     return std::filesystem::path(location) / bucket / path / "";
 }

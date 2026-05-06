@@ -3136,7 +3136,7 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         {"arrayReverse",           "arrayShuffle",   "arrayDistinct", "arrayCompact",   "arrayFlatten",       "arrayConcat",
          "arrayIntersect",         "arrayPopFront",  "arrayPopBack",  "arrayPushFront", "arrayPushBack",      "arrayRotateLeft",
          "arrayRotateRight",       "arraySlice",     "arrayZip",      "arrayEnumerate", "arrayEnumerateUniq", "arrayCumSum",
-         "arrayCumSumNonNegative", "arrayDifference"},
+         "arrayCumSumNonNegative", "arrayDifference", "arrayTranspose"},
         /// URL hierarchy generators (url → Array(String))
         {"URLHierarchy", "URLPathHierarchy"},
         /// Trig functions, logarithms, exponentials and roots (number → Float64)

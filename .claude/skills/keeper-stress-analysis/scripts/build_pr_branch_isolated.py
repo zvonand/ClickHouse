@@ -76,11 +76,15 @@ def main():
 
     branches_of_interest = {br for _, _, br in pr_set}
 
-    # Build weekly pool: scenario → week → list of (rps, p99) across ALL PR branches
-    # in staging (not just our PR set — broader pool gives a tighter weekly baseline).
+    # Build weekly pool: scenario → week → list of (sha8, run_ended, rps, p99)
+    # across ALL PR branches in staging (broader pool → tighter weekly baseline).
+    # Identity (sha8, run_ended) is carried so the head row can be excluded by
+    # identity, not by rps value (which can collide between unrelated runs).
     pool = defaultdict(lambda: defaultdict(list))
     for r in runs:
-        pool[r["scenario"]][iso_week(r["dt"])].append((r["rps_v"], r["p99_v"]))
+        pool[r["scenario"]][iso_week(r["dt"])].append(
+            (r["sha8"], r["run_ended"], r["rps_v"], r["p99_v"])
+        )
 
     # Per-PR HEAD = latest run per (branch, scenario) for branches in our PR set.
     pr_head = {}
@@ -104,7 +108,10 @@ def main():
                 })
                 continue
             wk = iso_week(head["dt"])
-            same_week_pool = [(rps, p99) for rps, p99 in pool[scenario].get(wk, []) if rps != head["rps_v"]]
+            head_id = (head["sha8"], head["run_ended"])
+            same_week_pool = [
+                t for t in pool[scenario].get(wk, []) if (t[0], t[1]) != head_id
+            ]
             if len(same_week_pool) < 2:
                 # Widen to ±1 ISO week. Use date arithmetic, not week-number ±1, so
                 # we cross year/W01/W52-53 boundaries correctly.
@@ -112,11 +119,11 @@ def main():
                 for delta_days in (-7, 7):
                     neighbour_wk = iso_week(head["dt"] + datetime.timedelta(days=delta_days))
                     neighbours += pool[scenario].get(neighbour_wk, [])
-                same_week_pool += [(rps, p99) for rps, p99 in neighbours if rps != head["rps_v"]]
+                same_week_pool += [t for t in neighbours if (t[0], t[1]) != head_id]
             if not same_week_pool:
                 continue
-            pool_rps = [rps for rps, _ in same_week_pool if rps > 0]
-            pool_p99 = [p99 for _, p99 in same_week_pool if p99 > 0]
+            pool_rps = [rps for _, _, rps, _ in same_week_pool if rps > 0]
+            pool_p99 = [p99 for _, _, _, p99 in same_week_pool if p99 > 0]
             if not pool_rps:
                 continue
             pool_med_rps = statistics.median(pool_rps)

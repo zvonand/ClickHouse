@@ -76,14 +76,16 @@ def main():
 
     branches_of_interest = {br for _, _, br in pr_set}
 
-    # Build weekly pool: scenario → week → list of (sha8, run_ended, rps, p99)
+    # Build weekly pool: scenario → week → list of (sha8, run_ended, rps, p99, branch)
     # across ALL PR branches in staging (broader pool → tighter weekly baseline).
-    # Identity (sha8, run_ended) is carried so the head row can be excluded by
-    # identity, not by rps value (which can collide between unrelated runs).
+    # `branch` is carried so we can exclude every run from the head's own branch
+    # — the docstring above promises a median over OTHER PR branches, and
+    # earlier commits on the same branch are correlated with the PR's code
+    # change, so leaving them in would dilute the isolated Δ toward zero.
     pool = defaultdict(lambda: defaultdict(list))
     for r in runs:
         pool[r["scenario"]][iso_week(r["dt"])].append(
-            (r["sha8"], r["run_ended"], r["rps_v"], r["p99_v"])
+            (r["sha8"], r["run_ended"], r["rps_v"], r["p99_v"], r["branch"])
         )
 
     # Per-PR HEAD = latest run per (branch, scenario) for branches in our PR set.
@@ -108,9 +110,8 @@ def main():
                 })
                 continue
             wk = iso_week(head["dt"])
-            head_id = (head["sha8"], head["run_ended"])
             same_week_pool = [
-                t for t in pool[scenario].get(wk, []) if (t[0], t[1]) != head_id
+                t for t in pool[scenario].get(wk, []) if t[4] != head["branch"]
             ]
             if len(same_week_pool) < 2:
                 # Widen to ±1 ISO week. Use date arithmetic, not week-number ±1, so
@@ -119,11 +120,11 @@ def main():
                 for delta_days in (-7, 7):
                     neighbour_wk = iso_week(head["dt"] + datetime.timedelta(days=delta_days))
                     neighbours += pool[scenario].get(neighbour_wk, [])
-                same_week_pool += [t for t in neighbours if (t[0], t[1]) != head_id]
+                same_week_pool += [t for t in neighbours if t[4] != head["branch"]]
             if not same_week_pool:
                 continue
-            pool_rps = [rps for _, _, rps, _ in same_week_pool if rps > 0]
-            pool_p99 = [p99 for _, _, _, p99 in same_week_pool if p99 > 0]
+            pool_rps = [t[2] for t in same_week_pool if t[2] > 0]
+            pool_p99 = [t[3] for t in same_week_pool if t[3] > 0]
             if not pool_rps:
                 continue
             pool_med_rps = statistics.median(pool_rps)

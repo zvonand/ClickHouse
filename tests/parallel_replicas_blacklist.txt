@@ -13,9 +13,6 @@
 03045_unknown_identifier_alias_substitution
 02561_temporary_table_sessions
 02525_different_engines_in_temporary_tables
-00645_date_time_input_format
-02154_default_keyword_insert
-02807_default_date_time_nullable
 
     https://github.com/ClickHouse/ClickHouse/issues/74324
     MULTIPLE_EXPRESSIONS_FOR_ALIAS
@@ -45,13 +42,6 @@
     Bloom filters
     Needle must not contain whitespace or separator characters: while executing 'FUNCTION hasToken(s : 0, 'abcabcabcabcabcabcabcab\0'_String :: 1) -> hasToken(__table1.s, 'abcabcabcabcabcabcabcab\0'_String) UInt8 : 2': While executing MergeTreeSelect(pool: ReadPoolParallelReplicas, algorithm: Thread). (BAD_ARGUMENTS) (version 25.1.1.1927 (official build)) (from [::ffff:127.0.0.1]:44318) (comment: 01781_token_extractor_buffer_overflow.sql) (in query: SELECT max(`__table1`.`id`) AS `max(id)` FROM `test_klfow1or`.`bloom_filter` AS `__table1` WHERE hasToken(`__table1`.`s`, 'abcabcabcabcabcabcabcab\0'))
 00945_bloom_filter_index
-
-    Setting offset=5 not work
-01892_setting_limit_offset_distributed
-
-    minor: distributed
-02517_wrong_total_structure_crash
-02985_shard_query_start_time
 
     order is never guaranteed
     https://github.com/ClickHouse/ClickHouse/issues/63203

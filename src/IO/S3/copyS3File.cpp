@@ -265,8 +265,6 @@ namespace
             calculatePartSize(size);
             createMultipartUpload();
 
-            multipart_tags.resize(num_parts);
-
             size_t position = start_offset;
             size_t end_position = start_offset + size;
 
@@ -275,6 +273,7 @@ namespace
 
             try
             {
+                multipart_tags.resize(num_parts);
                 for (size_t part_number = 1; position < end_position; ++part_number)
                 {
                     if (has_failed)

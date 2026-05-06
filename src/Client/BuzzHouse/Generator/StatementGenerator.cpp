@@ -2160,6 +2160,19 @@ std::optional<String> StatementGenerator::alterSingleTable(
                  if (rg.nextSmallNumber() < 4)
                      es->set_dry_run(rg.nextBool());
              }},
+            /// Remove orphan files (Iceberg-specific)
+            {4,
+             [&]
+             {
+                 RemoveOrphanFiles * ro = ati->mutable_execute_command()->mutable_remove_orphan_files();
+
+                 if (rg.nextSmallNumber() < 4)
+                     ro->set_older_than(getNextIcebergExpireTimestamp(rg, fc));
+                 if (rg.nextSmallNumber() < 4)
+                     ro->set_location(t.getTablePath(rg, this->allow_not_deterministic));
+                 if (rg.nextSmallNumber() < 4)
+                     ro->set_dry_run(rg.nextBool());
+             }},
         });
     }
 

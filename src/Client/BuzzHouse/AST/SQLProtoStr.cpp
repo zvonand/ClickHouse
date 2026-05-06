@@ -4644,6 +4644,21 @@ CONV_FN(ExpireSnapshots, es)
     ret += ")";
 }
 
+CONV_FN(RemoveOrphanFiles, ro)
+{
+    bool has_arg = false;
+    auto sep = [&]() -> String { return std::exchange(has_arg, true) ? ", " : ""; };
+
+    ret += "remove_orphan_files(";
+    if (ro.has_older_than())
+        ret += sep() + "'" + ro.older_than() + "'";
+    if (ro.has_location())
+        ret += sep() + "location = '" + ro.location() + "'";
+    if (ro.dry_run())
+        ret += sep() + "dry_run = 1";
+    ret += ")";
+}
+
 CONV_FN(ExecuteCommand, ec)
 {
     ret += "EXECUTE ";
@@ -4652,6 +4667,9 @@ CONV_FN(ExecuteCommand, ec)
     {
         case CommandType::kExpireSnapshots:
             ExpireSnapshotsToString(ret, ec.expire_snapshots());
+            break;
+        case CommandType::kRemoveOrphanFiles:
+            RemoveOrphanFilesToString(ret, ec.remove_orphan_files());
             break;
         default:
             break;

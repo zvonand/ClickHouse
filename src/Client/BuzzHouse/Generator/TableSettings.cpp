@@ -607,6 +607,7 @@ std::unordered_map<String, CHSetting> restoreSettings
        {"allow_s3_native_copy", trueOrFalseSettingNoOracle},
        {"async", trueOrFalseSettingNoOracle},
        {"internal", trueOrFalseSettingNoOracle},
+       {"restore_access_entities_with_current_grants", trueOrFalseSettingNoOracle},
        {"restore_broken_parts_as_detached", trueOrFalseSettingNoOracle},
        {"skip_unresolved_access_dependencies", trueOrFalseSettingNoOracle},
        {"structure_only", trueOrFalseSettingNoOracle},
@@ -624,6 +625,15 @@ std::unordered_map<String, CHSetting> backupSettings
        {"backup_data_from_refreshable_materialized_view_targets", trueOrFalseSettingNoOracle},
        {"check_parts", trueOrFalseSettingNoOracle},
        {"check_projection_parts", trueOrFalseSettingNoOracle},
+       {"compression_method",
+        CHSetting(
+            [](RandomGenerator & rg, FuzzConfig &)
+            {
+                static const DB::Strings methods = {"'none'", "'lz4'", "'zstd'", "'gzip'", "'deflate'"};
+                return rg.pickRandomly(methods);
+            },
+            {},
+            false)},
        {"decrypt_files_from_encrypted_disks", trueOrFalseSettingNoOracle},
        {"deduplicate_files", trueOrFalseSettingNoOracle},
        {"experimental_lightweight_snapshot", trueOrFalseSettingNoOracle},
@@ -631,6 +641,7 @@ std::unordered_map<String, CHSetting> backupSettings
        {"read_from_filesystem_cache", trueOrFalseSettingNoOracle},
        {"s3_storage_class", CHSetting([](RandomGenerator &, FuzzConfig &) { return "'STANDARD'"; }, {}, false)},
        {"structure_only", trueOrFalseSettingNoOracle},
+       {"use_same_s3_credentials_for_base_backup", trueOrFalseSettingNoOracle},
        {"write_access_entities_dependents", trueOrFalseSettingNoOracle}};
 
 std::unordered_map<String, CHSetting> projectionSettings

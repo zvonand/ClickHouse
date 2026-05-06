@@ -3295,7 +3295,9 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         /// URL percent-encoding (String → String)
         {"encodeURLComponent", "decodeURLComponent", "decodeURLFormComponent"},
         /// XML encoding (String → String)
-        {"encodeXMLComponent", "decodeXMLComponent"}};
+        {"encodeXMLComponent", "decodeXMLComponent"},
+        /// Text classification (arity mismatch is intentional: naiveBayesClassifier takes (model, text), the rest take (text))
+        {"naiveBayesClassifier", "detectCharset", "detectLanguage", "detectTonality"}};
 
 void QueryFuzzer::fuzz(ASTPtr & ast)
 {

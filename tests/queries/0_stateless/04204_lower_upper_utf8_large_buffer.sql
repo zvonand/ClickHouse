@@ -1,3 +1,6 @@
+-- Tags: no-fasttest
+-- Reason: lowerUTF8 / upperUTF8 are only available with ICU support, which is disabled in the fast-test build.
+
 -- Test that `lowerUTF8`/`upperUTF8` handle the ICU code path without int32_t overflow.
 -- The root cause was that destCapacity passed to ICU's `ucasemap_utf8ToLower/Upper`
 -- overflowed int32_t when the accumulated output buffer exceeded ~2 GB, causing

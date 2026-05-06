@@ -1,6 +1,6 @@
 ---
 name: keeper-stress-analysis
-description: Analyze ClickHouse Keeper stress-test results from play.clickhouse.com / keeper_stress_tests data warehouse. Use whenever the user asks about Keeper performance, validates Keeper PRs against stress dashboards, investigates regressions or improvements in Keeper nightlies, asks about specific date windows / SHAs / PR-sets in Keeper stress tests, wants per-PR or window-vs-window comparisons, asks "did this PR break Keeper", asks "what changed in Keeper between dates", or wants a Slack-ready summary of Keeper stress runs. Triggers on terms like "keeper stress", "keeper PR", "keeper p99", "keeper memory", "keeper rps", "keeper nightly", "keeper-stress-tests", "keeper validation", "keeper regression", or any question referencing the keeper-stress Grafana dashboard. ALWAYS prefer this skill over re-deriving the workflow from scratch — it captures hard-learned lessons about cgroup-vs-Keeper memory, bench-harness confounds, noise floors, and per-PR attribution limits.
+description: Analyze ClickHouse Keeper stress-test results from play.clickhouse.com / keeper_stress_tests data warehouse. Use whenever the user asks about Keeper performance, validates Keeper PRs against stress dashboards, investigates regressions or improvements in Keeper nightlies, asks about specific date windows / SHAs / PR-sets in Keeper stress tests, wants per-PR or window-vs-window comparisons, asks "did this PR break Keeper", asks "what changed in Keeper between dates", or wants a summary report of Keeper stress runs. Triggers on terms like "keeper stress", "keeper PR", "keeper p99", "keeper memory", "keeper rps", "keeper nightly", "keeper-stress-tests", "keeper validation", "keeper regression", or any question referencing the keeper-stress Grafana dashboard. ALWAYS prefer this skill over re-deriving the workflow from scratch — it captures hard-learned lessons about cgroup-vs-Keeper memory, bench-harness confounds, noise floors, and per-PR attribution limits.
 argument-hint: [<date-window>|<pr-list>|<question>]
 disable-model-invocation: false
 allowed-tools: Bash(curl:*), Bash(python3:*), Bash(awk:*), Bash(mkdir:*), Bash(ls:*), Bash(wc:*), Bash(grep:*), Bash(sort:*), Bash(cat:*), Bash(gh:*), Bash(realpath:*), Bash(cp:*), Bash(chmod:*), Bash(sed:*), Read, Write, Edit, Glob, Grep
@@ -17,7 +17,7 @@ This skill triggers on these kinds of requests:
 - "What changed in Keeper between 2026-04-01 and 2026-05-01?"
 - "Did PR #X cause any regression in Keeper stress?"
 - "Why did p99 spike on date Y?"
-- "Make a Slack summary of Keeper stress runs"
+- "Give me a summary report of Keeper stress runs"
 - "How are the Keeper PRs performing on the dashboard?"
 
 The skill does NOT touch any other CI data — it's specific to the Keeper stress framework.
@@ -116,9 +116,9 @@ Pick the deliverable that matches the request:
 
 | User wants | Where to look |
 |---|---|
-| Slack message | `references/slack_templates.md` (full / tight / one-liner templates with placeholders) |
+| Summary report | `references/report_templates.md` (full / tight / one-liner monospace templates with placeholders) |
 | Per-PR Markdown table | `examples/sample_outputs/PR_PERF_TABLE.md` (canonical example: data-backed per-PR table with co-merge attribution and noise-floor caveats) |
-| Cumulative-gains write-up | Build from `cumulative_gains_summary.tsv` using `references/slack_templates.md` formatting |
+| Cumulative-gains write-up | Build from `cumulative_gains_summary.tsv` using `references/report_templates.md` formatting |
 | Per-PR mover matrix / progress attribution | Build from `per_pr_metrics_long.tsv` (produced by `build_per_pr_metrics_tsv.py`) and `per_pr_summary.tsv` (from `compute_deltas.py`) |
 | Full validation report | Compose from the per-PR table + cumulative-gains + caveats sections; mirror the structure of `examples/sample_outputs/PR_PERF_TABLE.md` |
 
@@ -227,7 +227,7 @@ When you need deeper guidance, read these into context:
 - **`references/methodology.md`** — comparison-method choice (adjacent-nightly vs median-of-3 vs PR-branch isolation), significance bands, environment-offset correction.
 - **`references/known_confounds.md`** — catalog of bench-harness PRs that move dashboard metrics; updated as new ones are observed.
 - **`references/metric_glossary.md`** — what every column in `keeper_metrics_ts` measures, and which ones to NOT use (e.g. `max_cpu_cores`, raw `container_memory_bytes` for "Keeper memory").
-- **`references/slack_templates.md`** — three templates (full / tight / one-liner) with placeholder format.
+- **`references/report_templates.md`** — three monospace templates (full / tight / one-liner) with placeholder format.
 
 ## Verifying the analysis is correct
 
@@ -261,22 +261,22 @@ Process:
 1. Run `rebuild.sh` with TS filter `2026-04-01`.
 2. Run `build_cumulative_gains.py` — produces `cumulative_gains_summary.tsv` with median-of-3 vs median-of-3 deltas.
 3. Apply Phase 5 checks — flag the bench-harness changes from `known_confounds.md` that landed in this window. For `2026-04-01 → 2026-05-01` both `#100670` (`2026-04-04`) and `#101801` (`2026-04-11`) are in-window, so call them out as confounds for any read-heavy memory or rocks-side write-multi memory deltas.
-4. Output: a cumulative-gains write-up built from `cumulative_gains_summary.tsv` using `references/slack_templates.md` formatting, with conservative deltas + caveats (always include the bench-harness confound notes from `references/known_confounds.md` if any of those PR dates fall in the window).
+4. Output: a cumulative-gains write-up built from `cumulative_gains_summary.tsv` using `references/report_templates.md` formatting, with conservative deltas + caveats (always include the bench-harness confound notes from `references/known_confounds.md` if any of those PR dates fall in the window).
 
-### Example 3 — Slack summary
+### Example 3 — Summary report
 
-User: "Make a Slack summary of these PRs: ..."
+User: "Give me a summary of these PRs: ..."
 
 Process:
 1. Build `pr_meta.tsv` from the PR list using `gh`.
 2. Run full pipeline (rebuild.sh + per-PR scripts).
 3. Categorize PRs by intent (perf cohort by code path, correctness, tooling, refactor, net-zero).
-4. Fill in `references/slack_templates.md` "full" template.
+4. Fill in `references/report_templates.md` "full" template.
 5. Apply Phase 5 caveats — if any in-window bench-harness changes, mention by PR number.
 
 ## Output discipline
 
-When the user is asking for analysis (not a Slack post), produce:
+When the user is asking for analysis (not a templated report), produce:
 1. **Headline finding** — 1-2 sentences. State the verdict directly.
 2. **Backing table** — every claim has a specific scenario+metric+number.
 3. **Caveats** — note any noise-floor, co-merge, or bench-harness limitations.

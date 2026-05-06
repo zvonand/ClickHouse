@@ -1,8 +1,8 @@
-# Slack message templates
+# Monospace report templates
 
-Three templates depending on channel scope. Pick whichever matches the audience.
+Three templates depending on report scope. Pick whichever matches the audience. Each renders cleanly in any monospace context — terminal output, code-fenced markdown (PR comments, design docs), team-chat code blocks, etc.
 
-## Template 1 — Full validation post (for `#keeper-dev` or release-readiness)
+## Template 1 — Full validation report (release-readiness or broad audience)
 
 Use this for comprehensive validation reports. Replace placeholders in `{{double-curly}}`.
 
@@ -122,10 +122,10 @@ The skill's pipeline produces these artefacts from which to extract values:
 | Scenario+backend count | `merged_metrics.tsv` | `count(distinct (scenario,backend))` |
 | Memory verification | both `container.tsv` AND `prom_gauges.tsv` (look at `KeeperApproximateDataSize`) | confirm Keeper-reported memory matches the claimed Δ |
 
-## Slack rendering tips
+## Monospace rendering tips
 
 - Wrap the whole block in triple backticks for monospace alignment
-- Prefer ASCII box drawing (`═`, `│`, `┌`, `└`) over Unicode tables — Slack's monospace handles them well
-- Keep line width ≤ 95 chars to avoid wrapping
-- Don't use markdown tables (`|---|---|`) inside code blocks; they're not rendered, just literal text
+- Prefer ASCII box drawing (`═`, `│`, `┌`, `└`) over Unicode tables — handles consistently across terminal, GitHub PR comments, and chat code blocks
+- Keep line width ≤ 95 chars to avoid wrapping in narrower viewers
+- Don't use markdown tables (`|---|---|`) inside code blocks; they render as literal text, not as a table
 - Emojis at section markers (✅ 📊 🚀 ✍️ 🧠 🧹 ⏪ ⚠️ 🎯) are fine and improve scannability

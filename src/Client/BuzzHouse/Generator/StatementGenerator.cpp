@@ -496,7 +496,8 @@ void StatementGenerator::generateNextRefreshableView(RandomGenerator & rg, Refre
     const bool has_views = collectionHas<SQLView>(attached_views);
     const bool has_dictionaries = collectionHas<SQLDictionary>(attached_dictionaries);
 
-    if ((has_tables || !systemTables.empty() || has_views || has_dictionaries) && rg.nextBool())
+    if (pol == RefreshableView_RefreshPolicy::RefreshableView_RefreshPolicy_EVERY
+        && (has_tables || !systemTables.empty() || has_views || has_dictionaries) && rg.nextBool())
     {
         const uint32_t depend_table = 20 * static_cast<uint32_t>(has_tables);
         const uint32_t depend_system_table = 3 * static_cast<uint32_t>(!systemTables.empty());

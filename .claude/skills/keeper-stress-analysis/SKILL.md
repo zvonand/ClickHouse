@@ -218,7 +218,7 @@ User: "What changed in Keeper between 2026-04-01 and 2026-05-01?"
 Process:
 1. Run `rebuild.sh` with TS filter `2026-04-01`.
 2. Run `build_cumulative_gains.py` — produces `cumulative_gains_summary.tsv` with median-of-3 vs median-of-3 deltas.
-3. Apply Phase 5 checks — flag the bench-harness changes from `known_confounds.md` that landed in this window (none if 2026-04-01 → 2026-05-01; both bench changes were earlier).
+3. Apply Phase 5 checks — flag the bench-harness changes from `known_confounds.md` that landed in this window. For `2026-04-01 → 2026-05-01` both `#100670` (`2026-04-04`) and `#101801` (`2026-04-11`) are in-window, so call them out as confounds for any read-heavy memory or rocks-side write-multi memory deltas.
 4. Output: a cumulative-gains write-up built from `cumulative_gains_summary.tsv` using `references/slack_templates.md` formatting, with conservative deltas + caveats (always include the bench-harness confound notes from `references/known_confounds.md` if any of those PR dates fall in the window).
 
 ### Example 3 — Slack summary

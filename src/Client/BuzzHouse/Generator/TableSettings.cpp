@@ -636,6 +636,14 @@ std::unordered_map<String, CHSetting> backupSettings
 std::unordered_map<String, CHSetting> projectionSettings
     = {{"index_granularity", highRangeNonZeroSetting}, {"index_granularity_bytes", indexGranularityBytesSetting}};
 
+std::unordered_map<String, CHSetting> refreshSettings
+    = {{"all_replicas", trueOrFalseSettingNoOracle},
+       {"prefer_dependency_replica", trueOrFalseSettingNoOracle},
+       {"prefer_dependency_replica_delay_ms", highRangeSetting},
+       {"refresh_retries", highRangeSetting},
+       {"refresh_retry_initial_backoff_ms", highRangeSetting},
+       {"refresh_retry_max_backoff_ms", highRangeSetting}};
+
 static std::unordered_map<String, CHSetting> flatLayoutSettings
     = {{"INITIAL_ARRAY_SIZE", CHSetting(bytesRange, {}, false)}, {"MAX_ARRAY_SIZE", CHSetting(bytesRange, {}, false)}};
 

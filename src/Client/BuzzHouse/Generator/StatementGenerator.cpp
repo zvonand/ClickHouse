@@ -538,6 +538,10 @@ void StatementGenerator::generateNextRefreshableView(RandomGenerator & rg, Refre
         SetViewInterval(rg, rv->mutable_randomize());
     }
     rv->set_append(rg.nextBool());
+    if (rg.nextSmallNumber() < 4)
+    {
+        generateSettingValues(rg, refreshSettings, rv->mutable_setting_values());
+    }
 }
 
 static void matchQueryAliases(const SQLView & v, Select * osel, Select * nsel)

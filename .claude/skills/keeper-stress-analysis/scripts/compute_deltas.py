@@ -22,6 +22,8 @@ ROOT = Path(__file__).parent
 _threshold_str = os.environ.get("KEEPER_SKILL_THRESHOLD", "2026-03-25")
 THRESHOLD = datetime.datetime.fromisoformat(_threshold_str).replace(tzinfo=datetime.timezone.utc)
 
+PER_NIGHTLY_FIELDS = ["sha8", "earliest_ts", "scenarios_count", "kind", "prs_landed"]
+
 # Headline metrics to track per scenario+backend
 HEADLINE_METRICS = [
     ("rps",                    "higher_better"),
@@ -312,10 +314,13 @@ def compute_nightly_summary():
 
     out = ROOT / "per_nightly_summary.tsv"
     with open(out, "w") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()), delimiter="\t")
+        w = csv.DictWriter(f, fieldnames=PER_NIGHTLY_FIELDS, delimiter="\t")
         w.writeheader()
         w.writerows(rows)
-    print(f"Wrote {out} ({len(rows)} rows)", file=sys.stderr)
+    if not rows:
+        print(f"Wrote {out} (header-only — no master nightlies in window)", file=sys.stderr)
+    else:
+        print(f"Wrote {out} ({len(rows)} rows)", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,14 @@ ROOT = Path(__file__).parent
 _threshold_str = os.environ.get("KEEPER_SKILL_THRESHOLD", "2026-03-25")
 THRESHOLD = datetime.datetime.fromisoformat(_threshold_str).replace(tzinfo=datetime.timezone.utc)
 
+PR_TO_NIGHTLY_FIELDS = [
+    "pr", "title", "branch", "merged_at", "merge_sha8",
+    "pre_sha8", "pre_run", "post_sha8", "post_run",
+    "pre_nofault_sha8", "post_nofault_sha8",
+    "pre_fault_sha8", "post_fault_sha8",
+    "co_merged",
+]
+
 
 def parse_pr_meta() -> list[dict]:
     rows = []
@@ -131,10 +139,13 @@ def main():
 
     out_path = ROOT / "pr_to_nightly.tsv"
     with open(out_path, "w") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows_out[0].keys()), delimiter="\t")
+        w = csv.DictWriter(f, fieldnames=PR_TO_NIGHTLY_FIELDS, delimiter="\t")
         w.writeheader()
         w.writerows(rows_out)
-    print(f"Wrote {out_path} ({len(rows_out)} rows; {len(out_window)} PRs out-of-window omitted)", file=sys.stderr)
+    if not rows_out:
+        print(f"Wrote {out_path} (header-only — no in-window PRs to map)", file=sys.stderr)
+    else:
+        print(f"Wrote {out_path} ({len(rows_out)} rows; {len(out_window)} PRs out-of-window omitted)", file=sys.stderr)
 
 
 if __name__ == "__main__":

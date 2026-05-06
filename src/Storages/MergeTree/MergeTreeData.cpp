@@ -2922,6 +2922,11 @@ void MergeTreeData::waitForOutdatedPartsToBeLoaded() const TSA_NO_THREAD_SAFETY_
     LOG_TRACE(log, "Finished waiting for outdated data parts to be loaded");
 }
 
+void MergeTreeData::triggerBackgroundOperations()
+{
+    background_operations_assignee.trigger();
+}
+
 void MergeTreeData::waitForUnexpectedPartsToBeLoaded() const TSA_NO_THREAD_SAFETY_ANALYSIS
 {
     /// Background tasks are not run if storage is static.

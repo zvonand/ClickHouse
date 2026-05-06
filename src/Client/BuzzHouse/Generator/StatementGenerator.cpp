@@ -2170,7 +2170,13 @@ std::optional<String> StatementGenerator::alterSingleTable(
                  if (rg.nextSmallNumber() < 4)
                      ro->set_older_than(getNextIcebergExpireTimestamp(rg, fc));
                  if (rg.nextSmallNumber() < 4)
-                     ro->set_location(t.getTablePath(rg, this->allow_not_deterministic));
+                 {
+                     String loc = t.getTablePath(rg, this->allow_not_deterministic);
+
+                     while (!loc.empty() && loc.back() == '/')
+                         loc.pop_back();
+                     ro->set_location(loc);
+                 }
                  if (rg.nextSmallNumber() < 4)
                      ro->set_dry_run(rg.nextBool());
              }},

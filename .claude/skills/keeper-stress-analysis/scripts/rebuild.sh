@@ -68,23 +68,23 @@ fi
 
 echo
 echo "== Build merged_metrics.tsv"
-( cd "$WORK_DIR" && python3 build_metrics_table.py )
+( cd "$WORK_DIR" && python3 keeper_stress.py merge )
 
 # pr_meta.tsv must be supplied by caller in WORK_DIR's parent (../pr_meta.tsv)
 # if PR-set analysis is requested. The scripts gracefully handle its absence.
 if [[ -f "$WORK_DIR/../pr_meta.tsv" ]]; then
   echo "== Build PR -> nightly map"
-  ( cd "$WORK_DIR" && python3 build_pr_nightly_map.py )
+  ( cd "$WORK_DIR" && python3 keeper_stress.py prmap )
   echo "== Compute per-PR + per-nightly deltas"
-  ( cd "$WORK_DIR" && python3 compute_deltas.py )
+  ( cd "$WORK_DIR" && python3 keeper_stress.py deltas )
   echo "== Build per_pr_metrics_long.tsv"
-  ( cd "$WORK_DIR" && python3 build_per_pr_metrics_tsv.py )
+  ( cd "$WORK_DIR" && python3 keeper_stress.py prmetrics )
   echo "== Build PR-branch isolated effects"
-  ( cd "$WORK_DIR" && python3 build_pr_branch_isolated.py )
+  ( cd "$WORK_DIR" && python3 keeper_stress.py prisol )
 fi
 
 echo "== Build cumulative_gains.tsv"
-( cd "$WORK_DIR" && python3 build_cumulative_gains.py )
+( cd "$WORK_DIR" && python3 keeper_stress.py cumulative )
 
 echo
 echo "Outputs in $WORK_DIR:"

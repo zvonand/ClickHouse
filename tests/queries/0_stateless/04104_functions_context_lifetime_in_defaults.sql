@@ -142,3 +142,38 @@ INSERT INTO t_least_greatest_generic_default (x, y, z) VALUES (8, 2, 6);
 SELECT x, y, z, min_val, max_val FROM t_least_greatest_generic_default ORDER BY x;
 
 DROP TABLE t_least_greatest_generic_default;
+
+-- CAST in DEFAULT expression (exercises CastOverloadResolverImpl, which uses
+-- WithContext and would throw "Context has expired" if the resolver is
+-- evaluated in a deferred path with an expired planning context).
+DROP TABLE IF EXISTS t_cast_default;
+CREATE TABLE t_cast_default
+(
+    s String,
+    n DEFAULT CAST(s AS UInt64),
+    a DEFAULT accurateCast(s, 'UInt32')
+)
+ENGINE = MergeTree ORDER BY tuple();
+
+INSERT INTO t_cast_default (s) VALUES ('123');
+INSERT INTO t_cast_default (s) VALUES ('456');
+
+SELECT s, n, a FROM t_cast_default ORDER BY s;
+
+DROP TABLE t_cast_default;
+
+-- CAST in MATERIALIZED column.
+DROP TABLE IF EXISTS t_cast_materialized;
+CREATE TABLE t_cast_materialized
+(
+    s String,
+    n MATERIALIZED CAST(s AS UInt64)
+)
+ENGINE = MergeTree ORDER BY tuple();
+
+INSERT INTO t_cast_materialized (s) VALUES ('100');
+INSERT INTO t_cast_materialized (s) VALUES ('200');
+
+SELECT s, n FROM t_cast_materialized ORDER BY s;
+
+DROP TABLE t_cast_materialized;

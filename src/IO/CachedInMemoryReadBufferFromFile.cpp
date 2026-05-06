@@ -252,11 +252,10 @@ std::vector<PageCache::MappedPtr> CachedInMemoryReadBufferFromFile::populateBloc
     /// at 1 MiB blocks). Coalescing consecutive misses into a single request amortizes that
     /// overhead.
     ///
-    /// The coalesced read uses a temporary buffer, capped at `max_coalesced_bytes` to bound
-    /// transient memory under parallel cold reads. A run longer than the cap is split.
+    /// The coalesced read uses a temporary buffer, capped at `page_cache_max_coalesced_bytes` to
+    /// bound transient memory under parallel cold reads. A run longer than the cap is split.
     /// Single-block misses bypass the buffer and read directly into the cache cell.
-    constexpr size_t max_coalesced_bytes = 16 * 1024 * 1024;
-    const size_t max_blocks_per_fetch = std::max<size_t>(1, max_coalesced_bytes / block_size);
+    const size_t max_blocks_per_fetch = std::max<size_t>(1, settings.page_cache_max_coalesced_bytes / block_size);
 
     size_t i = 0;
     while (i < num_blocks)

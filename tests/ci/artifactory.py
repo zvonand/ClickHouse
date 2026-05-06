@@ -189,7 +189,7 @@ class DebianArtifactory:
         )
         cmd = (
             "docker run --rm ubuntu:latest bash -c "
-            f'"apt update -y; apt install -y gnupg ca-certificates; {setup_key}; {debian_command}"'
+            f'"apt update -y; apt install -y curl gnupg ca-certificates; {setup_key}; {debian_command}"'
         )
         print("Running test command:")
         print(f"  {cmd}")
@@ -202,7 +202,7 @@ class DebianArtifactory:
         )
         cmd = (
             "docker run --rm ubuntu:latest bash -c "
-            f'"apt update -y; apt install -y gnupg ca-certificates; {setup_key}; {debian_command_2}"'
+            f'"apt update -y; apt install -y curl gnupg ca-certificates; {setup_key}; {debian_command_2}"'
         )
         print("Running test command:")
         print(f"  {cmd}")

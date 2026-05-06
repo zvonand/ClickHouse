@@ -193,6 +193,14 @@ set_source_files_properties("pointInPolygon.cpp" PROPERTIES COMPILE_FLAGS -fno-s
 #   YMM stores / `vpbroadcastq`, which forces a `vzeroupper` before each
 #   virtual `getUInt` call inside the per-row loop.  The extra ~6 cycle
 #   transition × 100M rows regresses `randomString(rand() % 10)` ~15%.
+# - FunctionsHashingMisc.cpp: at v3 the BMI2 (`mulx`, `rorx`) encodings used
+#   inside the inlined `XXH3` body are 1-2 bytes longer than v2's `mul`/`shld`.
+#   This shifts the empty-string fast path so its `movabs`+`ret` straddles a
+#   16-byte instruction-fetch boundary, splitting one IFU fetch into two and
+#   regressing `xxh3(materialize(''))` ~21% and `farmHash64(materialize(''))`
+#   ~11%.  Compiling the dispatcher TU at v2 restores master codegen for the
+#   short-string critical path; the AVX2 hash kernels themselves are inline in
+#   their respective contrib headers and remain at v3 wherever they're used.
 #
 # Compiling these files at v2 keeps the SSE-only wrapper codegen that matches
 # master.  The hot AVX2 kernels they invoke (e.g. `RandImpl::execute`) live in
@@ -200,6 +208,7 @@ set_source_files_properties("pointInPolygon.cpp" PROPERTIES COMPILE_FLAGS -fno-s
 if (ARCH_AMD64 AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3)
     set_source_files_properties(FunctionsStringDistance.cpp PROPERTIES COMPILE_FLAGS "-march=x86-64-v2")
     set_source_files_properties(randomString.cpp PROPERTIES COMPILE_FLAGS "-march=x86-64-v2")
+    set_source_files_properties(FunctionsHashingMisc.cpp PROPERTIES COMPILE_FLAGS "-march=x86-64-v2")
 endif()
 
 if (USE_GPERF)

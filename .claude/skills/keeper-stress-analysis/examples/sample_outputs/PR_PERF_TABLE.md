@@ -1,6 +1,6 @@
 # Performance PRs — per-PR per-metric data tables
 
-_Companion to `PERFORMANCE_GAINS.md`. Every claim is backed by a `pre → post` measurement from `keeper_stress_tests.keeper_metrics_ts` (sourced via the queries in `queries/`)._
+_Every claim is backed by a `pre → post` measurement from `keeper_stress_tests.keeper_metrics_ts` (sourced via the queries in `queries/`)._
 
 **Why multiple metrics per PR**: rps alone is insufficient. The right metric depends on what the PR targets — a lock-contention fix should show in `StorageLockWait` AND `rps`, a memory PR in `peak_mem_gb` AND `KeeperApproximateDataSize`, a snapshot PR in `SnapshotWritten_B_per_s` AND `SnapshotApplysFailed`. Each table below reports the metric set relevant to the PR's intent.
 

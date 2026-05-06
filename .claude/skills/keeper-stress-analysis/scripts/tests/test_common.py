@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from _common import classify, iso_week  # noqa: E402
+from _common import classify, common_prefix, iso_week  # noqa: E402
 
 
 class ClassifyBandsTest(unittest.TestCase):
@@ -126,6 +126,31 @@ class IsoWeekTest(unittest.TestCase):
     def test_w53_year(self):
         # 2026 has 53 ISO weeks. 2026-12-31 is in W53.
         self.assertEqual(iso_week(self._day(2026, 12, 31)), "2026-W53")
+
+
+class CommonPrefixTest(unittest.TestCase):
+    """Used by `build_commit_diff`'s SHA-typo suggestion ranking. A bug here
+    silently degrades suggestion quality without raising — catch it in tests.
+    """
+
+    def test_no_overlap_returns_empty(self):
+        self.assertEqual(common_prefix("abc", "xyz"), "")
+
+    def test_partial_overlap(self):
+        self.assertEqual(common_prefix("fdf46xxx", "fdf46ee1"), "fdf46")
+
+    def test_identical_strings(self):
+        self.assertEqual(common_prefix("740b4a58", "740b4a58"), "740b4a58")
+
+    def test_one_is_prefix_of_other(self):
+        # First arg is the canonical "stored" string returned by the function.
+        self.assertEqual(common_prefix("abcd", "ab"), "ab")
+        self.assertEqual(common_prefix("ab", "abcd"), "ab")
+
+    def test_empty_inputs(self):
+        self.assertEqual(common_prefix("", "abc"), "")
+        self.assertEqual(common_prefix("abc", ""), "")
+        self.assertEqual(common_prefix("", ""), "")
 
 
 if __name__ == "__main__":

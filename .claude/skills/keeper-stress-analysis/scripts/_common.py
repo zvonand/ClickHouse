@@ -51,6 +51,17 @@ def iso_week(dt):
     return f"{yr}-W{wk:02d}"
 
 
+def common_prefix(a, b):
+    """Length-aware longest common prefix of two strings. Used by SHA-typo
+    suggestions; promoted here so it's testable and reusable.
+    """
+    n = min(len(a), len(b))
+    i = 0
+    while i < n and a[i] == b[i]:
+        i += 1
+    return a[:i]
+
+
 # Headline metrics to track per scenario+backend, paired with "good direction".
 # The order here is the canonical column order used by `compute_deltas` when
 # emitting per-PR delta rows.

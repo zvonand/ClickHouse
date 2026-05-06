@@ -17,7 +17,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from _common import HEADLINE_METRICS, classify, is_fault_scenario, to_float
+from _common import HEADLINE_METRICS, classify, common_prefix, is_fault_scenario, to_float
 
 ROOT = Path(__file__).parent
 
@@ -31,15 +31,6 @@ def _resolve_sha(prefix, by_sha8):
     if p in by_sha8:
         return p
     return None
-
-
-def _common_prefix(a, b):
-    """Length of the longest common prefix of two strings."""
-    n = min(len(a), len(b))
-    i = 0
-    while i < n and a[i] == b[i]:
-        i += 1
-    return a[:i]
 
 
 def main(sha_a_arg, sha_b_arg):
@@ -58,7 +49,7 @@ def main(sha_a_arg, sha_b_arg):
             p = arg.lower()[:8]
             scored = sorted(
                 by_sha8.keys(),
-                key=lambda k: (-len(_common_prefix(k, p)), k),
+                key=lambda k: (-len(common_prefix(k, p)), k),
             )
             return scored[:5]
         miss = []

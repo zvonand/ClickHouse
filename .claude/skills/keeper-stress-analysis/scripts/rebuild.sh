@@ -89,3 +89,9 @@ echo "== Build cumulative_gains.tsv"
 echo
 echo "Outputs in $WORK_DIR:"
 ls -la "$WORK_DIR"/*.tsv "$WORK_DIR"/*.md 2>/dev/null || true
+
+# On-demand subcommands (not part of the default pipeline):
+#   python3 keeper_stress.py diff <shaA> <shaB>  — per-metric Δ between two
+#                                                  arbitrary commits
+#   python3 keeper_stress.py noise               — per-(scenario, backend, metric)
+#                                                  median / stddev / cv / p95

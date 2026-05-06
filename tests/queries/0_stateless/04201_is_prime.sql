@@ -39,6 +39,18 @@ SELECT isPrime(toUInt8(255));
 SELECT isPrime(toUInt32(4294967295));
 SELECT isPrime(toUInt64(18446744073709551615));
 
+-- Adversarial bit patterns near 2^k boundaries
+WITH arrayJoin([
+    (8,  toUInt64(253)),  (8,  toUInt64(255)),  (8,  toUInt64(257)),  (8,  toUInt64(259)),
+    (16, toUInt64(65533)),(16, toUInt64(65535)),(16, toUInt64(65537)),(16, toUInt64(65539)),
+    (32, toUInt64(4294967293)),         (32, toUInt64(4294967295)),
+    (32, toUInt64(4294967297)),         (32, toUInt64(4294967299)),
+    (63, toUInt64(9223372036854775805)),(63, toUInt64(9223372036854775807)),
+    (63, toUInt64(9223372036854775809)),(63, toUInt64(9223372036854775811)),
+    (64, toUInt64(18446744073709551613)),(64, toUInt64(18446744073709551615))
+]) AS row
+SELECT row.1 AS k, row.2 AS n, isProbablePrime(n);
+
 -- Mersenne primes M_31, M_61, M_127
 SELECT isPrime(toUInt32(2147483647));
 SELECT isPrime(toUInt64(2305843009213693951));
@@ -66,6 +78,11 @@ SETTINGS allow_suspicious_low_cardinality_types = 1;
 
 -- Argument validation
 SELECT isProbablePrime(toUInt64(17), number) FROM numbers(1); -- { serverError ILLEGAL_COLUMN }
+WITH arrayJoin(
+    [561, 1105, 1729, 2047, 2465, 2821, 6601, 8911, 1373653, 25326001,
+     3215031751, 4759123141, 18446744073709551615]
+) AS c, arrayJoin(range(1, 33)) AS r
+SELECT sum(isProbablePrime(toUInt64(c), r));                 -- { serverError ILLEGAL_COLUMN }
 SELECT isProbablePrime(toUInt64(17), 0);                     -- { serverError BAD_ARGUMENTS }
 SELECT isProbablePrime(toUInt64(17), -1);                    -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 SELECT isProbablePrime(toUInt64(17), 5.5);                   -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }

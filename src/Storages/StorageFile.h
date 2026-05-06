@@ -251,6 +251,11 @@ public:
         }
 
         const String & getFileNameInArchive();
+
+        /// Returns the (possibly virtual-column-filtered) list of files this iterator
+        /// will produce. Only meaningful when not reading from an archive and not
+        /// using distributed_processing.
+        const std::vector<std::string> & getFiles() const { return files; }
 private:
         std::vector<std::string> files;
 

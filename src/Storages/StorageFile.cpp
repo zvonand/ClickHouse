@@ -1899,20 +1899,25 @@ void ReadFromFile::initializePipeline(QueryPipelineBuilder & pipeline, const Bui
     /// many files at once. Without this, a single big Parquet file feeds the whole
     /// downstream pipeline through a single source/Resize(1->N) — leaving most of the
     /// CPU idle on machines with many cores.
+    ///
+    /// We use the file list from `files_iterator` rather than `storage->paths`: the
+    /// iterator has already pruned files by `_path`/`_file` virtual-column predicates
+    /// (`createPathAndFileFilterDAG`), so the optimization respects that pruning. If
+    /// the predicate excludes the only path the file is not read at all.
     std::vector<FileBucketInfoPtr> per_source_buckets;
     String single_file_path;
-    if (files_to_read == 1
-        && num_streams < max_num_streams
+    if (num_streams < max_num_streams
         && !storage->archive_info
         && !storage->use_table_fd
         && !storage->has_peekable_read_buffer_from_fd.load()
         && !storage->distributed_processing
         && storage->compression_method == "auto"
         && FormatFactory::instance().checkFormatHasSplitter(storage->format_name)
-        && FormatFactory::instance().checkParallelizeOutputAfterReading(storage->format_name, ctx))
+        && FormatFactory::instance().checkParallelizeOutputAfterReading(storage->format_name, ctx)
+        && files_iterator->getFiles().size() == 1)
     {
         auto splitter = FormatFactory::instance().getSplitter(storage->format_name);
-        single_file_path = storage->paths.front();
+        single_file_path = files_iterator->getFiles().front();
         struct stat file_stat = getFileStat(single_file_path, false, -1, storage->getName());
         if (file_stat.st_size > 0)
         {

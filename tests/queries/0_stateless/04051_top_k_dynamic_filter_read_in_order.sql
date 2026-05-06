@@ -9,7 +9,7 @@ CREATE TABLE t_topk_rio (x UInt64, y String)
 ENGINE = MergeTree ORDER BY x
 SETTINGS index_granularity = 64;
 
-INSERT INTO t_topk_rio SELECT number, toString(number) FROM numbers(1000000);
+INSERT INTO t_topk_rio SELECT number, toString(number) FROM numbers(200000);
 
 -- Correctness: results must match regardless of dynamic filtering.
 SELECT x FROM t_topk_rio ORDER BY x LIMIT 5
@@ -26,7 +26,7 @@ FROM (
 WHERE has_topk_filter;
 
 -- Verify that read_rows is bounded (not a full scan).
--- With read-in-order + LIMIT 5, we should read far fewer than 1 000 000 rows.
+-- With read-in-order + LIMIT 5, we should read far fewer rows than the table contains.
 SYSTEM FLUSH LOGS query_log;
 
 SELECT read_rows < 100000

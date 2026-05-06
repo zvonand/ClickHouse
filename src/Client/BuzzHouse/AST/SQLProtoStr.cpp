@@ -4621,11 +4621,20 @@ CONV_FN(ExpireSnapshots, es)
 
     ret += "expire_snapshots(";
     if (es.has_positional_timestamp())
-        ret += sep() + "'" + es.positional_timestamp() + "'";
+    {
+        ret += sep();
+        appendSQLStringLiteral(ret, es.positional_timestamp());
+    }
     if (es.has_expire_before())
-        ret += sep() + "expire_before = '" + es.expire_before() + "'";
+    {
+        ret += sep() + "expire_before = ";
+        appendSQLStringLiteral(ret, es.expire_before());
+    }
     if (es.has_retention_period())
-        ret += sep() + "retention_period = '" + es.retention_period() + "'";
+    {
+        ret += sep() + "retention_period = ";
+        appendSQLStringLiteral(ret, es.retention_period());
+    }
     if (es.has_retain_last())
         ret += sep() + "retain_last = " + std::to_string(es.retain_last());
     if (es.snapshot_ids_size() > 0)
@@ -4651,9 +4660,15 @@ CONV_FN(RemoveOrphanFiles, ro)
 
     ret += "remove_orphan_files(";
     if (ro.has_older_than())
-        ret += sep() + "'" + ro.older_than() + "'";
+    {
+        ret += sep();
+        appendSQLStringLiteral(ret, ro.older_than());
+    }
     if (ro.has_location())
-        ret += sep() + "location = '" + ro.location() + "'";
+    {
+        ret += sep() + "location = ";
+        appendSQLStringLiteral(ret, ro.location());
+    }
     if (ro.dry_run())
         ret += sep() + "dry_run = 1";
     ret += ")";

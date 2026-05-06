@@ -1605,19 +1605,41 @@ Chunk StorageFileSource::generate()
                 object_with_metadata.emplace(current_path, std::move(md));
             }
 
-            input_format = FormatFactory::instance().getInputWithMetadata(
-                storage->format_name,
-                *read_buf,
-                block_for_format,
-                getContext(),
-                max_block_size,
-                object_with_metadata,
-                storage->format_settings,
-                parser_shared_resources,
-                format_filter_info,
-                /*is_remote_fs=*/false,
-                CompressionMethod::None,
-                need_only_count);
+            if (object_with_metadata.has_value())
+            {
+                input_format = FormatFactory::instance().getInputWithMetadata(
+                    storage->format_name,
+                    *read_buf,
+                    block_for_format,
+                    getContext(),
+                    max_block_size,
+                    object_with_metadata,
+                    storage->format_settings,
+                    parser_shared_resources,
+                    format_filter_info,
+                    /*is_remote_fs=*/false,
+                    CompressionMethod::None,
+                    need_only_count);
+            }
+            else
+            {
+                /// No usable metadata (e.g. archive entries, fd-backed storage, missing
+                /// stat info). Fall back to the regular creator — it doesn't trigger the
+                /// `getInputWithMetadata` chassert and the format-level metadata cache
+                /// just isn't consulted on this read.
+                input_format = FormatFactory::instance().getInput(
+                    storage->format_name,
+                    *read_buf,
+                    block_for_format,
+                    getContext(),
+                    max_block_size,
+                    storage->format_settings,
+                    parser_shared_resources,
+                    format_filter_info,
+                    /*is_remote_fs=*/false,
+                    CompressionMethod::None,
+                    need_only_count);
+            }
 
             input_format->setSerializationHints(serialization_hints);
 

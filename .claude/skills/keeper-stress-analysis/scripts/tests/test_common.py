@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from _common import classify, common_prefix, iso_week  # noqa: E402
+from _common import classify, common_prefix, iso_week, parse_merged_at  # noqa: E402
 
 
 class ClassifyBandsTest(unittest.TestCase):
@@ -151,6 +151,32 @@ class CommonPrefixTest(unittest.TestCase):
         self.assertEqual(common_prefix("", "abc"), "")
         self.assertEqual(common_prefix("abc", ""), "")
         self.assertEqual(common_prefix("", ""), "")
+
+
+class ParseMergedAtTest(unittest.TestCase):
+    """`parse_merged_at` is the single guard for empty `mergedAt` in
+    `pr_meta.tsv`. `gh pr list --state all` returns open PRs with empty
+    `mergedAt`, so the loader must skip them with a clear message instead of
+    aborting the pipeline with a `fromisoformat` exception.
+    """
+
+    def test_returns_none_for_empty_string(self):
+        self.assertIsNone(parse_merged_at({"mergedAt": ""}))
+
+    def test_returns_none_for_whitespace_only(self):
+        self.assertIsNone(parse_merged_at({"mergedAt": "   "}))
+
+    def test_returns_none_for_missing_key(self):
+        self.assertIsNone(parse_merged_at({}))
+
+    def test_parses_zulu_suffix(self):
+        # `gh pr view` emits Z-suffixed UTC timestamps. The result must be
+        # tz-aware so it compares cleanly to `KEEPER_SKILL_THRESHOLD`.
+        dt = parse_merged_at({"mergedAt": "2026-04-15T10:23:00Z"})
+        self.assertEqual(dt.year, 2026)
+        self.assertEqual(dt.month, 4)
+        self.assertEqual(dt.day, 15)
+        self.assertEqual(dt.tzinfo, datetime.timezone.utc)
 
 
 class ThresholdEndTest(unittest.TestCase):

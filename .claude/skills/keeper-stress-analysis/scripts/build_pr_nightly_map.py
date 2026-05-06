@@ -10,7 +10,7 @@ from pathlib import Path
 
 from _common import KEEPER_SKILL_THRESHOLD as THRESHOLD
 from _common import KEEPER_SKILL_THRESHOLD_END as THRESHOLD_END
-from _common import is_fault_scenario
+from _common import is_fault_scenario, parse_merged_at
 
 ROOT = Path(__file__).parent
 
@@ -25,12 +25,25 @@ PR_TO_NIGHTLY_FIELDS = [
 
 def parse_pr_meta() -> list[dict]:
     rows = []
-    with open(ROOT.parent / "pr_meta.tsv") as f:
+    skipped = 0
+    src = ROOT.parent / "pr_meta.tsv"
+    with open(src) as f:
         reader = csv.DictReader(f, delimiter="\t")
         for r in reader:
-            r["merged_dt"] = datetime.datetime.fromisoformat(r["mergedAt"].replace("Z", "+00:00"))
+            merged_dt = parse_merged_at(r, source=src)
+            if merged_dt is None:
+                # Open / unmerged PR (empty `mergedAt`) — `gh pr list --state all`
+                # returns these. Skip silently per row, summarize at end.
+                skipped += 1
+                continue
+            r["merged_dt"] = merged_dt
             r["pr"] = int(r["pr"])
             rows.append(r)
+    if skipped:
+        print(
+            f"parse_pr_meta: skipped {skipped} unmerged PR row(s) with empty `mergedAt`",
+            file=sys.stderr,
+        )
     rows.sort(key=lambda x: x["merged_dt"])
     return rows
 

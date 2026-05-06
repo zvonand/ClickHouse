@@ -22,6 +22,7 @@ from _common import (
     HEADLINE_METRICS,
     classify,
     is_fault_scenario,
+    parse_merged_at,
     to_float,
 )
 
@@ -270,10 +271,21 @@ def compute_nightly_summary():
     pr_meta_path = ROOT.parent / "pr_meta.tsv"
     pr_meta = []
     if pr_meta_path.exists():
+        skipped = 0
         with open(pr_meta_path) as f:
             for r in csv.DictReader(f, delimiter="\t"):
-                r["merged_dt"] = datetime.datetime.fromisoformat(r["mergedAt"].replace("Z", "+00:00"))
+                merged_dt = parse_merged_at(r, source=pr_meta_path)
+                if merged_dt is None:
+                    skipped += 1
+                    continue
+                r["merged_dt"] = merged_dt
                 pr_meta.append(r)
+        if skipped:
+            print(
+                f"compute_nightly_summary: skipped {skipped} unmerged PR row(s) "
+                f"with empty `mergedAt`",
+                file=sys.stderr,
+            )
         pr_meta.sort(key=lambda x: x["merged_dt"])
     else:
         print(

@@ -151,3 +151,18 @@ def require_cols(reader, names, source=None):
         raise ValueError(
             f"{prefix}missing expected columns {missing}; header is {fields}"
         )
+
+
+def parse_merged_at(row, source=None):
+    """Parse a `pr_meta.tsv` row's `mergedAt` field into a tz-aware UTC datetime.
+
+    Returns `None` for unmerged PRs (empty `mergedAt`) so callers can skip them
+    with a clear log line — `gh pr list` will return open PRs with empty
+    `mergedAt` and `datetime.fromisoformat("")` would otherwise abort the whole
+    pipeline. Both `build_pr_nightly_map` and `compute_deltas`'s nightly-summary
+    loader share this contract.
+    """
+    raw = (row.get("mergedAt") or "").strip()
+    if not raw:
+        return None
+    return datetime.datetime.fromisoformat(raw.replace("Z", "+00:00"))

@@ -5591,7 +5591,7 @@ CONV_FN(SystemCommand, cmd)
                 ClusterToString(ret, true, cmd.cluster());
             }
             ret += " ";
-            ret += cmd.wait_blobs_cleanup();
+            appendSQLStringLiteral(ret, cmd.wait_blobs_cleanup());
             break;
         case CmdType::kUnlockSnapshot:
             ret += "UNLOCK SNAPSHOT ";

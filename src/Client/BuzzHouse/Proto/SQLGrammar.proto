@@ -3890,6 +3890,9 @@ message DictionarySourceDetails {
         POSTGRESQL = 3;
         MONGODB = 4;
         REDIS = 5;
+        HTTP = 6;
+        FILE = 7;
+        YAMLRegExpTree = 8;
     }
     enum RedisStorageType {
         simple = 1;
@@ -3905,6 +3908,9 @@ message DictionarySourceDetails {
     optional string invalidate_query = 8;
     optional ColumnPath update_field = 9;
     optional uint32 update_lag = 10;
+    optional string url = 11;
+    optional string path = 12;
+    optional string format = 13;
 }
 
 message DictionarySource {

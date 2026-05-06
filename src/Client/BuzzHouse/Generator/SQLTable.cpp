@@ -2586,6 +2586,7 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
     const uint32_t dict_view = 5 * static_cast<uint32_t>(has_view);
     const uint32_t dict_dict = 5 * static_cast<uint32_t>(has_dictionary);
     const uint32_t null_src = 5;
+    const uint32_t yaml_regexp_tree_src = 5;
     DictionarySourceDetails * clickhouse_dsd = nullptr;
 
     rg.pickWeighted(
@@ -2633,6 +2634,24 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
                   dsd->set_user(sc.user);
                   dsd->set_password(sc.password);
                   dsd->set_source(DictionarySourceDetails::MONGODB);
+              }
+              else if (t.isFileEngine() && rg.nextSmallNumber() < 8)
+              {
+                  dsd->set_path(t.getTablePath(rg, this->allow_not_deterministic));
+                  if (t.file_format.has_value())
+                  {
+                      dsd->set_format(InOutFormat_Name(t.file_format.value()).substr(6));
+                  }
+                  dsd->set_source(DictionarySourceDetails::FILE);
+              }
+              else if (t.isURLEngine() && fc.http_server.has_value() && rg.nextSmallNumber() < 8)
+              {
+                  dsd->set_url(t.getTablePath(rg, this->allow_not_deterministic));
+                  if (t.file_format.has_value())
+                  {
+                      dsd->set_format(InOutFormat_Name(t.file_format.value()).substr(6));
+                  }
+                  dsd->set_source(DictionarySourceDetails::HTTP);
               }
               else if (t.isRedisEngine() && fc.redis_server.has_value() && rg.nextSmallNumber() < 8)
               {
@@ -2690,7 +2709,15 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
               dsd->set_source(DictionarySourceDetails::CLICKHOUSE);
               clickhouse_dsd = dsd;
           }},
-         {null_src, [&] { cd->mutable_source()->set_null_src(true); }}});
+         {null_src, [&] { cd->mutable_source()->set_null_src(true); }},
+         {yaml_regexp_tree_src,
+          [&]
+          {
+              /// YAMLRegExpTree only takes a PATH (no FORMAT). Pairs with REGEXP_TREE layout.
+              DictionarySourceDetails * dsd = cd->mutable_source()->mutable_source();
+              dsd->set_path(fmt::format("{}/d{}.yaml", fc.server_file_path.generic_string(), next.counter));
+              dsd->set_source(DictionarySourceDetails::YAMLRegExpTree);
+          }}});
 
     /// Set columns
     for (uint32_t i = 0; i < dictionary_ncols; i++)

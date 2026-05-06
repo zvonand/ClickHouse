@@ -5,6 +5,7 @@
 
 DROP DICTIONARY IF EXISTS dict_hashed_array_invalid_backlog;
 DROP DICTIONARY IF EXISTS dict_complex_hashed_array_invalid_backlog;
+DROP DICTIONARY IF EXISTS dict_hashed_array_valid_backlog;
 DROP TABLE IF EXISTS source_simple;
 DROP TABLE IF EXISTS source_complex;
 
@@ -15,6 +16,8 @@ CREATE TABLE source_complex (key1 UInt64, key2 String, value String) ENGINE = Ti
 INSERT INTO source_complex VALUES (1, 'k', 'a'), (2, 'k', 'b');
 
 -- HASHED_ARRAY rejects SHARD_LOAD_QUEUE_BACKLOG = 0
+-- Validation in registerDictionaryArrayHashed runs at dictionary load time
+-- (lazy load, the same way 03720_ubsan_dictionary_parameters.sql asserts errors on access).
 CREATE DICTIONARY dict_hashed_array_invalid_backlog
 (
     id UInt64,
@@ -42,7 +45,6 @@ LIFETIME(MIN 1 MAX 1000);
 SELECT dictGet('dict_complex_hashed_array_invalid_backlog', 'value', (toUInt64(1), 'k')); -- { serverError BAD_ARGUMENTS }
 
 -- Sanity check: a positive value works
-DROP DICTIONARY IF EXISTS dict_hashed_array_valid_backlog;
 CREATE DICTIONARY dict_hashed_array_valid_backlog
 (
     id UInt64,
@@ -56,8 +58,8 @@ LIFETIME(MIN 1 MAX 1000);
 SELECT dictGet('dict_hashed_array_valid_backlog', 'value', toUInt64(1));
 SELECT dictGet('dict_hashed_array_valid_backlog', 'value', toUInt64(2));
 
-DROP DICTIONARY dict_hashed_array_invalid_backlog;
-DROP DICTIONARY dict_complex_hashed_array_invalid_backlog;
-DROP DICTIONARY dict_hashed_array_valid_backlog;
+DROP DICTIONARY IF EXISTS dict_hashed_array_invalid_backlog;
+DROP DICTIONARY IF EXISTS dict_complex_hashed_array_invalid_backlog;
+DROP DICTIONARY IF EXISTS dict_hashed_array_valid_backlog;
 DROP TABLE source_simple;
 DROP TABLE source_complex;

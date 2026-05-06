@@ -3278,6 +3278,7 @@ def test_query_condition_cache(started_cluster):
         f"""
         CREATE TABLE {table_name} (id Int64, val String)
         ENGINE = S3('{url}', 'minio', '{minio_secret_key}', 'Parquet')
+        SETTINGS output_format_parquet_row_group_size = 1
         """
     )
 
@@ -3286,13 +3287,12 @@ def test_query_condition_cache(started_cluster):
         INSERT INTO {table_name}
         SELECT number AS id, toString(number) AS val
         FROM numbers(1000)
-        SETTINGS output_format_parquet_row_group_size = 1
         """
     )
 
     instance.query("SYSTEM DROP QUERY CONDITION CACHE")
 
-    select_query = f"SELECT * FROM {table_name} WHERE id % 100 = 0 ORDER BY id"
+    select_query = f"SELECT * FROM {table_name} WHERE id < 100 ORDER BY id"
     settings = {
         "use_query_condition_cache": 1,
         "allow_experimental_analyzer": 1,

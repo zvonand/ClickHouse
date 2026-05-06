@@ -22,6 +22,15 @@ KEEPER_SKILL_THRESHOLD = datetime.datetime.fromisoformat(_threshold_str).replace
     tzinfo=datetime.timezone.utc
 )
 
+# Upper-bound `ts` for the analysis window (exclusive). Set by `rebuild.sh`
+# from its `$3` arg via `KEEPER_SKILL_THRESHOLD_END`. Defaults to a far-future
+# sentinel (`9999-12-31`) so single-arg invocations preserve the original
+# "everything from THRESHOLD onwards" behavior.
+_threshold_end_str = os.environ.get("KEEPER_SKILL_THRESHOLD_END", "9999-12-31")
+KEEPER_SKILL_THRESHOLD_END = datetime.datetime.fromisoformat(_threshold_end_str).replace(
+    tzinfo=datetime.timezone.utc
+)
+
 
 def to_float(s):
     """Parse a TSV cell to float; return None for empty / non-numeric."""

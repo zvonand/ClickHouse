@@ -14,6 +14,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from _common import KEEPER_SKILL_THRESHOLD as THRESHOLD
+from _common import KEEPER_SKILL_THRESHOLD_END as THRESHOLD_END
 from _common import (
     CLASSIFY_BANDS,
     DEFAULT_BANDS,
@@ -287,7 +288,8 @@ def compute_nightly_summary():
     for sha8, info in nightlies:
         prs_landed = []
         for p in pr_meta:
-            if prev_ts < p["merged_dt"] <= info["earliest"] and p["merged_dt"] >= THRESHOLD:
+            if (prev_ts < p["merged_dt"] <= info["earliest"]
+                    and THRESHOLD <= p["merged_dt"] < THRESHOLD_END):
                 prs_landed.append(p["pr"])
         # Most nightlies run both fault and no-fault scenarios. Distinguish
         # `fault`-only / `no-fault`-only / `mixed` so downstream consumers

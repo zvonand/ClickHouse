@@ -17,6 +17,7 @@ FROM keeper_stress_tests.keeper_metrics_ts
 WHERE source='bench' AND stage='summary'
   AND branch != 'master'
   AND ts >= '{{TS_FILTER}}'
+  AND ts < '{{TS_FILTER_END}}'
 GROUP BY branch, scenario, commit_sha
 ORDER BY branch, scenario, run_ended DESC
 FORMAT TSVWithNames

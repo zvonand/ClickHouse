@@ -153,5 +153,55 @@ class CommonPrefixTest(unittest.TestCase):
         self.assertEqual(common_prefix("", ""), "")
 
 
+class ThresholdEndTest(unittest.TestCase):
+    """The `KEEPER_SKILL_THRESHOLD_END` upper bound is the linchpin of the
+    "between A and B" date-range workflow. The default must be far-future so
+    single-arg invocations preserve byte-identical output; an explicit value
+    must parse to the expected datetime so the in-window filter actually
+    truncates.
+    """
+
+    def test_default_threshold_end_is_far_future(self):
+        # Reload `_common` with no env var set — the default must be past any
+        # `merged_dt` we'd ever see in practice. `9999-12-31` is the sentinel.
+        import importlib
+        import os
+
+        prev = os.environ.pop("KEEPER_SKILL_THRESHOLD_END", None)
+        try:
+            import _common
+            importlib.reload(_common)
+            self.assertGreater(_common.KEEPER_SKILL_THRESHOLD_END.year, 2100)
+        finally:
+            if prev is not None:
+                os.environ["KEEPER_SKILL_THRESHOLD_END"] = prev
+            import _common
+            importlib.reload(_common)
+
+    def test_explicit_threshold_end_parses_to_utc_datetime(self):
+        # Setting the env var must yield a tz-aware UTC datetime so it is
+        # comparable to the tz-aware `merged_dt` values from `pr_meta.tsv`.
+        import importlib
+        import os
+
+        prev = os.environ.get("KEEPER_SKILL_THRESHOLD_END")
+        os.environ["KEEPER_SKILL_THRESHOLD_END"] = "2026-04-15"
+        try:
+            import _common
+            importlib.reload(_common)
+            self.assertEqual(_common.KEEPER_SKILL_THRESHOLD_END.year, 2026)
+            self.assertEqual(_common.KEEPER_SKILL_THRESHOLD_END.month, 4)
+            self.assertEqual(_common.KEEPER_SKILL_THRESHOLD_END.day, 15)
+            self.assertEqual(_common.KEEPER_SKILL_THRESHOLD_END.tzinfo,
+                             datetime.timezone.utc)
+        finally:
+            if prev is None:
+                os.environ.pop("KEEPER_SKILL_THRESHOLD_END", None)
+            else:
+                os.environ["KEEPER_SKILL_THRESHOLD_END"] = prev
+            import _common
+            importlib.reload(_common)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -29,7 +29,7 @@ The skill does NOT touch any other CI data — it's specific to the Keeper stres
   - project-level: `<repo>/.claude/skills/keeper-stress-analysis/`.
   Both work; `scripts/rebuild.sh` resolves the home from its own location.
 - **Working dir** (default): `tmp/keeper_stress_skill/` under the user's current directory
-- The orchestrator `scripts/rebuild.sh` accepts a working-dir argument as `$1` and a TS-filter as `$2`
+- The orchestrator `scripts/rebuild.sh` accepts a working-dir argument as `$1`, a lower-bound TS-filter as `$2`, and an optional upper-bound TS-filter as `$3` (default `9999-12-31` = unbounded)
 
 ## Workflow — five phases
 
@@ -56,7 +56,13 @@ SKILL_HOME="$(find ~/.claude/skills .claude/skills -maxdepth 2 -type d -name kee
 "$SKILL_HOME/scripts/rebuild.sh" tmp/keeper_stress_skill 2026-03-25
 ```
 
-The second arg to `rebuild.sh` is the lower-bound timestamp filter (default `2026-03-25`, when the current keeper-stress framework went live). It is both injected into the SQL via the `{{TS_FILTER}}` placeholder and exported to the Python pipeline as `KEEPER_SKILL_THRESHOLD` (read by `build_pr_nightly_map.py` and `compute_deltas.py` for the in-window vs out-of-window split). To analyse a different window, pass a new value — no source edits needed.
+`rebuild.sh` takes three optional args: `$1` work dir, `$2` lower-bound timestamp filter (default `2026-03-25`, when the current keeper-stress framework went live), and `$3` upper-bound timestamp filter (default `9999-12-31`, i.e. unbounded — same behaviour as a single-arg invocation). The bounds are injected into the SQL via `{{TS_FILTER}}` / `{{TS_FILTER_END}}` placeholders and exported to the Python pipeline as `KEEPER_SKILL_THRESHOLD` / `KEEPER_SKILL_THRESHOLD_END` (read by `build_pr_nightly_map.py` and `compute_deltas.py` for the in-window vs out-of-window split). The upper bound is **exclusive** (`ts < $3`), so for "between A and B" inclusive on B, pass B+1 day. To analyse a different window, pass new values — no source edits needed.
+
+For a closed date-range analysis like "what changed between 2026-04-01 and 2026-05-01?", invoke:
+
+```bash
+"$SKILL_HOME/scripts/rebuild.sh" tmp/keeper_stress_skill 2026-04-01 2026-05-01
+```
 
 The `rebuild.sh` script:
 1. Copies `queries/*.sql` and `scripts/*.py` into the work dir.
@@ -258,7 +264,7 @@ Process:
 User: "What changed in Keeper between 2026-04-01 and 2026-05-01?"
 
 Process:
-1. Run `rebuild.sh` with TS filter `2026-04-01`.
+1. Run `rebuild.sh tmp/keeper_stress_skill 2026-04-01 2026-05-01` — both bounds are required for a closed window; the third arg pins the upper bound (`ts < 2026-05-01`) so newer nightlies don't drift into the result.
 2. Run `build_cumulative_gains.py` — produces `cumulative_gains_summary.tsv` with median-of-3 vs median-of-3 deltas.
 3. Apply Phase 5 checks — flag the bench-harness changes from `known_confounds.md` that landed in this window. For `2026-04-01 → 2026-05-01` both `#100670` (`2026-04-04`) and `#101801` (`2026-04-11`) are in-window, so call them out as confounds for any read-heavy memory or rocks-side write-multi memory deltas.
 4. Output: a cumulative-gains write-up built from `cumulative_gains_summary.tsv` using `references/report_templates.md` formatting, with conservative deltas + caveats (always include the bench-harness confound notes from `references/known_confounds.md` if any of those PR dates fall in the window).

@@ -8,6 +8,7 @@ WITH base AS (
   WHERE source = 'prom'
     AND branch = 'master'
     AND ts >= '{{TS_FILTER}}'
+    AND ts < '{{TS_FILTER_END}}'
     AND node IN ('keeper1', 'keeper2', 'keeper3')
     AND name IN (
       'ClickHouseProfileEvents_KeeperRequestTotal',

@@ -7,6 +7,7 @@ WITH base AS (
   WHERE source = 'mntr'
     AND branch = 'master'
     AND ts >= '{{TS_FILTER}}'
+    AND ts < '{{TS_FILTER_END}}'
     AND node IN ('keeper1', 'keeper2', 'keeper3')
     AND name IN (
       'zk_avg_latency', 'zk_max_latency', 'zk_min_latency',

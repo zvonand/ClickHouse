@@ -2,11 +2,15 @@
 # rebuild.sh — fetch CI staging data and run the full Keeper-stress analysis pipeline.
 #
 # Usage:
-#   rebuild.sh [WORK_DIR] [TS_FILTER]
+#   rebuild.sh [WORK_DIR] [TS_FILTER] [TS_FILTER_END]
 #
 # Args:
-#   WORK_DIR   Where to drop staging/ and outputs. Default: ./tmp/keeper_stress_skill
-#   TS_FILTER  Lower-bound ts (ISO yyyy-mm-dd[Thh:mm:ss]). Default: 2026-03-25
+#   WORK_DIR       Where to drop staging/ and outputs. Default: ./tmp/keeper_stress_skill
+#   TS_FILTER      Lower-bound ts (ISO yyyy-mm-dd[Thh:mm:ss], inclusive). Default: 2026-03-25
+#   TS_FILTER_END  Upper-bound ts (ISO yyyy-mm-dd[Thh:mm:ss], exclusive). Default: 9999-12-31
+#                  (i.e. unbounded — equivalent to today's behavior). Pass an explicit
+#                  end date for "between A and B" date-range analyses; otherwise newer
+#                  nightlies will keep accumulating into the result.
 #
 # The skill home is determined automatically from the script location.
 set -euo pipefail
@@ -14,13 +18,15 @@ set -euo pipefail
 SKILL_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="${1:-./tmp/keeper_stress_skill}"
 TS_FILTER="${2:-2026-03-25}"
+TS_FILTER_END="${3:-9999-12-31}"
 
 WORK_DIR="$(realpath -m "$WORK_DIR")"
 mkdir -p "$WORK_DIR/staging" "$WORK_DIR/queries"
 
-# Pass the threshold to the Python pipeline (build_pr_nightly_map.py and
-# compute_deltas.py read this for the in-window vs out-of-window split).
+# Pass both bounds to the Python pipeline (build_pr_nightly_map.py and
+# compute_deltas.py read these for the in-window vs out-of-window split).
 export KEEPER_SKILL_THRESHOLD="$TS_FILTER"
+export KEEPER_SKILL_THRESHOLD_END="$TS_FILTER_END"
 
 # Copy scripts and queries into WORK_DIR so the Python scripts find their
 # staging/ siblings (the scripts use Path(__file__).parent as ROOT).
@@ -29,7 +35,7 @@ cp -f "$SKILL_HOME"/queries/*.sql       "$WORK_DIR/queries/"
 
 echo "== Skill home: $SKILL_HOME"
 echo "== Work dir:   $WORK_DIR"
-echo "== Lower-bound ts filter: $TS_FILTER"
+echo "== ts window:  >= $TS_FILTER  AND  < $TS_FILTER_END"
 echo
 
 PLAY_URL='https://play.clickhouse.com/?user=play'
@@ -37,8 +43,8 @@ fetch() {
   local sql_file="$1"
   local out_file="$2"
   local sql_text
-  # Substitute {{TS_FILTER}} placeholder if present, else apply default >= filter.
-  sql_text=$(sed "s|{{TS_FILTER}}|$TS_FILTER|g" "$sql_file")
+  # Substitute both {{TS_FILTER}} (lower) and {{TS_FILTER_END}} (upper) placeholders.
+  sql_text=$(sed -e "s|{{TS_FILTER}}|$TS_FILTER|g" -e "s|{{TS_FILTER_END}}|$TS_FILTER_END|g" "$sql_file")
   # --fail-with-body: exit non-zero on HTTP >=400 but still write the body, so
   # the failing staging file shows the server's error message. Combined with
   # `set -e` above, any 4xx/5xx response halts the pipeline immediately

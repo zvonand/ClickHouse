@@ -35,6 +35,7 @@ WHERE source = 'bench'
   AND stage = 'summary'
   AND branch = 'master'
   AND ts >= '{{TS_FILTER}}'
+  AND ts < '{{TS_FILTER_END}}'
 GROUP BY scenario, backend, commit_sha
 ORDER BY scenario, backend, run_ended
 FORMAT TSVWithNames

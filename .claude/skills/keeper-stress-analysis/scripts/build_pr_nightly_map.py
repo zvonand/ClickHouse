@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from _common import KEEPER_SKILL_THRESHOLD as THRESHOLD
+from _common import KEEPER_SKILL_THRESHOLD_END as THRESHOLD_END
 from _common import is_fault_scenario
 
 ROOT = Path(__file__).parent
@@ -67,10 +68,10 @@ def main():
     nightlies = parse_nightlies()
 
     # Build PR -> first-post-merge nightly
-    in_window = [p for p in prs if p["merged_dt"] >= THRESHOLD]
-    out_window = [p for p in prs if p["merged_dt"] < THRESHOLD]
+    in_window = [p for p in prs if THRESHOLD <= p["merged_dt"] < THRESHOLD_END]
+    out_window = [p for p in prs if not (THRESHOLD <= p["merged_dt"] < THRESHOLD_END)]
 
-    print(f"PRs in window (>= {THRESHOLD.date()}): {len(in_window)}", file=sys.stderr)
+    print(f"PRs in window ({THRESHOLD.date()} <= ts < {THRESHOLD_END.date()}): {len(in_window)}", file=sys.stderr)
     print(f"PRs out of window: {len(out_window)}", file=sys.stderr)
     print(f"Distinct master nightlies in staging: {len(nightlies)}", file=sys.stderr)
 

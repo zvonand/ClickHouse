@@ -7,6 +7,7 @@ WITH base AS (
   WHERE source = 'container'
     AND branch = 'master'
     AND ts >= '{{TS_FILTER}}'
+    AND ts < '{{TS_FILTER_END}}'
     AND node IN ('keeper1', 'keeper2', 'keeper3')
     AND name IN ('container_cpu_usage_usec', 'container_memory_bytes')
   GROUP BY scenario, backend, commit_sha, name, node, ts

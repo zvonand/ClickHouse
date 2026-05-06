@@ -18,68 +18,22 @@ The result is a per-PR effect that's robust to:
 What it cannot fix:
   - Co-merged effects across the SAME branch: if the branch carries multiple
     independent PRs, Δ is joint.
+
+PR set is read from pr_to_nightly.tsv (which carries the `branch`+`title` columns
+populated by build_pr_nightly_map.py from pr_meta.tsv) — the script is generic
+and works for any PR list, not just the original validation set.
 """
 import csv
 import datetime
-import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).parent
 
-# In-window PRs of interest, with their branches
-PR_BRANCHES = {
-    "99651":  "keeper-object-based-snapshots",
-    "100876": "shared_mutex_keeper_log_store",
-    "100778": "parallel-reads",
-    "101502": "better-profiled-locks",
-    "102586": "fix-keeper-spans-memory",
-    "99491":  "snaps",
-    "100834": "dk-keeper-client-watch",
-    "100893": "fix/keeper-client-watch-stderr",
-    "99484":  "piggy",
-    "101524": "hanfei/fix-clang-tidy",
-    "100773": "hot",
-    "101427": "nuraft-streaming",
-    "100998": "keeper_get_recursive_children",
-    "101640": "dk-data-race-keeper-state-machine",
-    "102599": "revert-100998-keeper_get_recursive_children",
-    "100606": "keeper-jemalloc-webui",
-    "102739": "fix-typos",
-    "103064": "release-MemoryAllocatedWithoutCheck",
-    "102629": "undur",
-    "103025": "fix-create2-filllogelements",
-    "103628": "fix-typos",
-}
-
-PR_NAMES = {
-    "99651":  "Object-based snapshots",
-    "100876": "shared_mutex KeeperLogStore",
-    "100778": "Parallel reads",
-    "101502": "Profiled lock overhead",
-    "102586": "Fix OOMs huge multi",
-    "99491":  "Snapshot code cleanup",
-    "100834": "keeper-client watch",
-    "100893": "watch stderr routing",
-    "99484":  "Race fix read/session-close",
-    "101524": "clang-tidy fix",
-    "100773": "Hot-reload settings",
-    "101427": "nuraft streaming opt-in",
-    "100998": "getRecursiveChildren",
-    "101640": "Data race fix",
-    "102599": "Revert getRecursiveChildren",
-    "100606": "jemalloc UI",
-    "102739": "Fix typos",
-    "103064": "MemoryAllocatedWithoutCheck",
-    "102629": "last_durable_idx fix",
-    "103025": "ZooKeeperCreate2Response fix",
-    "103628": "Fix typos",
-}
-
 
 def load_pr_branch_runs():
-    """Return all PR-branch stress runs from staging/pr_branches.tsv keyed by (branch, scenario, sha8)."""
+    """Return all PR-branch stress runs from staging/pr_branches.tsv."""
     runs = []
     with open(ROOT / "staging" / "pr_branches.tsv") as f:
         for r in csv.DictReader(f, delimiter="\t"):
@@ -90,45 +44,74 @@ def load_pr_branch_runs():
     return runs
 
 
+def load_pr_set():
+    """Return list of (pr_number, title, branch) tuples from pr_to_nightly.tsv."""
+    out = []
+    path = ROOT / "pr_to_nightly.tsv"
+    if not path.exists():
+        return out
+    with open(path) as f:
+        for r in csv.DictReader(f, delimiter="\t"):
+            branch = r.get("branch", "").strip()
+            if not branch:
+                continue
+            out.append((str(r["pr"]), r.get("title", ""), branch))
+    return out
+
+
 def iso_week(dt):
     yr, wk, _ = dt.isocalendar()
     return f"{yr}-W{wk:02d}"
 
 
+def import_statistics():
+    import statistics
+    return statistics
+
+
 def main():
+    statistics = import_statistics()
     runs = load_pr_branch_runs()
     print(f"Loaded {len(runs)} PR-branch run-rows", file=sys.stderr)
 
-    # Build weekly pool: scenario → week → list of (rps, p99)
+    pr_set = load_pr_set()
+    if not pr_set:
+        print("No PRs found in pr_to_nightly.tsv (run build_pr_nightly_map.py first); exiting.", file=sys.stderr)
+        return
+
+    branches_of_interest = {br for _, _, br in pr_set}
+
+    # Build weekly pool: scenario → week → list of (rps, p99) across ALL PR branches
+    # in staging (not just our PR set — broader pool gives a tighter weekly baseline).
     pool = defaultdict(lambda: defaultdict(list))
     for r in runs:
         pool[r["scenario"]][iso_week(r["dt"])].append((r["rps_v"], r["p99_v"]))
 
-    # Per-PR HEAD = latest run per (branch, scenario)
+    # Per-PR HEAD = latest run per (branch, scenario) for branches in our PR set.
     pr_head = {}
     for r in runs:
-        if r["branch"] not in PR_BRANCHES.values():
+        if r["branch"] not in branches_of_interest:
             continue
         key = (r["branch"], r["scenario"])
         if key not in pr_head or r["dt"] > pr_head[key]["dt"]:
             pr_head[key] = r
 
-    # For each PR, compute isolated Δ vs weekly pool median (excluding the PR's own observation)
     out_rows = []
-    for pr, branch in PR_BRANCHES.items():
+    for pr, name, branch in pr_set:
         for scenario in ("prod-mix-no-fault[default]", "read-multi-no-fault[default]", "write-multi-no-fault[default]"):
             head = pr_head.get((branch, scenario))
             if not head:
                 out_rows.append({
-                    "pr": pr, "name": PR_NAMES.get(pr, ""), "branch": branch, "scenario": scenario,
-                    "head_date": "—", "head_rps": "—", "pool_med_rps": "—", "iso_d_rps_pct": "—",
+                    "pr": pr, "name": name, "branch": branch, "scenario": scenario,
+                    "head_date": "—", "head_sha8": "",
+                    "head_rps": "—", "pool_med_rps": "—", "iso_d_rps_pct": "—",
                     "head_p99": "—", "pool_med_p99": "—", "iso_d_p99_pct": "—", "n_pool": 0,
                 })
                 continue
             wk = iso_week(head["dt"])
             same_week_pool = [(rps, p99) for rps, p99 in pool[scenario].get(wk, []) if rps != head["rps_v"]]
             if len(same_week_pool) < 2:
-                # Widen to ±1 week
+                # Widen to ±1 ISO week
                 neighbours = []
                 yr, wn = wk.split("-W")
                 for delta in (-1, 1):
@@ -146,7 +129,7 @@ def main():
             d_rps = (head["rps_v"] - pool_med_rps) / pool_med_rps * 100 if pool_med_rps else 0
             d_p99 = ((head["p99_v"] - pool_med_p99) / pool_med_p99 * 100) if (pool_med_p99 and head["p99_v"]) else None
             out_rows.append({
-                "pr": pr, "name": PR_NAMES.get(pr, ""), "branch": branch, "scenario": scenario,
+                "pr": pr, "name": name, "branch": branch, "scenario": scenario,
                 "head_date": head["run_ended"][:10], "head_sha8": head["sha8"],
                 "head_rps": f"{head['rps_v']:.0f}",
                 "pool_med_rps": f"{pool_med_rps:.0f}",

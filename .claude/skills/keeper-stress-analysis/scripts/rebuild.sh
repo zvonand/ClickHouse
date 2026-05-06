@@ -18,6 +18,10 @@ TS_FILTER="${2:-2026-03-25}"
 WORK_DIR="$(realpath -m "$WORK_DIR")"
 mkdir -p "$WORK_DIR/staging" "$WORK_DIR/queries"
 
+# Pass the threshold to the Python pipeline (build_pr_nightly_map.py and
+# compute_deltas.py read this for the in-window vs out-of-window split).
+export KEEPER_SKILL_THRESHOLD="$TS_FILTER"
+
 # Copy scripts and queries into WORK_DIR so the Python scripts find their
 # staging/ siblings (the scripts use Path(__file__).parent as ROOT).
 cp -f "$SKILL_HOME"/scripts/*.py        "$WORK_DIR/"
@@ -64,8 +68,6 @@ if [[ -f "$WORK_DIR/../pr_meta.tsv" ]]; then
   ( cd "$WORK_DIR" && python3 compute_deltas.py )
   echo "== Build per_pr_metrics_long.tsv"
   ( cd "$WORK_DIR" && python3 build_per_pr_metrics_tsv.py )
-  echo "== Build per-PR markdown matrix"
-  ( cd "$WORK_DIR" && python3 build_per_pr_metrics.py )
   echo "== Build PR-branch isolated effects"
   ( cd "$WORK_DIR" && python3 build_pr_branch_isolated.py ) || true
 fi

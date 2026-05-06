@@ -9,12 +9,18 @@ Outputs:
 """
 import csv
 import datetime
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).parent
-THRESHOLD = datetime.datetime(2026, 3, 25, 0, 0, 0, tzinfo=datetime.timezone.utc)
+
+# Threshold below which PRs are considered out-of-window. Read from env var
+# (set by rebuild.sh from its $2 arg); defaults to 2026-03-25 (when the
+# current keeper-stress framework went live).
+_threshold_str = os.environ.get("KEEPER_SKILL_THRESHOLD", "2026-03-25")
+THRESHOLD = datetime.datetime.fromisoformat(_threshold_str).replace(tzinfo=datetime.timezone.utc)
 
 # Headline metrics to track per scenario+backend
 HEADLINE_METRICS = [

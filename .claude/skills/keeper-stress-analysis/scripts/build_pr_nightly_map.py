@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Build PR -> first-post-merge nightly mapping with co-merged PR list."""
+"""Build PR -> first-post-merge nightly mapping with co-merged PR list.
+
+Threshold (the date below which PRs are considered out-of-window) is read from
+the KEEPER_SKILL_THRESHOLD env var (set by rebuild.sh from its $2 arg) and
+defaults to 2026-03-25 (when the current keeper-stress framework went live)."""
 import csv
 import datetime
 import os
@@ -7,7 +11,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent
-THRESHOLD = datetime.datetime(2026, 3, 25, 0, 0, 0, tzinfo=datetime.timezone.utc)
+
+_threshold_str = os.environ.get("KEEPER_SKILL_THRESHOLD", "2026-03-25")
+THRESHOLD = datetime.datetime.fromisoformat(_threshold_str).replace(tzinfo=datetime.timezone.utc)
 
 
 def parse_pr_meta() -> list[dict]:
@@ -109,6 +115,7 @@ def main():
         rows_out.append({
             "pr": pr["pr"],
             "title": pr["title"],
+            "branch": pr.get("headRefName", ""),  # PR-branch name; needed by build_pr_branch_isolated.py
             "merged_at": pr["mergedAt"],
             "merge_sha8": pr["mergeCommit"][:8],
             "pre_sha8":  pre["sha8"] if pre else "",
@@ -127,16 +134,7 @@ def main():
         w = csv.DictWriter(f, fieldnames=list(rows_out[0].keys()), delimiter="\t")
         w.writeheader()
         w.writerows(rows_out)
-    print(f"Wrote {out_path} ({len(rows_out)} rows)", file=sys.stderr)
-
-    # Out-of-window list
-    oow_path = ROOT / "pr_out_of_window.tsv"
-    with open(oow_path, "w") as f:
-        w = csv.writer(f, delimiter="\t")
-        w.writerow(["pr", "title", "merged_at", "merge_sha8"])
-        for p in out_window:
-            w.writerow([p["pr"], p["title"], p["mergedAt"], p["mergeCommit"][:8]])
-    print(f"Wrote {oow_path} ({len(out_window)} rows)", file=sys.stderr)
+    print(f"Wrote {out_path} ({len(rows_out)} rows; {len(out_window)} PRs out-of-window omitted)", file=sys.stderr)
 
 
 if __name__ == "__main__":

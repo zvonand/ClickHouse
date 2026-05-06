@@ -831,8 +831,8 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
             /// For database engine fuzzing, only swap between parameter-free engines.
             /// Avoid touching Replicated (needs ZooKeeper), Lazy (needs arg), or external
             /// engines (MySQL/PostgreSQL need connection params).
-            static const Strings safe_database_engines = {"Atomic", "Memory"};
-            if ((engine_name == "Atomic" || engine_name == "Memory") && fuzz_rand() % 10 == 0)
+            static const std::unordered_set<String> safe_database_engines = {"Atomic", "Memory", "Ordinary", "Dictionary"};
+            if (safe_database_engines.contains(engine_name) && fuzz_rand() % 10 == 0)
             {
                 engine_name = pickRandomly(fuzz_rand, safe_database_engines);
                 if (auto & arguments = create.storage->engine->arguments)
@@ -1337,7 +1337,7 @@ void QueryFuzzer::fuzzIndexDeclaration(ASTIndexDeclaration & index)
     /// No-arg index types: safe to swap to and clear any existing arguments.
     static const Strings simple_index_types = {"minmax", "set", "bloom_filter"};
     /// BF index types: require positional arguments — swap name only, keep args.
-    static const std::unordered_set<String> bf_index_types = {"ngrambf_v1", "tokenbf_v1"};
+    static const std::unordered_set<String> bf_index_types = {"ngrambf_v1", "tokenbf_v1", "sparse_grams"};
     /// Simple no-arg tokenizers valid as text index tokenizer values.
     static const Strings simple_tokenizers = {"splitByNonAlpha", "splitByString", "array"};
     static const Strings posting_list_codecs = {"none", "bitpacking"};
@@ -4287,8 +4287,27 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
                 break;
             case ASTAlterCommand::DROP_CONSTRAINT:
             case ASTAlterCommand::COMMENT_COLUMN:
+            case ASTAlterCommand::RENAME_COLUMN:
+            case ASTAlterCommand::MATERIALIZE_COLUMN:
+            case ASTAlterCommand::MATERIALIZE_INDEX:
+            case ASTAlterCommand::MATERIALIZE_PROJECTION:
+            case ASTAlterCommand::MATERIALIZE_STATISTICS:
+            case ASTAlterCommand::MATERIALIZE_TTL:
+                /// IN PARTITION sub-expressions are exercised via the recursive fuzz(alter_cmd->children) below.
                 if (fuzz_rand() % 20 == 0)
                     alter_cmd->if_exists = !alter_cmd->if_exists;
+                break;
+            case ASTAlterCommand::FETCH_PARTITION:
+                if (fuzz_rand() % 20 == 0)
+                    alter_cmd->part = !alter_cmd->part;
+                break;
+            case ASTAlterCommand::FREEZE_PARTITION:
+            case ASTAlterCommand::FREEZE_ALL:
+            case ASTAlterCommand::UNFREEZE_PARTITION:
+            case ASTAlterCommand::UNFREEZE_ALL:
+                /// Occasionally rotate the freeze backup name to exercise unrelated-name paths.
+                if (fuzz_rand() % 50 == 0)
+                    alter_cmd->with_name = "freeze_" + std::to_string(fuzz_rand() % 10);
                 break;
             default:
                 break;

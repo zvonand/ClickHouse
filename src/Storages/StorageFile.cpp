@@ -1908,7 +1908,8 @@ void ReadFromFile::initializePipeline(QueryPipelineBuilder & pipeline, const Bui
         && !storage->has_peekable_read_buffer_from_fd.load()
         && !storage->distributed_processing
         && storage->compression_method == "auto"
-        && FormatFactory::instance().checkFormatHasSplitter(storage->format_name))
+        && FormatFactory::instance().checkFormatHasSplitter(storage->format_name)
+        && FormatFactory::instance().checkParallelizeOutputAfterReading(storage->format_name, ctx))
     {
         auto splitter = FormatFactory::instance().getSplitter(storage->format_name);
         single_file_path = storage->paths.front();

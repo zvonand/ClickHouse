@@ -10,5 +10,9 @@ CREATE USER ' JWT AUTHENTICATION '; -- { serverError BAD_ARGUMENTS }
 CREATE USER ' JWT AUTHENTICATION suffix_chars'; -- { serverError BAD_ARGUMENTS }
 
 -- Confirm the marker check is prefix-based (starts_with), not exact match: a name that merely
--- contains the marker substring later in the string is allowed by setName itself.
-SELECT ' JWT AUTHENTICATION test_04202' LIKE ' JWT AUTHENTICATION %';
+-- contains the marker substring later in the string must still be accepted by setName.
+-- This drives the actual User::setName path (negative branch of starts_with).
+DROP USER IF EXISTS 'u_04202 JWT AUTHENTICATION y';
+CREATE USER 'u_04202 JWT AUTHENTICATION y';
+SELECT name FROM system.users WHERE name = 'u_04202 JWT AUTHENTICATION y';
+DROP USER 'u_04202 JWT AUTHENTICATION y';

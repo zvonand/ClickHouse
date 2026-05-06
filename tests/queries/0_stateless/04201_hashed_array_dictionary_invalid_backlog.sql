@@ -15,9 +15,11 @@ INSERT INTO source_simple VALUES (1, 'a'), (2, 'b');
 CREATE TABLE source_complex (key1 UInt64, key2 String, value String) ENGINE = TinyLog;
 INSERT INTO source_complex VALUES (1, 'k', 'a'), (2, 'k', 'b');
 
--- HASHED_ARRAY rejects SHARD_LOAD_QUEUE_BACKLOG = 0
--- Validation in registerDictionaryArrayHashed runs at dictionary load time
--- (lazy load, the same way 03720_ubsan_dictionary_parameters.sql asserts errors on access).
+-- HASHED_ARRAY rejects SHARD_LOAD_QUEUE_BACKLOG = 0.
+-- Validation in registerDictionaryArrayHashed runs at dictionary *load* time, not at CREATE time
+-- (dictionaries are lazily loaded by default, so CREATE DICTIONARY itself returns OK).
+-- SYSTEM RELOAD DICTIONARY forces the load synchronously so the assertion is pinned to the
+-- validation step rather than to the dictGet runtime path.
 CREATE DICTIONARY dict_hashed_array_invalid_backlog
 (
     id UInt64,
@@ -28,7 +30,7 @@ SOURCE(CLICKHOUSE(TABLE 'source_simple'))
 LAYOUT(HASHED_ARRAY(SHARD_LOAD_QUEUE_BACKLOG 0))
 LIFETIME(MIN 1 MAX 1000);
 
-SELECT dictGet('dict_hashed_array_invalid_backlog', 'value', toUInt64(1)); -- { serverError BAD_ARGUMENTS }
+SYSTEM RELOAD DICTIONARY dict_hashed_array_invalid_backlog; -- { serverError BAD_ARGUMENTS }
 
 -- COMPLEX_KEY_HASHED_ARRAY shares the same registration code path (registerDictionaryArrayHashed) — same validation
 CREATE DICTIONARY dict_complex_hashed_array_invalid_backlog
@@ -42,7 +44,7 @@ SOURCE(CLICKHOUSE(TABLE 'source_complex'))
 LAYOUT(COMPLEX_KEY_HASHED_ARRAY(SHARD_LOAD_QUEUE_BACKLOG 0))
 LIFETIME(MIN 1 MAX 1000);
 
-SELECT dictGet('dict_complex_hashed_array_invalid_backlog', 'value', (toUInt64(1), 'k')); -- { serverError BAD_ARGUMENTS }
+SYSTEM RELOAD DICTIONARY dict_complex_hashed_array_invalid_backlog; -- { serverError BAD_ARGUMENTS }
 
 -- Sanity check: a positive value works
 CREATE DICTIONARY dict_hashed_array_valid_backlog

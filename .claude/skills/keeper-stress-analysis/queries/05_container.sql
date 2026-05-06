@@ -36,11 +36,13 @@ mem_agg AS (
   GROUP BY scenario, backend, commit_sha
 )
 SELECT
-  m.scenario, m.backend, m.commit_sha,
+  coalesce(m.scenario,   c.scenario)   AS scenario,
+  coalesce(m.backend,    c.backend)    AS backend,
+  coalesce(m.commit_sha, c.commit_sha) AS commit_sha,
   m.peak_mem_gb, m.avg_mem_gb,
   c.avg_cpu_cores, c.p95_cpu_cores, c.max_cpu_cores
 FROM mem_agg m
 FULL OUTER JOIN cpu_agg c
   ON m.scenario = c.scenario AND m.backend = c.backend AND m.commit_sha = c.commit_sha
-ORDER BY m.scenario, m.backend, m.commit_sha
+ORDER BY scenario, backend, commit_sha
 FORMAT TSVWithNames

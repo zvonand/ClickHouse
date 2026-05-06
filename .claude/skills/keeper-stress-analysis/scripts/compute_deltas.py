@@ -9,11 +9,11 @@ Outputs:
 """
 import csv
 import datetime
-import os
 import sys
 from collections import defaultdict
 from pathlib import Path
 
+from _common import KEEPER_SKILL_THRESHOLD as THRESHOLD
 from _common import (
     CLASSIFY_BANDS,
     DEFAULT_BANDS,
@@ -25,12 +25,6 @@ from _common import (
 )
 
 ROOT = Path(__file__).parent
-
-# Threshold below which PRs are considered out-of-window. Read from env var
-# (set by rebuild.sh from its $2 arg); defaults to 2026-03-25 (when the
-# current keeper-stress framework went live).
-_threshold_str = os.environ.get("KEEPER_SKILL_THRESHOLD", "2026-03-25")
-THRESHOLD = datetime.datetime.fromisoformat(_threshold_str).replace(tzinfo=datetime.timezone.utc)
 
 PER_NIGHTLY_FIELDS = ["sha8", "earliest_ts", "scenarios_count", "kind", "prs_landed"]
 
@@ -65,6 +59,17 @@ def load_pr_map():
 
 
 def compute_pr_deltas():
+    # `pr_to_nightly.tsv` is the PR-set-mode artefact (built by
+    # `keeper_stress.py prmap`). In date-range-only mode it doesn't exist;
+    # there are no per-PR deltas to compute, so skip cleanly with a stderr
+    # note instead of crashing.
+    if not (ROOT / "pr_to_nightly.tsv").exists():
+        print(
+            "compute_pr_deltas: pr_to_nightly.tsv not found "
+            "(date-range-only mode); skipping per-PR delta computation.",
+            file=sys.stderr,
+        )
+        return
     by_sha8 = load_metrics_indexed_by_sha8()
     prs = load_pr_map()
     scenarios_backends = set()
@@ -253,13 +258,24 @@ def compute_nightly_summary():
 
     nightlies = sorted(by_sha8.items(), key=lambda x: x[1]["earliest"])
 
-    # Map PR merge time
+    # Map PR merge time. `pr_meta.tsv` is only present in PR-set mode; in
+    # date-range-only mode the per-nightly summary is still useful (lists
+    # nightlies + scenario kinds) but `prs_landed` is empty for every row.
+    pr_meta_path = ROOT.parent / "pr_meta.tsv"
     pr_meta = []
-    with open(ROOT.parent / "pr_meta.tsv") as f:
-        for r in csv.DictReader(f, delimiter="\t"):
-            r["merged_dt"] = datetime.datetime.fromisoformat(r["mergedAt"].replace("Z", "+00:00"))
-            pr_meta.append(r)
-    pr_meta.sort(key=lambda x: x["merged_dt"])
+    if pr_meta_path.exists():
+        with open(pr_meta_path) as f:
+            for r in csv.DictReader(f, delimiter="\t"):
+                r["merged_dt"] = datetime.datetime.fromisoformat(r["mergedAt"].replace("Z", "+00:00"))
+                pr_meta.append(r)
+        pr_meta.sort(key=lambda x: x["merged_dt"])
+    else:
+        print(
+            f"compute_nightly_summary: {pr_meta_path.name} not found; "
+            f"per_nightly_summary.tsv will list nightlies but `prs_landed` "
+            f"will be empty (date-range-only mode).",
+            file=sys.stderr,
+        )
 
     rows = []
     prev_ts = THRESHOLD

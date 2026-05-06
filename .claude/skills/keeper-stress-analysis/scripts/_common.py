@@ -2,11 +2,25 @@
 
 Lives next to the per-step scripts so they can `from _common import …`. Anything
 that previously had to be defined in three files (the fault/no-fault matcher,
-`to_float`, `iso_week`, `classify`) is consolidated here so a fix in one place
-applies everywhere — and the test harness can exercise the same definitions the
-runtime uses.
+`to_float`, `iso_week`, `classify`, the `KEEPER_SKILL_THRESHOLD` window edge)
+is consolidated here so a fix in one place applies everywhere — and the test
+harness can exercise the same definitions the runtime uses.
 """
+import datetime
+import os
 from pathlib import Path
+
+
+# Lower-bound `ts` for which PRs are considered in-window, parsed once.
+# Set by `rebuild.sh` from its `$2` arg via the `KEEPER_SKILL_THRESHOLD` env
+# var; defaults to `2026-03-25` (when the current keeper-stress framework
+# went live). The default lives here exactly once — `rebuild.sh` carries the
+# bash-side default for the env var, but the Python-side default is unique
+# to this module so a future bump can't drift between scripts.
+_threshold_str = os.environ.get("KEEPER_SKILL_THRESHOLD", "2026-03-25")
+KEEPER_SKILL_THRESHOLD = datetime.datetime.fromisoformat(_threshold_str).replace(
+    tzinfo=datetime.timezone.utc
+)
 
 
 def to_float(s):

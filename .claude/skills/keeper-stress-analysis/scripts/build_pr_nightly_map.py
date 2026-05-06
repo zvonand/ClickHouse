@@ -1,21 +1,17 @@
 #!/usr/bin/env python3
 """Build PR -> first-post-merge nightly mapping with co-merged PR list.
 
-Threshold (the date below which PRs are considered out-of-window) is read from
-the KEEPER_SKILL_THRESHOLD env var (set by rebuild.sh from its $2 arg) and
-defaults to 2026-03-25 (when the current keeper-stress framework went live)."""
+The window edge (`THRESHOLD`) is sourced from `_common.KEEPER_SKILL_THRESHOLD`
+so all scripts agree on which PRs are in-window."""
 import csv
 import datetime
-import os
 import sys
 from pathlib import Path
 
+from _common import KEEPER_SKILL_THRESHOLD as THRESHOLD
 from _common import is_fault_scenario
 
 ROOT = Path(__file__).parent
-
-_threshold_str = os.environ.get("KEEPER_SKILL_THRESHOLD", "2026-03-25")
-THRESHOLD = datetime.datetime.fromisoformat(_threshold_str).replace(tzinfo=datetime.timezone.utc)
 
 PR_TO_NIGHTLY_FIELDS = [
     "pr", "title", "branch", "merged_at", "merge_sha8",

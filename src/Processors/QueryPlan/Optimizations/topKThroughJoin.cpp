@@ -1,4 +1,5 @@
 #include <Core/Joins.h>
+#include <Core/SortDescription.h>
 #include <Interpreters/IJoin.h>
 #include <Interpreters/JoinOperator.h>
 #include <Interpreters/TableJoin.h>
@@ -8,7 +9,9 @@
 #include <Processors/QueryPlan/LimitStep.h>
 #include <Processors/QueryPlan/Optimizations/Optimizations.h>
 #include <Processors/QueryPlan/QueryPlan.h>
+#include <Processors/QueryPlan/ReadFromMergeTree.h>
 #include <Processors/QueryPlan/SortingStep.h>
+#include <Storages/StorageInMemoryMetadata.h>
 #include <Common/typeid_cast.h>
 
 namespace DB::QueryPlanOptimizations
@@ -29,6 +32,49 @@ std::optional<JoinKind> getJoinKindFromStep(IQueryPlanStep * step)
     if (auto * logical = typeid_cast<JoinStepLogical *>(step))
         return logical->getJoinOperator().kind;
     return {};
+}
+
+/// Walk down a single-child chain looking for a `ReadFromMergeTree` step. We use this
+/// to defer to `optimizeReadInOrder`'s through-join pass when the preserved input can
+/// stream rows in sort-key order from MergeTree's primary key. Inserting our explicit
+/// `Sort + Limit n` would mask that opportunity and force a materializing sort.
+const ReadFromMergeTree * findMergeTreeRead(const QueryPlan::Node * node)
+{
+    while (node)
+    {
+        if (auto * reading = typeid_cast<const ReadFromMergeTree *>(node->step.get()))
+            return reading;
+        if (node->children.size() != 1)
+            return nullptr;
+        node = node->children.front();
+    }
+    return nullptr;
+}
+
+/// True iff the sort columns name a prefix of the storage's primary-key columns. The
+/// analyzer often presents sort columns with a table-qualifier prefix (e.g.
+/// `__table1.Time`); we compare on the unqualified suffix so the deferral check still
+/// fires for plans like `ORDER BY t.col DESC LIMIT n` over a MergeTree sorted by
+/// `(col, ...)`. Conservative: any mismatch lets the optimization apply, never the
+/// other way around.
+bool sortMatchesStoragePrimaryKeyPrefix(const SortDescription & description, const KeyDescription & sorting_key)
+{
+    if (description.empty() || sorting_key.column_names.size() < description.size())
+        return false;
+
+    auto unqualified = [](std::string_view name)
+    {
+        if (auto pos = name.find_last_of('.'); pos != std::string_view::npos)
+            return name.substr(pos + 1);
+        return name;
+    };
+
+    for (size_t i = 0; i < description.size(); ++i)
+    {
+        if (unqualified(description[i].column_name) != sorting_key.column_names[i])
+            return false;
+    }
+    return true;
 }
 }
 
@@ -162,6 +208,21 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
     {
         if (existing_limit->getLimit() <= n && existing_limit->getOffset() == 0)
             return 0;
+    }
+
+    /// Defer to `optimizeReadInOrder` (second-pass) when the preserved input can stream
+    /// rows in the requested sort order from MergeTree's primary key. That path scans
+    /// only the rows the LIMIT will keep, without materializing a sort - strictly better
+    /// than what we would do here. This mirrors the soundness sketch in the file header
+    /// without the cost of an explicit Sort + Limit on top of the storage step.
+    if (settings.read_in_order)
+    {
+        if (const auto * reading = findMergeTreeRead(preserved_input_node))
+        {
+            if (sortMatchesStoragePrimaryKeyPrefix(sort_step->getSortDescription(),
+                                                    reading->getStorageMetadata()->getSortingKey()))
+                return 0;
+        }
     }
 
     /// Build `Limit(n) <- Sort(K, limit=n)` and graft it on top of the preserved input.

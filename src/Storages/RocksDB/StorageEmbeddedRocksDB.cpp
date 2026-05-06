@@ -81,6 +81,7 @@ extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
 extern const int ROCKSDB_ERROR;
 extern const int NOT_IMPLEMENTED;
 extern const int TABLE_IS_DROPPED;
+extern const int TYPE_MISMATCH;
 }
 
 using FieldVectorPtr = std::shared_ptr<FieldVector>;
@@ -915,7 +916,7 @@ Chunk StorageEmbeddedRocksDB::getByKeys(
 
         if (!key_type->equals(*primary_key_type))
             throw DB::Exception(
-                ErrorCodes::LOGICAL_ERROR,
+                ErrorCodes::TYPE_MISMATCH,
                 "Primary key type mismatch, expected {}, got {}.",
                 primary_key_types[i]->getName(),
                 keys[i].type->getName());

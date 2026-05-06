@@ -68,7 +68,7 @@ The `rebuild.sh` script:
 1. Copies `queries/*.sql` and `scripts/*.py` into the work dir.
 2. Runs each query against `https://play.clickhouse.com/?user=play` via `curl --data-urlencode`.
 3. Substitutes `{{TS_FILTER}}` placeholder if present in the SQL.
-4. Builds `merged_metrics.tsv` (1093+ rows × 95 cols).
+4. Builds `merged_metrics.tsv` (one row per scenario × backend × commit; ~95+ columns covering bench, prom, mntr, container metrics).
 5. If `<work_dir>/../pr_meta.tsv` exists, builds the per-PR pipeline too.
 6. Builds `cumulative_gains.tsv` and `cumulative_gains_summary.tsv`.
 
@@ -299,4 +299,4 @@ If you change anything in `scripts/_common.py` — particularly `classify`, `iso
 cd <skill_home>/scripts && python3 -m unittest tests.test_common -v
 ```
 
-The 18 cases gate the per-metric significance bands and the ISO-year-boundary widening. If they fail, methodology and code have drifted apart — fix one to match the other (the `references/methodology.md` rubric is the binding contract).
+The 29 cases gate the per-metric significance bands, the ISO-year-boundary widening, the SHA-prefix matcher, the `KEEPER_SKILL_THRESHOLD_END` default, and the unmerged-PR guard. If they fail, methodology and code have drifted apart — fix one to match the other (the `references/methodology.md` rubric is the binding contract).

@@ -1409,6 +1409,14 @@ std::shared_ptr<IMergeTreeDataPart::Index> IMergeTreeDataPart::loadIndex() const
     /// Memory for index must not be accounted as memory usage for query, because it belongs to a table.
     MemoryTrackerBlockerInThread temporarily_disable_memory_tracker;
 
+    /// The loaded primary-index `Columns` live for the part's lifetime when stored on the part
+    /// (`primary_key_lazy_load=0`, or lazy load with `use_primary_key_cache=0`), or for the
+    /// cache entry's lifetime when the result is handed to `PrimaryIndexCache`. `loadIndex` is
+    /// reachable from `loadColumnsChecksumsIndexes` (already wrapped) but also from `getIndex`
+    /// and `loadIndexToCache` on the lazy-load path; wrapping inside `loadIndex` itself covers
+    /// every entry point.
+    ScopedJemallocThreadArena mergetree_arena_scope(JemallocMergeTreeArena::getArenaIndex());
+
     auto metadata_snapshot = getMetadataSnapshot();
     const auto & primary_key = metadata_snapshot->getPrimaryKey();
     size_t key_size = primary_key.column_names.size();

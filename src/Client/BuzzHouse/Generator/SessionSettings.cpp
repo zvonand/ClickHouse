@@ -800,6 +800,7 @@ std::unordered_map<String, CHSetting> serverSettings = {
     {"hdfs_ignore_file_doesnt_exist", trueOrFalseSettingNoOracle},
     {"hdfs_skip_empty_files", trueOrFalseSettingNoOracle},
     {"hdfs_throw_on_zero_files_match", trueOrFalseSettingNoOracle},
+    {"http_headers_read_timeout", CHSetting(highRange, {}, false)},
     {"http_make_head_request", trueOrFalseSettingNoOracle},
     {"http_max_field_name_size", CHSetting(highRange, {}, false)},
     {"http_max_fields", CHSetting(highRange, {}, false)},

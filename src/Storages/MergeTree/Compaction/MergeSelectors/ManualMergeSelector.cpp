@@ -47,7 +47,7 @@ std::optional<PartsRange> lookupRange(const PartsRanges & parts_ranges, const Na
     return std::nullopt;
 }
 
-bool checkPreparedRangeAgainstConstraints(const PartsRange & prepared_range, const MergeConstraints & merge_constraints)
+bool checkPreparedRangeAgainstConstraints(const PartsRange & prepared_range, const MergeConstraint & constraint)
 {
     size_t total_bytes = 0;
     size_t total_rows = 0;
@@ -57,9 +57,8 @@ bool checkPreparedRangeAgainstConstraints(const PartsRange & prepared_range, con
         total_rows += part.rows;
     }
 
-    for (const auto & constraint : merge_constraints)
-        if (total_bytes <= constraint.max_size_bytes && total_rows <= constraint.max_size_rows)
-            return true;
+    if (total_bytes <= constraint.max_size_bytes && total_rows <= constraint.max_size_rows)
+        return true;
 
     return false;
 }
@@ -80,24 +79,27 @@ PartsRanges ManualMergeSelector::select(
     if (info->queue.empty())
         return {};
 
-    PartsRanges prepared_ranges;
-    while (!info->queue.empty())
+    PartsRanges ranges;
+    for (const auto & constraint : merge_constraints)
     {
+        if (info->queue.empty())
+            break;
+
         auto range = lookupRange(parts_ranges, info->queue.front());
         if (!range)
             break;
 
-        if (!checkPreparedRangeAgainstConstraints(range.value(), merge_constraints))
+        if (!checkPreparedRangeAgainstConstraints(range.value(), constraint))
             break;
 
         if (range_filter && !range_filter(range.value()))
             break;
 
-        prepared_ranges.push_back(std::move(range.value()));
         info->queue.pop_front();
+        ranges.push_back(std::move(range.value()));
     }
 
-    return prepared_ranges;
+    return ranges;
 }
 
 void ManualMergeSelector::push(const StorageID & id, const Names & parts_to_merge)

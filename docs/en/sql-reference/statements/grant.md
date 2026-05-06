@@ -778,9 +778,9 @@ in config.xml.
 
 Some table engines with external sources may require `READ`/`WRITE` permissions on the corresponding source. See [Sources](#sources).
 
-e.g For AzureBlobStorage Table engine, following grant may be required.
+e.g For example, for the AzureBlobStorage Table engine, following grant may be required.
 
-- `GRANT READ,WRITE ON AZURE TO john`
+- `GRANT READ, WRITE ON AZURE TO john`
 
 ### ALL {#all}
 

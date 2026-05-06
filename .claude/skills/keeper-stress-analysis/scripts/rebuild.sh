@@ -39,7 +39,11 @@ fetch() {
   local sql_text
   # Substitute {{TS_FILTER}} placeholder if present, else apply default >= filter.
   sql_text=$(sed "s|{{TS_FILTER}}|$TS_FILTER|g" "$sql_file")
-  curl -sG "$PLAY_URL" --data-urlencode "query=$sql_text" > "$out_file"
+  # --fail-with-body: exit non-zero on HTTP >=400 but still write the body, so
+  # the failing staging file shows the server's error message. Combined with
+  # `set -e` above, any 4xx/5xx response halts the pipeline immediately
+  # instead of feeding garbage into the downstream Python pipeline.
+  curl -sS --fail-with-body -G "$PLAY_URL" --data-urlencode "query=$sql_text" > "$out_file"
 }
 
 echo "== 1/8 Pull bench_summary"

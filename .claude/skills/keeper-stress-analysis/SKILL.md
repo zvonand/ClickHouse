@@ -80,8 +80,8 @@ Pick the right script(s) based on Phase 1's intent:
 
 | Intent | Run |
 |---|---|
-| Date-range window | `compute_deltas.py` + `build_cumulative_gains.py` |
-| PR set | `build_pr_nightly_map.py` + `build_per_pr_metrics_tsv.py` (requires `pr_meta.tsv`) |
+| Date-range window | `build_cumulative_gains.py` |
+| PR set | `build_pr_nightly_map.py` + `compute_deltas.py` + `build_per_pr_metrics_tsv.py` (requires `pr_meta.tsv`) |
 | PR-branch isolation | `build_pr_branch_isolated.py` (reads PR list + branch from `pr_to_nightly.tsv`) |
 | Free-form | none — query merged_metrics.tsv directly with awk/python |
 

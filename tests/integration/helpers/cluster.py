@@ -4310,6 +4310,13 @@ class ClickHouseCluster:
         Docker's cgroup freezer takes effect asynchronously with respect
         to in-flight traffic. Set `wait_for_paused=False` to opt out and
         keep the older non-blocking behavior.
+
+        Cleanup: once the container has been paused (whether via
+        `docker compose pause` or the `SIGSTOP` fallback), unpausing must
+        always run on context exit — even if `_wait_for_pause_effective`
+        times out. Otherwise a probe failure would leave the container
+        permanently paused and cascade into unrelated test failures in
+        the same suite.
         """
         used_signal = False
         try:
@@ -4323,10 +4330,9 @@ class ClickHouseCluster:
             self._pause_container_using_signal(instance_name)
             used_signal = True
 
-        if wait_for_paused:
-            self._wait_for_pause_effective(instance_name, wait_timeout)
-
         try:
+            if wait_for_paused:
+                self._wait_for_pause_effective(instance_name, wait_timeout)
             yield
         finally:
             if used_signal:
@@ -4337,9 +4343,9 @@ class ClickHouseCluster:
     @contextmanager
     def pause_container_using_signal(self, instance_name, wait_for_paused=True, wait_timeout=30.0):
         self._pause_container_using_signal(instance_name)
-        if wait_for_paused:
-            self._wait_for_pause_effective(instance_name, wait_timeout)
         try:
+            if wait_for_paused:
+                self._wait_for_pause_effective(instance_name, wait_timeout)
             yield
         finally:
             self._unpause_container_using_signal(instance_name)

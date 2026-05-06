@@ -179,8 +179,13 @@ def compute_pr_deltas():
             ranked_improvements.sort(key=lambda x: x[1], reverse=True)
             best = ranked_improvements[0][0]
 
-        # Assign overall verdict per PR
-        if any(v[6] == "regression" for v in scenario_verdicts):
+        # Assign overall verdict per PR. If both nightlies have data but
+        # no `(scenario, backend)` pair is shared (e.g. partial scenario
+        # coverage on one side), `scenario_verdicts` is empty — that's
+        # `not-yet-tested`, not silently `clean`.
+        if not scenario_verdicts:
+            verdict = "not-yet-tested"
+        elif any(v[6] == "regression" for v in scenario_verdicts):
             verdict = "regression"
         elif any(v[6] == "watch" for v in scenario_verdicts):
             verdict = "watch"

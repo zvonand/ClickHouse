@@ -47,17 +47,26 @@ def main():
                 skipped.append((sc, be, len(rows)))
                 continue
             for metric, _ in HEADLINE_METRICS:
+                # Include zeros: for non-negative metrics like `error_pct`,
+                # zero is the dominant baseline. Excluding it would bias the
+                # noise sample upward and make a stable metric look noisy.
+                # Only `None` (parse failure / missing column) is dropped.
                 values = [v for v in (to_float(r.get(metric)) for r in rows)
-                          if v is not None and v > 0]
+                          if v is not None and v >= 0]
                 if len(values) < MIN_RUNS:
                     continue
                 med = statistics.median(values)
                 sd = statistics.stdev(values) if len(values) >= 2 else 0.0
-                cv = (sd / abs(med)) if med != 0 else 0.0
+                # `cv` is undefined when the median is exactly zero (which
+                # is common for `error_pct` on healthy windows). Emit "" to
+                # mark "no scale to normalise against" rather than 0.
+                cv = (sd / abs(med)) if med > 0 else None
                 p95 = statistics.quantiles(values, n=20)[18] if len(values) >= 4 else max(values)
                 w.writerow([
                     sc, be, metric, len(values),
-                    f"{med:.4f}", f"{sd:.4f}", f"{cv:.4f}", f"{p95:.4f}",
+                    f"{med:.4f}", f"{sd:.4f}",
+                    f"{cv:.4f}" if cv is not None else "",
+                    f"{p95:.4f}",
                 ])
     print(f"Wrote {out_path}", file=sys.stderr)
     if skipped:

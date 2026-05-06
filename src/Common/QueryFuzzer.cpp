@@ -3022,6 +3022,22 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         {"fromUnixTimestamp64Micro", "fromUnixTimestamp64Milli", "fromUnixTimestamp64Nano"},
         /// Date/time difference functions (unit, t1, t2 → Int64)
         {"dateDiff", "date_diff", "age"},
+        /// Date/time formatters (datetime [, format] → String)
+        {"formatDateTime", "formatDateTimeInJodaSyntax"},
+        /// Date/time parsers (string [, format] → DateTime / DateTime64)
+        {"parseDateTime",
+         "parseDateTimeOrNull",
+         "parseDateTimeOrZero",
+         "parseDateTimeInJodaSyntax",
+         "parseDateTimeInJodaSyntaxOrNull",
+         "parseDateTimeInJodaSyntaxOrZero",
+         "parseDateTime64InJodaSyntax",
+         "parseDateTime64InJodaSyntaxOrNull",
+         "parseDateTime64InJodaSyntaxOrZero"},
+        /// Date ↔ Modified Julian Day conversions
+        {"toModifiedJulianDay", "toModifiedJulianDayOrNull", "fromModifiedJulianDay", "fromModifiedJulianDayOrNull"},
+        /// Unix-time → DateTime
+        {"fromUnixTime", "fromUnixTimeInJodaSyntax"},
         /// Date arithmetic: add/subtract intervals (date/datetime, number → datetime)
         {"addDays",         "addHours",       "addInterval",         "addMicroseconds",  "addMilliseconds",      "addMinutes",
          "addMonths",       "addNanoseconds", "addQuarters",         "addSeconds",       "addTupleOfIntervals",  "addWeeks",
@@ -3091,6 +3107,7 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
          "reverseUTF8",
          "isValidASCII",
          "isValidUTF8",
+         "toValidUTF8",
          "normalizeUTF8NFC",
          "normalizeUTF8NFD",
          "normalizeUTF8NFKC",
@@ -3133,9 +3150,9 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         /// Array scalar reductions (array → scalar)
         {"arrayMin", "arrayMax", "arraySum", "arrayProduct", "arrayAvg", "arrayUniq"},
         /// Array transform functions (array → array, no lambda)
-        {"arrayReverse",           "arrayShuffle",   "arrayDistinct", "arrayCompact",   "arrayFlatten",       "arrayConcat",
-         "arrayIntersect",         "arrayPopFront",  "arrayPopBack",  "arrayPushFront", "arrayPushBack",      "arrayRotateLeft",
-         "arrayRotateRight",       "arraySlice",     "arrayZip",      "arrayEnumerate", "arrayEnumerateUniq", "arrayCumSum",
+        {"arrayReverse",           "arrayShuffle",    "arrayDistinct", "arrayCompact",   "arrayFlatten",       "arrayConcat",
+         "arrayIntersect",         "arrayPopFront",   "arrayPopBack",  "arrayPushFront", "arrayPushBack",      "arrayRotateLeft",
+         "arrayRotateRight",       "arraySlice",      "arrayZip",      "arrayEnumerate", "arrayEnumerateUniq", "arrayCumSum",
          "arrayCumSumNonNegative", "arrayDifference", "arrayTranspose"},
         /// URL hierarchy generators (url → Array(String))
         {"URLHierarchy", "URLPathHierarchy"},
@@ -3165,7 +3182,11 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         /// Cryptographic hashes (string → FixedString)
         {"MD5", "SHA1", "SHA224", "SHA256", "SHA384", "SHA512", "SHA512_256"},
         /// String position search (haystack, needle → UInt64)
-        {"position", "positionCaseInsensitive", "positionUTF8", "positionCaseInsensitiveUTF8"},
+        {"position", "positionCaseInsensitive", "positionUTF8", "positionCaseInsensitiveUTF8", "locate"},
+        /// Subsequence containment checks (haystack, needle → UInt8)
+        {"hasSubsequence", "hasSubsequenceUTF8", "hasSubsequenceCaseInsensitive", "hasSubsequenceCaseInsensitiveUTF8"},
+        /// String character translation (str, from, to → String)
+        {"translate", "translateUTF8"},
         /// URL component extractors (url → String or UInt16)
         {"domain",
          "domainWithoutWWW",
@@ -3203,7 +3224,31 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         /// Sign/magnitude
         {"abs", "sign"},
         /// JSONExtract* family (json, path → typed value)
-        {"JSONExtractBool", "JSONExtractFloat", "JSONExtractInt", "JSONExtractRaw", "JSONExtractString", "JSONExtractUInt"},
+        {"JSONExtract",
+         "JSONExtractArrayRaw",
+         "JSONExtractArrayRawCaseInsensitive",
+         "JSONExtractBool",
+         "JSONExtractBoolCaseInsensitive",
+         "JSONExtractCaseInsensitive",
+         "JSONExtractFloat",
+         "JSONExtractFloatCaseInsensitive",
+         "JSONExtractInt",
+         "JSONExtractIntCaseInsensitive",
+         "JSONExtractRaw",
+         "JSONExtractRawCaseInsensitive",
+         "JSONExtractString",
+         "JSONExtractStringCaseInsensitive",
+         "JSONExtractUInt",
+         "JSONExtractUIntCaseInsensitive"},
+        /// JSON predicates / metadata (json[, path] → scalar)
+        {"JSONHas", "JSONLength", "JSONType", "JSONKey", "isValidJSON"},
+        /// JSON keys / keys-and-values extractors (json[, path] → Array(...) / Map(...))
+        {"JSONExtractKeys",
+         "JSONExtractKeysCaseInsensitive",
+         "JSONExtractKeysAndValues",
+         "JSONExtractKeysAndValuesCaseInsensitive",
+         "JSONExtractKeysAndValuesRaw",
+         "JSONExtractKeysAndValuesRawCaseInsensitive"},
         /// SQL/JSON standard functions
         {"JSON_EXISTS", "JSON_VALUE", "JSON_QUERY"},
         /// simpleJSON* family (json, path → typed value, no schema)
@@ -3221,7 +3266,7 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         /// String splitting (str, sep → Array(String))
         {"splitByChar", "splitByString", "splitByRegexp", "splitByWhitespace", "splitByNonAlpha"},
         /// Substring occurrence count (haystack, needle → UInt64)
-        {"countSubstrings", "countSubstringsCaseInsensitive"},
+        {"countSubstrings", "countSubstringsCaseInsensitive", "countSubstringsCaseInsensitiveUTF8"},
         /// Multi-pattern search (haystack, [needles] → UInt8/UInt64)
         {"multiSearchAny", "multiSearchFirstIndex", "multiSearchFirstPosition", "multiSearchAllPositions"},
         /// Integer GCD / LCM
@@ -3297,12 +3342,7 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
         /// XML encoding (String → String)
         {"encodeXMLComponent", "decodeXMLComponent"},
         /// Text classification (arity mismatch is intentional: naiveBayesClassifier takes (model, text), the rest take (text))
-        {"naiveBayesClassifier",
-         "detectCharset",
-         "detectLanguage",
-         "detectLanguageUnknown",
-         "detectLanguageMixed",
-         "detectTonality"},
+        {"naiveBayesClassifier", "detectCharset", "detectLanguage", "detectLanguageUnknown", "detectLanguageMixed", "detectTonality"},
         /// Word-level NLP (language/extension + word)
         {"stem", "lemmatize", "synonyms"}};
 

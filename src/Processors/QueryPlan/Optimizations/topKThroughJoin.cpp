@@ -270,7 +270,11 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
     /// only the rows the LIMIT will keep, without materializing a sort - strictly better
     /// than what we would do here. This mirrors the soundness sketch in the file header
     /// without the cost of an explicit Sort + Limit on top of the storage step.
-    if (settings.read_in_order)
+    ///
+    /// Both `read_in_order` and `read_in_order_through_join` must be enabled for the
+    /// second-pass optimization to actually apply through the join. If either is off,
+    /// deferring here would silently disable both optimizations.
+    if (settings.read_in_order && settings.read_in_order_through_join)
     {
         if (const auto * reading = findMergeTreeRead(preserved_input_node))
         {

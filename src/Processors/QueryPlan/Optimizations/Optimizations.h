@@ -51,6 +51,7 @@ struct Optimization
         size_t max_limit_for_top_k_optimization;
         bool use_skip_indexes_on_data_read;
         bool read_in_order;
+        bool read_in_order_through_join;
 
         // parallel replicas
         bool parallel_replicas_filter_pushdown = false;

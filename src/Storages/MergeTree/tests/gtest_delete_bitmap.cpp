@@ -323,6 +323,30 @@ TEST(DeleteBitmapTest, OversizedDeclaredBodyRejectedBeforeAllocation)
     }
 }
 
+TEST(DeleteBitmapTest, TrailingBytesAfterCRCRejected)
+{
+    DeleteBitmap in;
+    in.add(7);
+    String buf;
+    {
+        WriteBufferFromString out(buf);
+        in.serialize(out);
+    }
+    /// Append junk bytes after the CRC; deserialize must reject so torn copies
+    /// or accidental appends do not silently look valid.
+    buf.append("\xDE\xAD\xBE\xEF", 4);
+    ReadBufferFromString rb(buf);
+    try
+    {
+        auto _ = DeleteBitmap::deserialize(rb);
+        FAIL() << "Expected trailing bytes after CRC to be rejected";
+    }
+    catch (const Exception & e)
+    {
+        EXPECT_EQ(e.code(), ErrorCodes::CORRUPTED_DATA);
+    }
+}
+
 TEST(DeleteBitmapTest, FileNameRoundtrip)
 {
     EXPECT_EQ(DeleteBitmap::fileNameForBlockNumber(0), "delete_bitmap_0.rbm");

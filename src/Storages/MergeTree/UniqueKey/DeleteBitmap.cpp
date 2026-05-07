@@ -147,9 +147,12 @@ size_t DeleteBitmap::memoryUsage() const
 void DeleteBitmap::serialize(WriteBuffer & out) const
 {
     const size_t body_size = bitmap->getSizeInBytes(/*portable=*/true);
-    if (body_size > std::numeric_limits<UInt32>::max())
+    /// Enforce the same upper bound as `deserialize`; otherwise a payload
+    /// between `MAX_SERIALIZED_BODY_SIZE` and `UInt32::max` would be writable
+    /// but unreadable.
+    if (body_size > MAX_SERIALIZED_BODY_SIZE)
         throw Exception(ErrorCodes::CORRUPTED_DATA,
-            "DeleteBitmap serialized body too large: {} bytes (max {})", body_size, std::numeric_limits<UInt32>::max());
+            "DeleteBitmap serialized body too large: {} bytes (max {})", body_size, MAX_SERIALIZED_BODY_SIZE);
 
     std::vector<char> body(body_size);
     if (body_size)
@@ -210,6 +213,12 @@ std::unique_ptr<DeleteBitmap> DeleteBitmap::deserialize(ReadBuffer & in)
     if (stored_crc != computed_crc)
         throw Exception(ErrorCodes::CORRUPTED_DATA,
             "DeleteBitmap CRC mismatch: stored {:#x}, computed {:#x}", stored_crc, computed_crc);
+
+    /// Reject trailing bytes after the CRC so torn copies / accidental appends
+    /// surface as corruption instead of being silently accepted.
+    if (!in.eof())
+        throw Exception(ErrorCodes::CORRUPTED_DATA,
+            "DeleteBitmap deserialize: unexpected trailing bytes after CRC");
 
     auto result = std::make_unique<DeleteBitmap>();
     if (body_size_u32)

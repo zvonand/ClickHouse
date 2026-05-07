@@ -693,6 +693,7 @@ Pipe ReadFromMergeTree::readInOrder(
             shared_virtual_fields,
             index_read_tasks,
             has_hard_limit_below_one_block,
+            has_soft_limit_below_one_block,
             storage_snapshot,
             query_info.row_level_filter,
             query_info.prewhere_info,

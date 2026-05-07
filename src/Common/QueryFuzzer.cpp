@@ -1740,6 +1740,10 @@ DataTypePtr QueryFuzzer::fuzzDataType(DataTypePtr type)
     if (type_datetime64 && fuzz_rand() % 4 != 0)
         return std::make_shared<DataTypeDateTime64>(fuzz_rand() % 10); /// scale in [0, 9]
 
+    const auto * type_time64 = typeid_cast<const DataTypeTime64 *>(type.get());
+    if (type_time64 && fuzz_rand() % 4 != 0)
+        return std::make_shared<DataTypeTime64>(fuzz_rand() % 10); /// scale in [0, 9]
+
     const auto * type_dynamic = typeid_cast<const DataTypeDynamic *>(type.get());
     if (type_dynamic && fuzz_rand() % 4 != 0)
         return std::make_shared<DataTypeDynamic>(fuzz_rand() % 255);
@@ -3309,8 +3313,8 @@ static const std::vector<std::unordered_set<String>> & swapFuncs
          "parseDateTime64BestEffortUSOrZero"},
         /// Logical binary operators (same variadic Boolean signature)
         {"and", "or", "xor"},
-        /// Conditional branching (if: 3 args; multiIf: 2n+1 args — errors on mismatch are fine)
-        {"if", "multiIf"},
+        /// Conditional branching (if: 3 args; multiIf: 2n+1 args; caseWithExpression: subject + 2n+1 args — errors on mismatch are fine)
+        {"if", "multiIf", "caseWithExpression"},
         /// Array higher-order functions ([lambda,] array → array or scalar)
         {"arraySort",
          "arrayReverseSort",
@@ -4315,6 +4319,15 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
                 /// Occasionally rotate the freeze backup name to exercise unrelated-name paths.
                 if (fuzz_rand() % 50 == 0)
                     alter_cmd->with_name = "freeze_" + std::to_string(fuzz_rand() % 10);
+                break;
+            case ASTAlterCommand::EXECUTE_COMMAND:
+                /// Occasionally swap the EXECUTE command name between the two registered commands;
+                /// rarely substitute an unknown name to exercise the unknown-command error path.
+                if (fuzz_rand() % 30 == 0)
+                {
+                    static const Strings real_execute_commands = {"expire_snapshots", "remove_orphan_files"};
+                    alter_cmd->execute_command_name = pickRandomly(fuzz_rand, real_execute_commands);
+                }
                 break;
             default:
                 break;

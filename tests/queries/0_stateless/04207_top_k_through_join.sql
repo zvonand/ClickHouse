@@ -59,19 +59,26 @@ FROM (
 
 -- Verify the plan: with the optimization on, a Limit + Sorting must appear inside
 -- the join's left input subtree. With it off, the only Sort+Limit is at the top.
+-- Optional optimizations that wrap the plan with extra steps (`BuildRuntimeFilter`,
+-- `JoinLazyColumnsStep`, `LazilyReadFromMergeTree`) are disabled for the EXPLAIN
+-- so the plan structure is deterministic across CI runs.
 EXPLAIN actions = 0
 SELECT l.id, l.k, r.value
 FROM t_l AS l LEFT JOIN t_r AS r ON r.id = l.id
 ORDER BY l.k DESC
 LIMIT 10
-SETTINGS query_plan_top_k_through_join = 1, allow_experimental_analyzer = 1;
+SETTINGS query_plan_top_k_through_join = 1, allow_experimental_analyzer = 1,
+         enable_join_runtime_filters = 0, enable_lazy_columns_replication = 0,
+         query_plan_optimize_lazy_materialization = 0;
 
 EXPLAIN actions = 0
 SELECT l.id, l.k, r.value
 FROM t_l AS l LEFT JOIN t_r AS r ON r.id = l.id
 ORDER BY l.k DESC
 LIMIT 10
-SETTINGS query_plan_top_k_through_join = 0, allow_experimental_analyzer = 1;
+SETTINGS query_plan_top_k_through_join = 0, allow_experimental_analyzer = 1,
+         enable_join_runtime_filters = 0, enable_lazy_columns_replication = 0,
+         query_plan_optimize_lazy_materialization = 0;
 
 DROP TABLE t_l;
 DROP TABLE t_r;

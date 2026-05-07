@@ -5,20 +5,17 @@ left_join_multiplied	10
 Expression (Project names)
   Limit (preliminary LIMIT)
     Sorting (Sorting for ORDER BY)
-      Expression
-        Join (JOIN FillRightFirst)
-          Expression (Left Pre Join Actions)
-            Expression
-              ReadFromMergeTree (default.t_r)
-          Expression (Right Pre Join Actions)
-            BuildRuntimeFilter (Build runtime join filter on __table1.id)
-              Expression
-                JoinLazyColumnsStep
-                  Limit
-                    Sorting
-                      Expression
-                        ReadFromMergeTree (default.t_l)
-                  LazilyReadFromMergeTree
+      Expression ((Before ORDER BY + Projection))
+        Expression (Post Join Actions)
+          Join (JOIN FillRightFirst)
+            Expression (Left Pre Join Actions)
+              Expression (Change column names to column identifiers)
+                ReadFromMergeTree (default.t_r)
+            Expression (Right Pre Join Actions)
+              Limit
+                Sorting
+                  Expression (Change column names to column identifiers)
+                    ReadFromMergeTree (default.t_l)
 Expression (Project names)
   Limit (preliminary LIMIT)
     Sorting (Sorting for ORDER BY)

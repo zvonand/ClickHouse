@@ -38,6 +38,9 @@ namespace
 
     /// Small constant for empty-bitmap footprint so size proxies stay non-zero.
     constexpr size_t EMPTY_BITMAP_OVERHEAD = 64;
+
+    /// Corruption guard: reject implausibly large payload lengths before allocating.
+    constexpr UInt32 MAX_SERIALIZED_BODY_SIZE = 256U * 1024U * 1024U;
 }
 
 DeleteBitmap::DeleteBitmap() : bitmap(std::make_unique<roaring::Roaring>())
@@ -191,6 +194,10 @@ std::unique_ptr<DeleteBitmap> DeleteBitmap::deserialize(ReadBuffer & in)
     if (version != VERSION)
         throw Exception(ErrorCodes::UNKNOWN_FORMAT_VERSION,
             "DeleteBitmap version {} is not supported (expected {})", version, VERSION);
+
+    if (body_size_u32 > MAX_SERIALIZED_BODY_SIZE)
+        throw Exception(ErrorCodes::CORRUPTED_DATA,
+            "DeleteBitmap serialized body too large: {} bytes (max {})", body_size_u32, MAX_SERIALIZED_BODY_SIZE);
 
     std::vector<char> body(body_size_u32);
     if (body_size_u32)

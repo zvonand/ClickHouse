@@ -3,6 +3,7 @@
 #include <IO/ReadBufferFromString.h>
 #include <IO/WriteBufferFromString.h>
 #include <Storages/MergeTree/UniqueKey/DeleteBitmap.h>
+#include <Common/Exception.h>
 
 #include <chrono>
 #include <cstdio>
@@ -11,6 +12,11 @@
 #include <vector>
 
 using namespace DB;
+
+namespace DB::ErrorCodes
+{
+    extern const int CORRUPTED_DATA;
+}
 
 namespace
 {
@@ -291,6 +297,30 @@ TEST(DeleteBitmapTest, MagicMismatchRejected)
     buf[0] = 'X';
     ReadBufferFromString rb(buf);
     EXPECT_ANY_THROW({ auto _ = DeleteBitmap::deserialize(rb); });
+}
+
+TEST(DeleteBitmapTest, OversizedDeclaredBodyRejectedBeforeAllocation)
+{
+    DeleteBitmap in;
+    String buf;
+    {
+        WriteBufferFromString out(buf);
+        in.serialize(out);
+    }
+
+    constexpr UInt32 oversized_body = std::numeric_limits<UInt32>::max();
+    std::memcpy(buf.data() + sizeof(UInt32) * 2, &oversized_body, sizeof(UInt32));
+
+    ReadBufferFromString rb(buf);
+    try
+    {
+        auto _ = DeleteBitmap::deserialize(rb);
+        FAIL() << "Expected oversized DeleteBitmap payload to be rejected";
+    }
+    catch (const Exception & e)
+    {
+        EXPECT_EQ(e.code(), ErrorCodes::CORRUPTED_DATA);
+    }
 }
 
 TEST(DeleteBitmapTest, FileNameRoundtrip)

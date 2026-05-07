@@ -62,6 +62,16 @@ FROM (
 -- Optional optimizations that wrap the plan with extra steps (`BuildRuntimeFilter`,
 -- `JoinLazyColumnsStep`, `LazilyReadFromMergeTree`) are disabled for the EXPLAIN
 -- so the plan structure is deterministic across CI runs.
+-- `query_plan_join_swap_table = false` disables the heuristic that may swap join
+-- inputs (turning `LEFT JOIN` into `RIGHT JOIN` with sides reversed); without it
+-- the plan structure depends on randomized settings.
+-- `query_plan_max_limit_for_top_k_optimization = 0` removes the cap that the
+-- stateless test runner randomizes - small values would prevent our optimization
+-- from firing for `LIMIT 10`, again making the plan non-deterministic.
+-- `query_plan_read_in_order_through_join = 0` prevents that pass from inserting
+-- extra steps; this query's sort key (`k`) is not the storage's primary key
+-- (`id`), so the deferral inside `topKThroughJoin` does not engage either way,
+-- but disabling the pass keeps the plan stable against future changes there.
 EXPLAIN actions = 0
 SELECT l.id, l.k, r.value
 FROM t_l AS l LEFT JOIN t_r AS r ON r.id = l.id
@@ -69,7 +79,10 @@ ORDER BY l.k DESC
 LIMIT 10
 SETTINGS query_plan_top_k_through_join = 1, allow_experimental_analyzer = 1,
          enable_join_runtime_filters = 0, enable_lazy_columns_replication = 0,
-         query_plan_optimize_lazy_materialization = 0;
+         query_plan_optimize_lazy_materialization = 0,
+         query_plan_join_swap_table = false,
+         query_plan_max_limit_for_top_k_optimization = 0,
+         query_plan_read_in_order_through_join = 0;
 
 EXPLAIN actions = 0
 SELECT l.id, l.k, r.value
@@ -78,7 +91,10 @@ ORDER BY l.k DESC
 LIMIT 10
 SETTINGS query_plan_top_k_through_join = 0, allow_experimental_analyzer = 1,
          enable_join_runtime_filters = 0, enable_lazy_columns_replication = 0,
-         query_plan_optimize_lazy_materialization = 0;
+         query_plan_optimize_lazy_materialization = 0,
+         query_plan_join_swap_table = false,
+         query_plan_max_limit_for_top_k_optimization = 0,
+         query_plan_read_in_order_through_join = 0;
 
 DROP TABLE t_l;
 DROP TABLE t_r;

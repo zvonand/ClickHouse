@@ -231,9 +231,9 @@ std::optional<UInt64> DeleteBitmap::parseBlockNumberFromFileName(std::string_vie
 {
     if (file_name.size() <= FILE_PREFIX.size() + FILE_SUFFIX.size())
         return std::nullopt;
-    if (file_name.substr(0, FILE_PREFIX.size()) != FILE_PREFIX)
+    if (!file_name.starts_with(FILE_PREFIX))
         return std::nullopt;
-    if (file_name.substr(file_name.size() - FILE_SUFFIX.size()) != FILE_SUFFIX)
+    if (!file_name.ends_with(FILE_SUFFIX))
         return std::nullopt;
 
     auto number_part = file_name.substr(FILE_PREFIX.size(), file_name.size() - FILE_PREFIX.size() - FILE_SUFFIX.size());

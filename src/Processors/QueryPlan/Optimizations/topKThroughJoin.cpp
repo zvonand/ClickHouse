@@ -19,18 +19,30 @@ namespace DB::QueryPlanOptimizations
 
 namespace
 {
-/// Extract the JoinKind from either JoinStep (physical) or JoinStepLogical
+/// Extract `(kind, strictness)` from either JoinStep (physical) or JoinStepLogical
 /// (analyzer's logical plan, which is what we typically see in the first pass).
-std::optional<JoinKind> getJoinKindFromStep(IQueryPlanStep * step)
+struct JoinSemantics
+{
+    JoinKind kind;
+    JoinStrictness strictness;
+};
+
+std::optional<JoinSemantics> getJoinSemanticsFromStep(IQueryPlanStep * step)
 {
     if (auto * physical = typeid_cast<JoinStep *>(step))
     {
         if (auto join_ptr = physical->getJoin())
-            return join_ptr->getTableJoin().kind();
+        {
+            const auto & table_join = join_ptr->getTableJoin();
+            return JoinSemantics{table_join.kind(), table_join.strictness()};
+        }
         return {};
     }
     if (auto * logical = typeid_cast<JoinStepLogical *>(step))
-        return logical->getJoinOperator().kind;
+    {
+        const auto & op = logical->getJoinOperator();
+        return JoinSemantics{op.kind, op.strictness};
+    }
     return {};
 }
 
@@ -42,7 +54,7 @@ const ReadFromMergeTree * findMergeTreeRead(const QueryPlan::Node * node)
 {
     while (node)
     {
-        if (auto * reading = typeid_cast<const ReadFromMergeTree *>(node->step.get()))
+        if (const auto * reading = typeid_cast<const ReadFromMergeTree *>(node->step.get()))
             return reading;
         if (node->children.size() != 1)
             return nullptr;
@@ -98,6 +110,15 @@ bool sortMatchesStoragePrimaryKeyPrefix(const SortDescription & description, con
 /// zero output rows, so limiting L to its top-n by K may cause every L survivor to drop
 /// out, leaving fewer than n output rows even when the query has more.
 ///
+/// `SEMI` and `ANTI` strictnesses on `LEFT`/`RIGHT` are also rejected: they break the
+/// "every preserved-side row produces at least one output row" invariant by filtering
+/// the preserved side based on match/non-match against the other side, so truncating
+/// to top-n by K may drop rows that actually survive the join.
+///
+/// `LIMIT WITH TIES` and `LIMIT` steps with `alwaysReadTillEnd` set (e.g. `WITH TOTALS`,
+/// `exact_rows_before_limit`) are also skipped: both require the upstream to keep
+/// processing past the limit, which our preserved-side `Limit` would prevent.
+///
 /// Pattern matched: `LimitStep -> SortingStep -> [ExpressionStep] -> JoinStep`.
 /// The optional ExpressionStep is allowed only when every sort key column passes
 /// through it unchanged (i.e. the sort column name exists in the Expression's input
@@ -112,6 +133,12 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
     /// LIMIT WITH TIES needs to know how many rows have the threshold value, so
     /// we cannot stop reading early.
     if (limit_step->withTies())
+        return 0;
+
+    /// Skip when `always_read_till_end` is set (e.g. `WITH TOTALS`, `exact_rows_before_limit`).
+    /// Truncating the preserved input would make the upstream operator see fewer JOIN rows
+    /// than it should, breaking `rows_before_limit_at_least` and totals semantics.
+    if (limit_step->alwaysReadTillEnd())
         return 0;
 
     if (parent_node->children.size() != 1)
@@ -154,13 +181,14 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
         join_node = join_node->children.front();
     }
 
-    auto join_kind_opt = getJoinKindFromStep(join_node->step.get());
-    if (!join_kind_opt)
+    auto join_semantics_opt = getJoinSemanticsFromStep(join_node->step.get());
+    if (!join_semantics_opt)
         return 0;
     if (join_node->children.size() != 2)
         return 0;
 
-    const JoinKind join_kind = *join_kind_opt;
+    const JoinKind join_kind = join_semantics_opt->kind;
+    const JoinStrictness join_strictness = join_semantics_opt->strictness;
 
     size_t preserved_idx = 0;
     if (join_kind == JoinKind::Left)
@@ -168,6 +196,15 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
     else if (join_kind == JoinKind::Right)
         preserved_idx = 1;
     else
+        return 0;
+
+    /// `SEMI` and `ANTI` strictnesses do not preserve the "every row from the preserved
+    /// side produces at least one output row" invariant the soundness sketch relies on:
+    /// `LEFT SEMI` drops unmatched preserved-side rows, `LEFT ANTI` drops matched ones
+    /// (mirrored for `RIGHT`). Truncating the preserved input to its top-n by sort key
+    /// could discard rows that survive the join while keeping rows that get filtered out,
+    /// changing the final top-n result.
+    if (join_strictness == JoinStrictness::Semi || join_strictness == JoinStrictness::Anti)
         return 0;
 
     const auto & preserved_input_header = join_node->step->getInputHeaders().at(preserved_idx);

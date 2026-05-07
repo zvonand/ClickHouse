@@ -1,5 +1,7 @@
 #include <Common/checkStackSize.h>
 
+#include <fstream>
+
 #include <Client/BuzzHouse/Generator/SQLCatalog.h>
 #include <Client/BuzzHouse/Generator/SQLTypes.h>
 #include <Client/BuzzHouse/Generator/StatementGenerator.h>
@@ -2586,8 +2588,10 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
     const uint32_t dict_view = 5 * static_cast<uint32_t>(has_view);
     const uint32_t dict_dict = 5 * static_cast<uint32_t>(has_dictionary);
     const uint32_t null_src = 5;
-    const uint32_t yaml_regexp_tree_src = 5;
+    /// YAMLRegExpTree requires exactly one String primary key — only consider it for non-range, non-complex layouts.
+    const uint32_t yaml_regexp_tree_src = static_cast<uint32_t>(!isRange && !is_complex_key) * 3;
     DictionarySourceDetails * clickhouse_dsd = nullptr;
+    DictionarySourceDetails * yaml_dsd = nullptr;
 
     rg.pickWeighted(
         {{dict_table,
@@ -2713,10 +2717,9 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
          {yaml_regexp_tree_src,
           [&]
           {
-              /// YAMLRegExpTree only takes a PATH (no FORMAT). Pairs with REGEXP_TREE layout.
               DictionarySourceDetails * dsd = cd->mutable_source()->mutable_source();
-              dsd->set_path(fmt::format("{}/d{}.yaml", fc.server_file_path.generic_string(), next.counter));
               dsd->set_source(DictionarySourceDetails::YAMLRegExpTree);
+              yaml_dsd = dsd;
           }}});
 
     /// Set columns
@@ -2734,7 +2737,16 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
         this->next_type_mask = fc.type_mask
             & ~(allow_JSON | allow_variant | allow_dynamic | allow_tuple | allow_low_cardinality | allow_map | allow_enum | allow_geo
                 | allow_time | allow_array | (is_complex_key ? UINT64_C(0) : allow_fixed_strings));
-        col.tp = randomNextType(rg, this->next_type_mask, col_counter, dc->mutable_type()->mutable_type());
+        if (yaml_dsd && i == 0)
+        {
+            /// YAMLRegExpTree requires the primary key to be exactly one String column.
+            dc->mutable_type()->mutable_type()->mutable_non_nullable()->set_standard_string(true);
+            col.tp = std::make_unique<StringType>(std::nullopt);
+        }
+        else
+        {
+            col.tp = randomNextType(rg, this->next_type_mask, col_counter, dc->mutable_type()->mutable_type());
+        }
         this->next_type_mask = type_mask_backup;
 
         const String dict_col_name = col.getColumnName();
@@ -2817,9 +2829,9 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
             clickhouse_dsd->set_update_lag(rg.randomInt<uint32_t>(0, 3600));
         }
     }
-    if (dl == IP_TRIE)
+    if (dl == IP_TRIE || yaml_dsd)
     {
-        /// IP_TRIE requires a String primary key
+        /// IP_TRIE and YAMLRegExpTree both require a String primary key
         std::vector<ColumnPathChain> str_entries;
         for (const auto & e : this->entries)
         {
@@ -2858,6 +2870,30 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
     for (size_t i = 0; i < kcols; i++)
     {
         columnPathRef(this->entries[i], tkey->add_exprs()->mutable_expr());
+    }
+    if (yaml_dsd && !this->entries.empty())
+    {
+        /// Write a small YAML fixture that matches the dictionary's columns so that both
+        /// CREATE-time validation and runtime LOAD succeed. The chosen primary-key column
+        /// is the regex pattern; every other column becomes an attribute.
+        const String pkey_name = this->entries[0].getBottomName();
+        const String fname = fmt::format("d{}.yaml", next.counter);
+        std::ofstream yaml_file(fc.client_file_path / fname);
+        if (yaml_file.is_open())
+        {
+            for (uint32_t j = 0; j < 3; j++)
+            {
+                yaml_file << "- regexp: '.*pattern" << j << ".*'\n";
+                for (const auto & [cname, cdata] : next.cols)
+                {
+                    if (cname == pkey_name || !cdata.tp)
+                        continue;
+                    yaml_file << "  " << cname << ": " << cdata.tp->appendRandomRawValue(rg, *this) << "\n";
+                }
+            }
+            yaml_file.close();
+        }
+        yaml_dsd->set_path(fmt::format("{}/{}", fc.server_file_path.generic_string(), fname));
     }
     if (isRange && this->entries.size() > 1)
     {

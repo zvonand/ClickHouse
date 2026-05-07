@@ -592,7 +592,11 @@ std::pair<DB::ObjectStoragePtr, std::string> resolveObjectStorageForPath(
         if (use_base_storage)
             return {base_storage, key_to_use};
 
-        const std::string storage_cache_key = "s3://" + s3_uri.bucket + "@" + (s3_uri.endpoint.empty() ? "amazonaws.com" : s3_uri.endpoint);
+        /// Include credential-propagation flag in the cache key: `configure_fn` runs only on miss,
+        /// so different per-query values of `s3_propagate_credentials_to_other_storages` must not share an entry.
+        const bool propagate_creds = context->getSettingsRef()[Setting::s3_propagate_credentials_to_other_storages];
+        const std::string storage_cache_key = "s3://" + s3_uri.bucket + "@" + (s3_uri.endpoint.empty() ? "amazonaws.com" : s3_uri.endpoint)
+            + "#propagate=" + (propagate_creds ? "1" : "0");
 
         return getOrCreateStorageAndKey(
             storage_cache_key,

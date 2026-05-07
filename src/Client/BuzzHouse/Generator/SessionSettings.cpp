@@ -812,16 +812,6 @@ std::unordered_map<String, CHSetting> serverSettings = {
     {"http_wait_end_of_query", trueOrFalseSettingNoOracle},
     {"http_write_exception_in_output_format", trueOrFalseSettingNoOracle},
     {"iceberg_delete_data_on_drop", trueOrFalseSettingNoOracle},
-    {"iceberg_expire_default_max_ref_age_ms",
-     CHSetting(
-         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 0, 300000)); },
-         {},
-         false)},
-    {"iceberg_expire_default_max_snapshot_age_ms",
-     CHSetting(
-         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 0, 300000)); },
-         {},
-         false)},
     {"iceberg_expire_default_min_snapshots_to_keep",
      CHSetting(
          [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 0, 10)); }, {}, false)},
@@ -840,11 +830,6 @@ std::unordered_map<String, CHSetting> serverSettings = {
                     "'manifest_file_entry'"};
              return rg.pickRandomly(choices);
          },
-         {},
-         false)},
-    {"iceberg_metadata_staleness_ms",
-     CHSetting(
-         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 0, 60000)); },
          {},
          false)},
     {"iceberg_snapshot_id",
@@ -1858,6 +1843,46 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
                   [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.1, 0.1, 0, 16384)); },
                   {},
                   false)}});
+    }
+    if (fc.enable_timeout_settings)
+    {
+        /// Connection / wait / poll timeouts. Fuzzed independently from other settings since
+        /// extreme values can stall the fuzzer rather than producing useful coverage.
+        serverSettings.insert(
+            {{"async_insert_busy_timeout_min_ms", CHSetting(highRange, {}, false)},
+             {"async_insert_poll_timeout_ms", CHSetting(highRange, {}, false)},
+             {"connect_timeout_with_failover_ms", CHSetting(highRange, {}, false)},
+             {"connect_timeout_with_failover_secure_ms", CHSetting(highRange, {}, false)},
+             {"connection_pool_max_wait_ms", CHSetting(highRange, {}, false)},
+             {"handshake_timeout_ms", CHSetting(highRange, {}, false)},
+             {"hedged_connection_timeout_ms", CHSetting(highRange, {}, false)},
+             {"iceberg_expire_default_max_ref_age_ms",
+              CHSetting(
+                  [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 0, 300000)); },
+                  {},
+                  false)},
+             {"iceberg_expire_default_max_snapshot_age_ms",
+              CHSetting(
+                  [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 0, 300000)); },
+                  {},
+                  false)},
+             {"iceberg_metadata_staleness_ms",
+              CHSetting(
+                  [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 0, 60000)); },
+                  {},
+                  false)},
+             {"kafka_max_wait_ms", CHSetting(highRange, {}, false)},
+             {"log_queries_min_query_duration_ms", CHSetting(highRange, {}, false)},
+             {"low_priority_query_wait_time_ms", CHSetting(highRange, {}, false)},
+             {"parallel_replicas_connect_timeout_ms", CHSetting(highRange, {}, false)},
+             {"queue_max_wait_ms", CHSetting(highRange, {}, false)},
+             {"rabbitmq_max_wait_ms", CHSetting(highRange, {}, false)},
+             {"read_backoff_min_interval_between_events_ms", CHSetting(highRange, {}, false)},
+             {"read_backoff_min_latency_ms", CHSetting(highRange, {}, false)},
+             {"receive_data_timeout_ms", CHSetting(highRange, {}, false)},
+             {"storage_system_stack_trace_pipe_read_timeout_ms", CHSetting(highRange, {}, false)},
+             {"stream_flush_interval_ms", CHSetting(highRange, {}, false)},
+             {"stream_poll_timeout_ms", CHSetting(highRange, {}, false)}});
     }
     if (fc.enable_force_settings)
     {

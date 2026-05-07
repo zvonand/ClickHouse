@@ -563,8 +563,12 @@ std::vector<std::pair<ObjectStoragePtr, String>> getOldFiles(
 
 void clearOldFiles(const std::vector<std::pair<ObjectStoragePtr, String>> & old_files)
 {
+    auto log = getLogger("IcebergCompaction");
     for (const auto & [storage, key] : old_files)
+    {
+        LOG_DEBUG(log, "Removing old file during compaction: storage={}, key={}", storage->getDescription(), key);
         storage->removeObjectIfExists(StoredObject(key));
+    }
 }
 
 void compactIcebergTable(

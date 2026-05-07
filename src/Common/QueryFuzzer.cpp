@@ -831,7 +831,7 @@ void QueryFuzzer::fuzzCreateQuery(ASTCreateQuery & create)
             /// For database engine fuzzing, only swap between parameter-free engines.
             /// Avoid touching Replicated (needs ZooKeeper), Lazy (needs arg), or external
             /// engines (MySQL/PostgreSQL need connection params).
-            static const std::unordered_set<String> safe_database_engines = {"Atomic", "Memory", "Ordinary", "Dictionary"};
+            static const std::unordered_set<String> safe_database_engines = {"Atomic", "Memory", "Dictionary"};
             if (safe_database_engines.contains(engine_name) && fuzz_rand() % 10 == 0)
             {
                 engine_name = pickRandomly(fuzz_rand, safe_database_engines);

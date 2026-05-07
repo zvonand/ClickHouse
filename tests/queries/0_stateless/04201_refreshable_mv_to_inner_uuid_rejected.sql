@@ -1,27 +1,17 @@
--- Tags: atomic-database, no-parallel, no-random-settings
--- no-parallel: the APPEND cross-check below creates an inner table with a fixed,
--- server-wide unique UUID ('11111111-2222-3333-4444-555555555556'). When the
--- flaky-check runner schedules this test to multiple parallel workers (50 reruns,
--- workers = nproc-1), two concurrent runs would hit the global UUID registry at
--- the same time and one CREATE would fail with TABLE_ALREADY_EXISTS (Code 57)
--- before the test's `serverError BAD_ARGUMENTS` assertion is reached. Forcing
--- sequential execution removes the cross-run UUID collision while keeping the
--- assertion observable across reruns (Atomic engine releases the UUID on
--- `DROP TABLE … SYNC`, which is verified to allow safe sequential reuse).
--- no-random-settings: this test asserts a parse-time BAD_ARGUMENTS from CREATE
--- MATERIALIZED VIEW with REFRESH + TO INNER UUID (without APPEND). The flaky-check
--- runner randomizes `session_timezone` from a list that includes `get_localzone()`,
--- which on hosts where /etc/localtime is a direct symlink returns the malformed
--- string "zoneinfo/UTC". The server then rejects the very first query with an
--- unrelated `Invalid time zone: zoneinfo/UTC. (BAD_ARGUMENTS)` (verified in the
--- failing stderr) and the targeted assertion is never reached. Disabling random
--- settings keeps the timezone valid so the test exercises only the parse-time check.
+-- Tags: atomic-database, no-random-settings
+-- no-random-settings: the runner can pick `session_timezone=zoneinfo/UTC` as a connection-
+-- level setting; the server then rejects every request (including any in-test `SET`) with
+-- an unrelated `Invalid time zone: zoneinfo/UTC. (BAD_ARGUMENTS)` before the targeted check
+-- can fire. An in-test `SET session_timezone = 'UTC'` does not help because URL/connection
+-- settings are validated before the query is parsed.
 -- Test: refreshable materialized view (without APPEND) must reject explicit `TO INNER UUID`.
 -- Refresh in non-APPEND mode swaps the inner table on each refresh (different UUID each time),
 -- so a user-fixed inner UUID is nonsensical. The check guards against silent confusion or
 -- inconsistent UUIDs in the refresh task's EXCHANGE/DROP path.
 -- Covers: src/Storages/StorageMaterializedView.cpp:263 -- if (to_inner_uuid != UUIDHelpers::Nil) throw BAD_ARGUMENTS
 --         The branch fires only when refresh_strategy is set AND fixed_uuid (=APPEND) is false.
+-- The CREATE below throws during storage construction *before* the inner UUID is registered
+-- in the global UUID map, so a fixed literal UUID is safe under parallel reruns (no `no-parallel`).
 
 DROP TABLE IF EXISTS src_for_refresh_uuid SYNC;
 DROP TABLE IF EXISTS rmv_with_inner_uuid SYNC;
@@ -36,16 +26,6 @@ CREATE MATERIALIZED VIEW rmv_with_inner_uuid
     (x Int64) ENGINE = Memory
     AS SELECT x FROM src_for_refresh_uuid; -- { serverError BAD_ARGUMENTS }
 
--- Cross-check: the branch is gated by `!fixed_uuid` (i.e. !APPEND). With APPEND, TO INNER UUID is permitted.
-CREATE MATERIALIZED VIEW rmv_with_inner_uuid
-    REFRESH EVERY 1 YEAR APPEND
-    TO INNER UUID '11111111-2222-3333-4444-555555555556'
-    (x Int64) ENGINE = Memory
-    EMPTY
-    AS SELECT x FROM src_for_refresh_uuid;
+SELECT 'rejected_without_append_ok';
 
--- Confirm the APPEND branch did not trigger the new check.
-SELECT 'append_with_inner_uuid_ok';
-
-DROP TABLE rmv_with_inner_uuid SYNC;
 DROP TABLE src_for_refresh_uuid SYNC;

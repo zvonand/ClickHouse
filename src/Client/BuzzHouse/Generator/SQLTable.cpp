@@ -2878,6 +2878,49 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
         /// Write a small YAML fixture that matches the dictionary's columns so that both
         /// CREATE-time validation and runtime LOAD succeed. The chosen primary-key column
         /// is the regex pattern; every other column becomes an attribute.
+        ///
+        /// regexp_tree's loader parses YAML attribute values via deserializeWholeText for
+        /// the target type, which expects plain text (NOT SQL literal syntax with quotes
+        /// or `::Type` casts). We emit a fixed plain-text default per type class instead
+        /// of using appendRandomRawValue (which produces SQL literals).
+        const auto yaml_plain_value = [](const SQLType * tp) -> std::optional<String>
+        {
+            const SQLType * t = tp;
+            if (t && t->getTypeClass() == SQLTypeClass::NULLABLE)
+                t = static_cast<const Nullable *>(t)->subtype.get();
+            if (t && t->getTypeClass() == SQLTypeClass::LOWCARDINALITY)
+                t = static_cast<const LowCardinality *>(t)->subtype.get();
+            if (!t)
+                return std::nullopt;
+            switch (t->getTypeClass())
+            {
+                case SQLTypeClass::BOOL:
+                    return "true";
+                case SQLTypeClass::INT:
+                case SQLTypeClass::FLOAT:
+                case SQLTypeClass::DECIMAL:
+                case SQLTypeClass::ENUM:
+                    return "0";
+                case SQLTypeClass::STRING:
+                    return "text";
+                case SQLTypeClass::DATE:
+                    return "2024-01-01";
+                case SQLTypeClass::DATETIME:
+                    return "2024-01-01 12:00:00";
+                case SQLTypeClass::TIME:
+                    return "12:00:00";
+                case SQLTypeClass::UUID:
+                    return "00000000-0000-0000-0000-000000000000";
+                case SQLTypeClass::IPV4:
+                    return "0.0.0.0";
+                case SQLTypeClass::IPV6:
+                    return "::";
+                default:
+                    /// Skip complex (Array/Map/Tuple/JSON/Variant/Dynamic/etc.)
+                    return std::nullopt;
+            }
+        };
+
         const String pkey_name = this->entries[0].getBottomName();
         const String fname = fmt::format("d{}.yaml", next.counter);
         std::ofstream yaml_file(fc.client_file_path / fname);
@@ -2890,7 +2933,9 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
                 {
                     if (cname == pkey_name || !cdata.tp)
                         continue;
-                    yaml_file << "  " << cname << ": " << cdata.tp->appendRandomRawValue(rg, *this) << "\n";
+                    auto value = yaml_plain_value(cdata.tp.get());
+                    if (value.has_value())
+                        yaml_file << "  " << cname << ": " << value.value() << "\n";
                 }
             }
             yaml_file.close();

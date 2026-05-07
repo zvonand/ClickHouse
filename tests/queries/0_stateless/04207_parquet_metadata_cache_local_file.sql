@@ -13,6 +13,12 @@ SET engine_file_truncate_on_insert = 1;
 -- splitting (#104251), a single Parquet file can be read by `max_threads`
 -- sources, so this also guards us from per-machine variance in core count.
 SET max_threads = 1;
+-- `StorageFile` keeps a per-path row-count schema cache; with `count()` the
+-- second query is served from that cache and never reaches the Parquet input
+-- format, so the metadata-cache hit/miss counters would stay at 0/0. Disable
+-- it so every query goes through `getInputWithMetadata` and the Parquet
+-- metadata cache is actually consulted.
+SET use_cache_for_count_from_files = 0;
 
 INSERT INTO FUNCTION file(currentDatabase() || '_04207_local.parquet', Parquet, 'id UInt64, name String')
 SELECT number, toString(number) FROM numbers(100);

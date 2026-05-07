@@ -2995,6 +2995,14 @@ bool ClientBase::processQueryText(const String & text)
     if (exit_strings.contains(trimmed_input))
         return false;
 
+    /// Clear the terminal (POSIX `clear`-style), not SQL. Same entry point as `ls` / `\i` metacommands.
+    if (boost::iequals(trimmed_input, "clear") || boost::iequals(trimmed_input, "/clear"))
+    {
+        if (stdout_is_a_tty)
+            output_stream << "\033[2J\033[H" << std::flush;
+        return true;
+    }
+
     if (trimmed_input.starts_with("\\i"))
     {
         size_t skip_prefix_size = std::strlen("\\i");

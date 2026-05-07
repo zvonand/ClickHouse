@@ -1,0 +1,6 @@
+-- clear variants exit successfully
+OK
+-- clear is not parsed as a bare SQL identifier
+OK
+-- select clear is still SQL
+OK

@@ -90,4 +90,18 @@ SELECT count(c2) FROM
     SELECT c1, c2 FROM VALUES ((118, 150000))
 );
 
+SELECT '-- Query I: den-crane VALUES-based count() repro from PR #104114';
+-- Same shape as Query H but with `count()` (no argument) instead of
+-- `count(c2)`. Pre-fix: returned 2 because `RemoveUnusedProjectionColumnsPass`
+-- pruned both `c1` and `c2` from the inner `SELECT DISTINCT c1, c2` (the outer
+-- `count()` references no column at all), collapsing the entire DISTINCT side
+-- into a single empty-projection row.
+-- Post-fix: returns 3 (2 distinct rows from the LHS DISTINCT side + 1 from the RHS).
+SELECT count() FROM
+(
+    SELECT DISTINCT c1, c2 FROM VALUES ((1, 1), (1, 2))
+    UNION ALL
+    SELECT c1, c2 FROM VALUES ((1, 1))
+);
+
 DROP TABLE t_qty_103785;

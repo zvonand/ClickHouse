@@ -38,3 +38,5 @@ product_1
 product_1
 -- Query H: den-crane VALUES-based count(c2) repro from PR #104114
 3
+-- Query I: den-crane VALUES-based count() repro from PR #104114
+3

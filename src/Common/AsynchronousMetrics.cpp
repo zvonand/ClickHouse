@@ -12,7 +12,6 @@
 #include <Common/MemoryWorker.h>
 #include <Common/formatReadable.h>
 #include <Common/Jemalloc.h>
-#include <base/getPageSize.h>
 #include <Common/JemallocCacheArena.h>
 #include <Common/JemallocMergeTreeArena.h>
 #include <Common/MemoryTracker.h>
@@ -1168,8 +1167,10 @@ void AsynchronousMetrics::update(TimePoint update_time, bool force_update)
     ///   - per-table metadata (allocations from `MergeTreeData::setProperties`,
     ///     `resetSerializationHints`, `updateSerializationHints`).
     /// jemalloc reports per-arena `pactive`/`pdirty` as a count of jemalloc pages. The
-    /// `*_bytes` variants below multiply by the runtime page size (`getPageSize()`) so the values
-    /// are correct on any host (4 KiB on x86_64, 16 KiB on Apple Silicon, 64 KiB on some ARM64).
+    /// `*_bytes` variants below multiply by jemalloc's compiled-in page size (read once from
+    /// `arenas.page`), not the OS page size: the two differ on platforms where jemalloc is
+    /// built with `LG_PAGE=16` (64 KiB pages — aarch64, ppc64le, riscv64) but the kernel uses
+    /// 4 KiB pages. Using `getPageSize()` would under-report by 16× there.
     if (JemallocMergeTreeArena::isEnabled())
     {
         unsigned mergetree_arena = JemallocMergeTreeArena::getArenaIndex();
@@ -1180,7 +1181,8 @@ void AsynchronousMetrics::update(TimePoint update_time, bool force_update)
             fmt::format("stats.arenas.{}.pdirty", mergetree_arena),
             "jemalloc.mergetree_arena.pdirty");
 
-        Int64 page_size = getPageSize();
+        static const Jemalloc::MibCache<size_t> jemalloc_page_size_mib{"arenas.page"};
+        const size_t page_size = jemalloc_page_size_mib.getValue();
         new_values["jemalloc.mergetree_arena.active_bytes"] = { mt_pactive * page_size,
             "Active bytes in the dedicated jemalloc MergeTree arena. Holds long-lived MergeTree heap "
             "state: per-part metadata (`NamesAndTypesList`, `SerializationInfoByName`, the "

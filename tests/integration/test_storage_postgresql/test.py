@@ -1011,6 +1011,48 @@ def test_postgres_date32_array(started_cluster):
     cursor.execute("DROP TABLE test_date32_array")
 
 
+def test_postgres_read_boolean_array(started_cluster):
+    """Test reading PostgreSQL boolean arrays with native 't'/'f' text values.
+
+    PostgreSQL boolean arrays contain 't'/'f' text values. The array parser
+    must handle these correctly (the scalar boolean path handled 't'/'f' but
+    the array path previously did not, causing a conversion error).
+    Also validates dimension tracking doesn't underflow on well-formed input.
+    """
+    cursor = started_cluster.postgres_conn.cursor()
+    cursor.execute("DROP TABLE IF EXISTS test_read_bool_array")
+    cursor.execute(
+        """CREATE TABLE test_read_bool_array (
+            id integer,
+            flags boolean[] NOT NULL,
+            nullable_flags boolean[],
+            nested_flags boolean[][] NOT NULL
+        )"""
+    )
+
+    cursor.execute(
+        "INSERT INTO test_read_bool_array VALUES "
+        "(1, '{t,f,t,f}', '{t,NULL,f}', '{{t,f},{f,t}}'),"
+        "(2, '{t,t,t}', NULL, '{{t,t},{t,t}}'),"
+        "(3, '{f,f}', '{f,f,f,f}', '{{f,f},{f,f}}')"
+    )
+    started_cluster.postgres_conn.commit()
+
+    table = f"""postgresql('{started_cluster.postgres_ip}:{started_cluster.postgres_port}', 'postgres', 'test_read_bool_array', 'postgres', '{pg_pass}')"""
+
+    result = node1.query(
+        f"SELECT id, flags, nullable_flags, nested_flags FROM {table} ORDER BY id"
+    )
+    expected = (
+        "1\t[1,0,1,0]\t[1,NULL,0]\t[[1,0],[0,1]]\n"
+        "2\t[1,1,1]\t[]\t[[1,1],[1,1]]\n"
+        "3\t[0,0]\t[0,0,0,0]\t[[0,0],[0,0]]\n"
+    )
+    assert result == expected
+
+    cursor.execute("DROP TABLE test_read_bool_array")
+
+
 if __name__ == "__main__":
     cluster.start()
     input("Cluster created, press any key to destroy...")

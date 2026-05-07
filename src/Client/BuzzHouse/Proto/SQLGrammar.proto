@@ -3937,6 +3937,7 @@ enum DictionaryLayouts {
     RANGE_HASHED = 14;
     SPARSE_HASHED = 15;
     SSD_CACHE = 16;
+    REGEXP_TREE = 17;
 }
 
 message DictionaryLayout {

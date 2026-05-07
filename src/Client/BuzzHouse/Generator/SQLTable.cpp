@@ -2583,13 +2583,15 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
     const bool has_view = collectionHas<SQLView>(dictionary_view_lambda);
     const bool has_dictionary = collectionHas<SQLDictionary>(dictionary_dictionary_lambda);
 
-    const uint32_t dict_table = 10 * static_cast<uint32_t>(has_table);
-    const uint32_t dict_system_table = 5 * static_cast<uint32_t>(!next.is_deterministic && !systemTables.empty());
-    const uint32_t dict_view = 5 * static_cast<uint32_t>(has_view);
-    const uint32_t dict_dict = 5 * static_cast<uint32_t>(has_dictionary);
-    const uint32_t null_src = 5;
-    /// YAMLRegExpTree requires exactly one String primary key — only consider it for non-range, non-complex layouts.
-    const uint32_t yaml_regexp_tree_src = static_cast<uint32_t>(!isRange && !is_complex_key) * 3;
+    /// REGEXP_TREE layout is tied to YAMLRegExpTree source: skip all other source types when this layout is in use.
+    const uint32_t generic_src_mult = static_cast<uint32_t>(dl != REGEXP_TREE);
+    const uint32_t dict_table = 10 * static_cast<uint32_t>(has_table) * generic_src_mult;
+    const uint32_t dict_system_table = 5 * static_cast<uint32_t>(!next.is_deterministic && !systemTables.empty()) * generic_src_mult;
+    const uint32_t dict_view = 5 * static_cast<uint32_t>(has_view) * generic_src_mult;
+    const uint32_t dict_dict = 5 * static_cast<uint32_t>(has_dictionary) * generic_src_mult;
+    const uint32_t null_src = 5 * generic_src_mult;
+    /// YAMLRegExpTree only makes sense when paired with REGEXP_TREE layout.
+    const uint32_t yaml_regexp_tree_src = !generic_src_mult ? 100 : 0;
     DictionarySourceDetails * clickhouse_dsd = nullptr;
     DictionarySourceDetails * yaml_dsd = nullptr;
 

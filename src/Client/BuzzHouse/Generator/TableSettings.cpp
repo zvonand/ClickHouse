@@ -698,6 +698,8 @@ static std::unordered_map<String, CHSetting> ssdCachedLayoutSettings
 
 static std::unordered_map<String, CHSetting> ipTreeLayoutSettings = {{"ACCESS_TO_KEY_FROM_ATTRIBUTES", trueOrFalseSettingNoOracle}};
 
+static std::unordered_map<String, CHSetting> regexpTreeLayoutSettings = {{"require_nonempty", trueOrFalseSettingNoOracle}};
+
 static std::unordered_map<String, CHSetting> dataLakeSettings
     = {{"iceberg_format_version",
         CHSetting([](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.randomInt<uint32_t>(1, 3)); }, {"1", "2", "3"}, false)},
@@ -1200,6 +1202,7 @@ void loadFuzzerTableSettings(const FuzzConfig & fc)
          {HASHED_ARRAY, hashedArrayLayoutSettings},
          {IP_TRIE, ipTreeLayoutSettings},
          {RANGE_HASHED, rangeHashedLayoutSettings},
+         {REGEXP_TREE, regexpTreeLayoutSettings},
          {SPARSE_HASHED, hashedLayoutSettings},
          {SSD_CACHE, ssdCachedLayoutSettings}});
 

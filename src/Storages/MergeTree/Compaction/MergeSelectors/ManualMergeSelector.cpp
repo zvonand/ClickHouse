@@ -22,10 +22,10 @@ struct ManualMergeSelectorTableInfo
 std::pair<ManualMergeSelectorTableInfo *, std::unique_lock<std::mutex>> getTableInfo(const StorageID & id)
 {
     static std::mutex registry_mutex;
-    static std::unordered_map<UUID, ManualMergeSelectorTableInfo> registry;
+    static std::unordered_map<StorageID, ManualMergeSelectorTableInfo, StorageID::DatabaseAndTableNameHash, StorageID::DatabaseAndTableNameEqual> registry;
 
     std::unique_lock<std::mutex> lock(registry_mutex);
-    return std::make_pair(&registry[id.uuid], std::move(lock));
+    return std::make_pair(&registry[id], std::move(lock));
 }
 
 std::optional<PartsRange> lookupRange(const PartsRanges & parts_ranges, const Names & scheduled_merge)

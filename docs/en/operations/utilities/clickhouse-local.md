@@ -289,7 +289,7 @@ You can also run it with `-q`:
 ./clickhouse-local -q clear
 ```
 
-The same metacommand is available in `clickhouse-client` interactive mode.
+The same meta-command is available in `clickhouse-client` interactive mode.
 
 ## Examples {#examples}
 

@@ -2995,7 +2995,7 @@ bool ClientBase::processQueryText(const String & text)
     if (exit_strings.contains(trimmed_input))
         return false;
 
-    /// Clear the terminal (POSIX `clear`-style), not SQL. Same entry point as `ls` / `\i` metacommands.
+    /// Clear the terminal (POSIX `clear`-style), not SQL. Same entry point as `ls` / `\i` meta-commands.
     if (boost::iequals(trimmed_input, "clear") || boost::iequals(trimmed_input, "/clear"))
     {
         if (stdout_is_a_tty)

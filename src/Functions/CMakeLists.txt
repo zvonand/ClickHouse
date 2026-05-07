@@ -182,29 +182,11 @@ add_subdirectory(keyvaluepair)
 # Signed integer overflow on user-provided data inside boost::geometry - ignore.
 set_source_files_properties("pointInPolygon.cpp" PROPERTIES COMPILE_FLAGS -fno-sanitize=signed-integer-overflow)
 
-# Files where the v3 wrapper codegen hurts performance.
-#
-# - FunctionsStringDistance.cpp: under v3+LTO the auto-vectorizer/unroller
-#   produce a 16-YMM scratch zero-init followed by per-byte scatter writes
-#   in the Jaccard kernel (`stringJaccardIndex`).  The combination causes
-#   store-buffer pressure and partial store-forwarding stalls on Intel cores,
-#   regressing the query ~17%.
-# - randomString.cpp: under v3 the `ColumnString` prologue is emitted with
-#   YMM stores / `vpbroadcastq`, which forces a `vzeroupper` before each
-#   virtual `getUInt` call inside the per-row loop.  The extra ~6 cycle
-#   transition × 100M rows regresses `randomString(rand() % 10)` ~15%.
-# - FunctionsHashingMisc.cpp: at v3 the BMI2 (`mulx`, `rorx`) encodings used
-#   inside the inlined `XXH3` body are 1-2 bytes longer than v2's `mul`/`shld`.
-#   This shifts the empty-string fast path so its `movabs`+`ret` straddles a
-#   16-byte instruction-fetch boundary, splitting one IFU fetch into two and
-#   regressing `xxh3(materialize(''))` ~21% and `farmHash64(materialize(''))`
-#   ~11%.  Compiling the dispatcher TU at v2 restores master codegen for the
-#   short-string critical path; the AVX2 hash kernels themselves are inline in
-#   their respective contrib headers and remain at v3 wherever they're used.
-#
-# Compiling these files at v2 keeps the SSE-only wrapper codegen that matches
-# master.  The hot AVX2 kernels they invoke (e.g. `RandImpl::execute`) live in
-# separate translation units and remain at v3.
+# TODO: at v3 these wrapper TUs regress because the SLP vectorizer / SIMD-aware codegen
+# fires inside the per-row dispatch (YMM scratch zero-init in `stringJaccardIndex`,
+# YMM `ColumnString` prologue forcing `vzeroupper` around `randomString`'s `getUInt`,
+# longer BMI2 encodings in `XXH3`'s short-input fast path crossing a 16-byte fetch boundary).
+# Compiling at v2 restores master codegen; the actual AVX2 kernels they call live in other TUs.
 if (ARCH_AMD64 AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3)
     set_source_files_properties(FunctionsStringDistance.cpp PROPERTIES COMPILE_FLAGS "-march=x86-64-v2")
     set_source_files_properties(randomString.cpp PROPERTIES COMPILE_FLAGS "-march=x86-64-v2")

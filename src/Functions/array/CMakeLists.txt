@@ -24,20 +24,11 @@ endif()
 # TUs where libcxx hardening needs to be disabled are specified here.
 set_source_files_properties(array.cpp PROPERTIES COMPILE_FLAGS "-U_LIBCPP_HARDENING_MODE -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_NONE")
 
-# On x86-64-v3 the SLP vectorizer widens the accumulator loop in arrayNorm to
-# 256-bit YMM, which is slower for LinfNorm with BFloat16/Float32 and causes
-# register spills for sum-based norms.  Compile this file at v2 level to keep
-# the 128-bit codegen that matches master's performance.
-#
-# Same pattern applies to arrayDistance.cpp: at v3 the SLP vectorizer collapses the
-# 8-way `states[VEC_SIZE]` accumulator into a single 256-bit YMM and uses
-# `vpmovzxwd` + `vpslld` for the BF16->Float32 expansion. The result is fewer
-# instructions but a longer per-iteration latency chain on the BF16 paths of
-# `L1Distance`/`LinfDistance`/`LpDistance`/`cosineDistance` (no AVX-512
-# specialisation) - IPC drops from 3.40 to 1.89 and the BF16 distance queries
-# regress ~7-12%. Function-level `__attribute__((target("...")))` on the L2
-# AVX-512 specialisations overrides this file flag, so those keep their
-# Sapphire Rapids `_mm512_cvtpbh_ps` codegen.
+# TODO: at v3 the SLP vectorizer widens the per-row accumulator loops in arrayNorm and
+# arrayDistance to 256-bit YMM (collapses to a single accumulator on the BF16 paths,
+# regressing `LinfNorm`/`L1Distance`/`LinfDistance` ~7-15%).  Compiling at v2 keeps
+# 128-bit codegen; the AVX-512 specialisations carry function-level target attributes
+# and override this file flag.
 if (ARCH_AMD64 AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3)
     set_source_files_properties(arrayNorm.cpp PROPERTIES COMPILE_FLAGS "-march=x86-64-v2")
     set_source_files_properties(arrayDistance.cpp PROPERTIES COMPILE_FLAGS "-march=x86-64-v2")

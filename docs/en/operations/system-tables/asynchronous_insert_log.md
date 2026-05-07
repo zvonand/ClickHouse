@@ -36,7 +36,7 @@ ClickHouse does not delete data from the table automatically. See [Introduction]
 - `bytes` ([UInt64](/sql-reference/data-types/int-uint)) — Number of inserted bytes.
 - `rows` ([UInt64](/sql-reference/data-types/int-uint)) — Number of inserted rows.
 - `exception` ([String](/sql-reference/data-types/string)) — Exception message.
-- `status` ([Enum8('Ok' = 0, 'ParsingError' = 1, 'FlushError' = 2)](/sql-reference/data-types/enum)) — Status of the view. Values: 'Ok' = 1 — Successful insert, 'ParsingError' = 2 — Exception when parsing the data, 'FlushError' = 3 — Exception when flushing the data
+- `status` ([Enum8('Ok' = 0, 'ParsingError' = 1, 'FlushError' = 2)](/sql-reference/data-types/enum)) — Status of the insert. Values: 'Ok' = 0 — Successful insert, 'ParsingError' = 1 — Exception when parsing the data, 'FlushError' = 2 — Exception when flushing the data.
 - `data_kind` ([Enum8('Parsed' = 0, 'Preprocessed' = 1)](/sql-reference/data-types/enum)) — The status of the data. Value: 'Parsed' and 'Preprocessed'.
 - `flush_time` ([DateTime](/sql-reference/data-types/datetime)) — The date and time when the flush happened.
 - `flush_time_microseconds` ([DateTime64(6)](/sql-reference/data-types/datetime64)) — The date and time when the flush happened with microseconds precision.

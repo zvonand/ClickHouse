@@ -342,6 +342,7 @@ std::unordered_map<String, CHSetting> performanceSettings
        {"optimize_append_index", trueOrFalseSetting},
        {"optimize_arithmetic_operations_in_aggregate_functions", trueOrFalseSetting},
        {"optimize_and_compare_chain", trueOrFalseSetting},
+       {"optimize_dictget_tuple_element", trueOrFalseSetting},
        {"optimize_distinct_in_order", trueOrFalseSetting},
        {"optimize_distributed_group_by_sharding_key", trueOrFalseSetting},
        {"optimize_empty_string_comparisons", trueOrFalseSetting},
@@ -1462,6 +1463,15 @@ static std::unordered_map<String, CHSetting> serverSettings2 = {
     {"type_json_use_partial_match_to_skip_paths_by_regexp", trueOrFalseSettingNoOracle},
     {"union_default_mode", setSetting},
     {"update_insert_deduplication_token_in_dependent_materialized_views", trueOrFalseSettingNoOracle},
+    {"url_base",
+     CHSetting(
+         [](RandomGenerator & rg, FuzzConfig &)
+         {
+             static const DB::Strings bases = {"''", "'http://localhost'", "'http://localhost/'", "'http://example.com/'"};
+             return rg.pickRandomly(bases);
+         },
+         {},
+         false)},
     {"update_parallel_mode",
      CHSetting(
          [](RandomGenerator & rg, FuzzConfig &)

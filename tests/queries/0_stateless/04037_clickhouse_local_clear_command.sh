@@ -14,6 +14,13 @@ $CLICKHOUSE_LOCAL -q "/clear"
 $CLICKHOUSE_LOCAL -q "/CLEAR;"
 echo "OK"
 
+echo "-- clear via --queries-file (same path as -q)"
+qf="${CLICKHOUSE_TMP}/04037_clear_queries_file_$$.txt"
+printf '%s\n' 'clear' >"$qf"
+$CLICKHOUSE_LOCAL --queries-file "$qf"
+rm -f "$qf"
+echo "OK"
+
 echo "-- clear is not parsed as a bare SQL identifier"
 if err="$($CLICKHOUSE_LOCAL -q "clear" 2>&1)"; then
     if echo "$err" | grep -qF 'UNKNOWN_IDENTIFIER'; then

@@ -3843,7 +3843,8 @@ bool ClientBase::processMultiQueryFromFile(const String & file_name)
     ReadBufferFromFile in(file_name);
     readStringUntilEOF(queries_from_file, in);
 
-    return executeMultiQuery(queries_from_file);
+    /// Same entry point as `-q` / stdin so meta-commands (`clear`, `ls`, `\i`, …) work for whole-file input.
+    return processQueryText(queries_from_file);
 }
 
 void ClientBase::runNonInteractive()

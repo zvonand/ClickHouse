@@ -210,6 +210,13 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
 
     if (null_presence.has_nullable)
     {
+        /// If the result type cannot be Nullable (e.g. Array, Tuple, Map),
+        /// run the function on nested columns and return the result as-is.
+        /// For null rows, the nested column holds default values, so the function
+        /// produces results equivalent to feeding it the default of the input type
+        /// (e.g. an empty array for `extractAll(NULL, ...)`).
+        const bool result_is_nullable = result_type->isNullable();
+
         bool all_columns_constant = true;
         bool all_numeric_types = true;
         for (const auto & arg: args)
@@ -219,7 +226,8 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
 
             if (arg.type->isNullable() && isColumnConst(*arg.column) && arg.column->onlyNull())
             {
-                /// If any of input columns contains a null constant, the result is null constant.
+                /// If any of input columns contains a null constant, the result is null constant
+                /// (or the default value of the result type when it cannot be Nullable).
                 return result_type->createColumnConstWithDefaultValue(input_rows_count);
             }
 
@@ -246,6 +254,8 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
             auto temporary_result_type = removeNullable(result_type);
 
             auto res = executeWithoutLowCardinalityColumns(temporary_columns, temporary_result_type, input_rows_count, dry_run);
+            if (!result_is_nullable)
+                return res;
             return wrapInNullable(res, args, result_type, input_rows_count);
         }
 
@@ -295,6 +305,8 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
         {
             /// Each row should be evaluated if there are no nulls or short circuiting is disabled.
             auto res = executeWithoutLowCardinalityColumns(temporary_columns, temporary_result_type, input_rows_count, dry_run);
+            if (!result_is_nullable)
+                return res;
             auto new_res = wrapInNullable(res, std::move(result_null_map));
             return new_res;
         }
@@ -316,6 +328,8 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
             auto mutable_res = IColumn::mutate(std::move(res));
             mutable_res->expand(filter_mask, false);
 
+            if (!result_is_nullable)
+                return std::move(mutable_res);
             auto new_res = wrapInNullable(std::move(mutable_res), std::move(result_null_map));
             return new_res;
         }
@@ -748,7 +762,11 @@ DataTypePtr IFunctionOverloadResolver::getReturnTypeWithoutLowCardinality(const 
         {
             Block nested_columns = createBlockWithNestedColumns(arguments);
             auto return_type = getReturnTypeImpl(ColumnsWithTypeAndName(nested_columns.begin(), nested_columns.end()));
-            return makeNullable(return_type);
+            /// If the return type cannot be Nullable (e.g. Array, Tuple, Map),
+            /// return it as-is. For null input rows, the function will be evaluated
+            /// over the default values of the nested column and produce the corresponding default result
+            /// (e.g. an empty array), instead of failing the type check.
+            return makeNullableSafe(return_type);
         }
     }
 

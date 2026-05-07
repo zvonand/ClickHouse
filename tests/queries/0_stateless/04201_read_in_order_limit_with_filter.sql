@@ -1,4 +1,4 @@
--- Tags: no-random-settings, no-random-merge-tree-settings
+-- Tags: no-random-settings, no-random-merge-tree-settings, no-parallel-replicas
 
 DROP TABLE IF EXISTS t_read_in_order_limit;
 

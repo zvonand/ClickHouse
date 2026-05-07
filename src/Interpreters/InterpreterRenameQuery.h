@@ -62,11 +62,7 @@ public:
 
 private:
     BlockIO executeToTables(const ASTRenameQuery & rename, const RenameDescriptions & descriptions, TableGuards & ddl_guards);
-#if CLICKHOUSE_CLOUD
-    BlockIO executeToDatabase(const ASTRenameQuery & rename, const RenameDescriptions & descriptions, TableGuards & ddl_guards);
-#else
     BlockIO executeToDatabase(const ASTRenameQuery & rename, const RenameDescriptions & descriptions);
-#endif
 
     enum class RenameType : uint8_t
     {

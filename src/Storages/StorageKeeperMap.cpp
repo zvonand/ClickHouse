@@ -1036,14 +1036,12 @@ void StorageKeeperMap::drop()
 
     // used in private build
     bool do_not_drop_table_data_in_keeper = false;
-    if (do_not_drop_table_data_in_keeper)
-        return;
 #if CLICKHOUSE_CLOUD
     /// In case of Shared Catalog, table data in ZooKeeper will be dropped separately
-    bool do_not_drop_table_data_in_keeper = SharedDatabaseCatalog::initialized() && SharedDatabaseCatalog::instance().isTableInLocalDropOrDetachQueue(getStorageID().uuid);
+    do_not_drop_table_data_in_keeper = SharedDatabaseCatalog::initialized() && SharedDatabaseCatalog::instance().isTableInLocalDropOrDetachQueue(getStorageID().uuid);
+#endif
     if (do_not_drop_table_data_in_keeper)
         return;
-#endif
 
     Coordination::Requests ops;
     Coordination::Responses responses;

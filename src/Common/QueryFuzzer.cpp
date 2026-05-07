@@ -2889,7 +2889,6 @@ static const std::map<size_t, Strings> swapAggrs
          "max",
          "median",
          "min",
-         "rankCorr",
          "singleValueOrNull",
          "skewPop",
          "skewSamp",
@@ -2916,7 +2915,11 @@ static const std::map<size_t, Strings> swapAggrs
          "groupBitmapAnd",
          "groupBitmapOr",
          "groupBitmapXor",
-         "quantile"}},
+         "quantile",
+         "groupArrayMovingAvg",
+         "groupArrayMovingSum",
+         "groupArraySorted",
+         "aggThrow"}},
        {2,
         {"argMax",
          "argMin",
@@ -2937,12 +2940,16 @@ static const std::map<size_t, Strings> swapAggrs
          "maxIntersections",
          "maxIntersectionsPosition",
          "quantileWeighted",
+         "rankCorr",
          "studentTTest",
          "theilsU",
          "topKWeighted",
          "uniq",
          "welchTTest",
-         "simpleLinearRegression"}}};
+         "simpleLinearRegression",
+         "largestTriangleThreeBuckets",
+         "analysisOfVariance",
+         "intervalLengthSum"}}};
 
 static const std::vector<std::unordered_set<String>> & swapFuncs
     = { /// String pattern matching operators

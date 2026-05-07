@@ -4,3 +4,5 @@ OK
 OK
 -- select clear is still SQL
 OK
+-- clickhouse-client -q clear is still SQL (non-interactive)
+OK

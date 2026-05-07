@@ -2996,7 +2996,10 @@ bool ClientBase::processQueryText(const String & text)
         return false;
 
     /// Clear the terminal (POSIX `clear`-style), not SQL. Same entry point as `ls` / `\i` meta-commands.
-    if (boost::iequals(trimmed_input, "clear") || boost::iequals(trimmed_input, "/clear"))
+    /// Only in interactive mode, or in clickhouse-local (including `-q`), so `clickhouse-client` batch
+    /// mode still parses `clear` as SQL and errors on mistakes (UNKNOWN_IDENTIFIER).
+    if ((boost::iequals(trimmed_input, "clear") || boost::iequals(trimmed_input, "/clear"))
+        && (is_interactive || supportsLocalMetaCommands()))
     {
         if (stdout_is_a_tty)
             output_stream << "\033[2J\033[H" << std::flush;

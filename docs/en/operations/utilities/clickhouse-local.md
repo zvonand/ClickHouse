@@ -279,17 +279,19 @@ file3.xml
 
 ### CLEAR command {#clear-command}
 
-Clears the terminal screen (similar to the `clear` command on Linux or Ctrl+L in many terminals). This is a client-side action: it is not sent to the SQL engine, so you can use it in interactive mode without getting an `UNKNOWN_IDENTIFIER` error.
+Clears the terminal screen (similar to the `clear` command on Linux or Ctrl+L in many terminals). This is a client-side action: it is not sent to the SQL engine.
 
-Supported forms: `clear`, `CLEAR`, `/clear` (optional trailing `;` is ignored). If standard output is not a terminal (for example, when piping output), the command is accepted but does not emit control sequences.
+In `clickhouse-local`, the meta-command is recognized in **interactive** mode and with **`-q`** / query files (same idea as `ls`), so a bare `clear` does not produce an `UNKNOWN_IDENTIFIER` error.
 
-You can also run it with `-q`:
+In `clickhouse-client`, it is recognized only in **interactive** mode. With **`-q`** or query files, `clear` is still parsed as SQL, so automation keeps the previous error behavior instead of turning typos into a silent no-op.
+
+Supported forms: `clear`, `CLEAR`, `/clear` (optional trailing `;` is ignored). If standard output is not a terminal (for example, when piping output), the meta-command is accepted when recognized but does not emit control sequences.
+
+With `clickhouse-local` and `-q`:
 
 ```sh
 ./clickhouse-local -q clear
 ```
-
-The same meta-command is available in `clickhouse-client` interactive mode.
 
 ## Examples {#examples}
 

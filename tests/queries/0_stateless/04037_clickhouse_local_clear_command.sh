@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test the `clear` client metacommand (clickhouse-local / same ClientBase path as clickhouse-client).
+# Test the `clear` client meta-command (clickhouse-local; gated for clickhouse-client non-interactive).
 
 CURDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
@@ -28,4 +28,8 @@ echo "OK"
 
 echo "-- select clear is still SQL"
 $CLICKHOUSE_LOCAL -q "select clear" 2>&1 | grep -F 'UNKNOWN_IDENTIFIER' > /dev/null
+echo "OK"
+
+echo "-- clickhouse-client -q clear is still SQL (non-interactive)"
+$CLICKHOUSE_CLIENT -q "clear" 2>&1 | grep -F 'UNKNOWN_IDENTIFIER' > /dev/null
 echo "OK"

@@ -130,3 +130,32 @@ SELECT 'keyword lambda arg bloom_filter', user_id FROM t_quoted_lambda WHERE has
 SETTINGS force_data_skipping_indices = 'idx_kw_bf';
 
 DROP TABLE t_quoted_lambda;
+
+-- A lambda with more than three captured arguments and a captured-constant
+-- separator (`concatWithSeparator('-', x1, x2, x3, x4)`) exercises the same
+-- folding path with a wider capture list and a different higher-order function.
+DROP TABLE IF EXISTS t_cws;
+
+CREATE TABLE t_cws
+(
+    id UInt64,
+    a Array(String),
+    b Array(String),
+    c Array(String),
+    d Array(String),
+    joined Array(String) ALIAS arrayMap((x1, x2, x3, x4) -> concatWithSeparator('-', x1, x2, x3, x4), a, b, c, d),
+    INDEX idx_joined_text joined TYPE text(tokenizer = 'array') GRANULARITY 100000000,
+    INDEX idx_joined_bf joined TYPE bloom_filter GRANULARITY 100000000
+)
+ENGINE = MergeTree
+ORDER BY id;
+
+INSERT INTO t_cws VALUES (1, ['hello', 'foo'], ['world', 'bar'], ['a', 'baz'], ['b', 'qux']);
+
+SELECT 'concatWithSeparator text', id FROM t_cws WHERE has(joined, 'hello-world-a-b')
+SETTINGS force_data_skipping_indices = 'idx_joined_text';
+
+SELECT 'concatWithSeparator bloom_filter', id FROM t_cws WHERE has(joined, 'hello-world-a-b')
+SETTINGS force_data_skipping_indices = 'idx_joined_bf';
+
+DROP TABLE t_cws;

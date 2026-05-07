@@ -2024,6 +2024,13 @@ bool InterpreterCreateQuery::doCreateTable(ASTCreateQuery & create,
                 const auto column_declaration = make_intrusive<ASTColumnDeclaration>();
                 column_declaration->name = column.name;
                 column_declaration->setType(makeASTDataType(column.type->getName()));
+                /// Preserve DEFAULT so DatabaseDataLake::createTable can reject it
+                /// instead of silently dropping the expression from the Iceberg schema.
+                if (column.default_desc.expression)
+                {
+                    column_declaration->default_specifier = toColumnDefaultSpecifier(column.default_desc.kind);
+                    column_declaration->setDefaultExpression(column.default_desc.expression->clone());
+                }
                 columns_expression_list->children.emplace_back(column_declaration);
             }
         }

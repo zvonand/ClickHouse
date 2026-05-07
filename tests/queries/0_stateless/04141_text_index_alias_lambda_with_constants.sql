@@ -98,3 +98,35 @@ SELECT 'bloom_filter concat-prefix', id FROM t_bf_arr WHERE has(arr_prefixed, '-
 SETTINGS force_data_skipping_indices = 'idx_prefixed_bf';
 
 DROP TABLE t_bf_arr;
+
+-- Lambda argument names that require backquoting (contain whitespace, or clash
+-- with SQL keywords) must produce identical column names on the AST and DAG
+-- sides, so index matching keeps working.
+DROP TABLE IF EXISTS t_quoted_lambda;
+
+CREATE TABLE t_quoted_lambda
+(
+    user_id UInt64,
+    color_map Map(String, String),
+    colors_kv Array(String) ALIAS arrayMap((`my key`, `my value`) -> concat(`my key`, '=', `my value`), mapKeys(color_map), mapValues(color_map)),
+    arr Array(String),
+    arr_keyword Array(String) ALIAS arrayMap(`select` -> concat('-', `select`), arr),
+    INDEX idx_kv_quoted colors_kv TYPE text(tokenizer = 'array') GRANULARITY 100000000,
+    INDEX idx_kw_text arr_keyword TYPE text(tokenizer = 'array') GRANULARITY 100000000,
+    INDEX idx_kw_bf arr_keyword TYPE bloom_filter GRANULARITY 100000000
+)
+ENGINE = MergeTree
+ORDER BY user_id;
+
+INSERT INTO t_quoted_lambda VALUES (1, {'favorite': 'red', 'second': 'blue'}, ['hello', 'world']);
+
+SELECT 'quoted lambda args', user_id FROM t_quoted_lambda WHERE has(colors_kv, 'favorite=red')
+SETTINGS force_data_skipping_indices = 'idx_kv_quoted';
+
+SELECT 'keyword lambda arg text', user_id FROM t_quoted_lambda WHERE has(arr_keyword, '-hello')
+SETTINGS force_data_skipping_indices = 'idx_kw_text';
+
+SELECT 'keyword lambda arg bloom_filter', user_id FROM t_quoted_lambda WHERE has(arr_keyword, '-hello')
+SETTINGS force_data_skipping_indices = 'idx_kw_bf';
+
+DROP TABLE t_quoted_lambda;

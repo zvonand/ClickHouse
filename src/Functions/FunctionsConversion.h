@@ -1770,6 +1770,22 @@ static ColumnPtr NO_SANITIZE_UNDEFINED convertNumericGeneral(
         vec_null_map_to = &col_null_map_to->getData();
     }
 
+    /// Same-width integer conversions (e.g. `toInt64(UInt64)`, `toUInt32(Int32)`) are pure bit-reinterprets,
+    /// so the per-element `static_cast` loop below is just a memcpy.  Calling `std::memcpy` directly
+    /// keeps the codegen narrow (`rep movsb`/scalar) and avoids the SLP vectorizer widening this trivial
+    /// loop into 256-bit YMM stores at `-march=x86-64-v3` - those leave the upper YMM state dirty for
+    /// the rest of the query and trigger an SSE/AVX transition penalty on Intel cores that handle the
+    /// transition serially.
+    if constexpr (std::is_integral_v<FromFieldType> && std::is_integral_v<ToFieldType>
+        && sizeof(FromFieldType) == sizeof(ToFieldType)
+        && !std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>
+        && !std::is_same_v<Additions, AccurateConvertStrategyAdditions>)
+    {
+        if (input_rows_count > 0)
+            std::memcpy(vec_to.data(), vec_from.data(), input_rows_count * sizeof(ToFieldType));
+        return std::move(col_to);
+    }
+
     for (size_t i = 0; i < input_rows_count; ++i)
     {
         /// Handle NaN/Inf when converting from float to integer

@@ -3843,8 +3843,13 @@ bool ClientBase::processMultiQueryFromFile(const String & file_name)
     ReadBufferFromFile in(file_name);
     readStringUntilEOF(queries_from_file, in);
 
-    /// Same entry point as `-q` / stdin so meta-commands (`clear`, `ls`, `\i`, …) work for whole-file input.
-    return processQueryText(queries_from_file);
+    /// For `clickhouse-local` only: same entry point as `-q` / stdin so meta-commands (`clear`, `ls`,
+    /// `\i`, …) work for whole-file input. Remote `clickhouse-client` keeps `executeMultiQuery` so
+    /// `--queries-file` does not apply `exit_strings` and other text-level metas (avoids silent
+    /// behavior changes for batch automation).
+    if (supportsLocalMetaCommands())
+        return processQueryText(queries_from_file);
+    return executeMultiQuery(queries_from_file);
 }
 
 void ClientBase::runNonInteractive()

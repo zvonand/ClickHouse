@@ -281,7 +281,7 @@ file3.xml
 
 Clears the terminal screen (similar to the `clear` command on Linux or Ctrl+L in many terminals). This is a client-side action: it is not sent to the SQL engine.
 
-In `clickhouse-local`, the meta-command is recognized in **interactive** mode and for **`-q`** and **`--queries-file`** input (same client path as `-q`, same idea as `ls`), so a bare `clear` does not produce an `UNKNOWN_IDENTIFIER` error.
+In `clickhouse-local`, the meta-command is recognized in **interactive** mode and for **`-q`** and **`--queries-file`** input (same client path as `-q`, same idea as `ls`), so a bare `clear` does not produce an `UNKNOWN_IDENTIFIER` error. Remote **`clickhouse-client --queries-file`** is unchanged: file contents are executed as SQL only (no text-level meta-commands).
 
 In `clickhouse-client`, it is recognized only in **interactive** mode. With **`-q`** or query files, `clear` is still parsed as SQL, so automation keeps the previous error behavior instead of turning typos into a silent no-op.
 

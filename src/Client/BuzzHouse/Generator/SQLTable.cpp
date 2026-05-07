@@ -2953,7 +2953,9 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
         {
             for (uint32_t j = 0; j < 3; j++)
             {
-                yaml_file << "- regexp: '.*pattern" << j << ".*'\n";
+                /// regexp_tree requires each rule to use the dictionary's primary-key field name
+                /// (not a literal "regexp"). This is the column we forced to String earlier.
+                yaml_file << "- " << pkey_name << ": '.*pattern" << j << ".*'\n";
                 for (const auto & [cname, cdata] : next.cols)
                 {
                     if (cname == pkey_name || !cdata.tp)

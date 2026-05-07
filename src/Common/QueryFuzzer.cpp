@@ -4321,8 +4321,7 @@ void QueryFuzzer::fuzz(ASTPtr & ast)
                     alter_cmd->with_name = "freeze_" + std::to_string(fuzz_rand() % 10);
                 break;
             case ASTAlterCommand::EXECUTE_COMMAND:
-                /// Occasionally swap the EXECUTE command name between the two registered commands;
-                /// rarely substitute an unknown name to exercise the unknown-command error path.
+                /// Occasionally swap the EXECUTE command name between the two registered commands.
                 if (fuzz_rand() % 30 == 0)
                 {
                     static const Strings real_execute_commands = {"expire_snapshots", "remove_orphan_files"};

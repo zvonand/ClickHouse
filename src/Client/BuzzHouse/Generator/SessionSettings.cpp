@@ -801,7 +801,6 @@ std::unordered_map<String, CHSetting> serverSettings = {
     {"hdfs_ignore_file_doesnt_exist", trueOrFalseSettingNoOracle},
     {"hdfs_skip_empty_files", trueOrFalseSettingNoOracle},
     {"hdfs_throw_on_zero_files_match", trueOrFalseSettingNoOracle},
-    {"http_headers_read_timeout", CHSetting(highRange, {}, false)},
     {"http_make_head_request", trueOrFalseSettingNoOracle},
     {"http_max_field_name_size", CHSetting(highRange, {}, false)},
     {"http_max_fields", CHSetting(highRange, {}, false)},
@@ -834,12 +833,7 @@ std::unordered_map<String, CHSetting> serverSettings = {
          false)},
     {"iceberg_snapshot_id",
      CHSetting([](RandomGenerator &, FuzzConfig & fc) { return fc.getRandomIcebergHistoryValue("\"snapshot_id\""); }, {}, false)},
-    {"iceberg_orphan_files_older_than_seconds", CHSetting(highRange, {}, false)},
     {"iceberg_timestamp_ms", CHSetting([](RandomGenerator & rg, FuzzConfig & fc) { return getNextIcebergTimestamp(rg, fc); }, {}, false)},
-    /// ClickHouse cloud setting
-    {"ignore_cold_parts_seconds",
-     CHSetting(
-         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 0, 60)); }, {}, false)},
     {"ignore_format_null_for_explain", trueOrFalseSettingNoOracle},
     {"ignore_materialized_views_with_dropped_target_table", trueOrFalseSettingNoOracle},
     {"ignore_on_cluster_for_replicated_access_entities_queries", trueOrFalseSettingNoOracle},
@@ -1844,18 +1838,24 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
                   {},
                   false)}});
     }
-    if (fc.enable_timeout_settings)
+    if (fc.enable_time_settings)
     {
         /// Connection / wait / poll timeouts. Fuzzed independently from other settings since
         /// extreme values can stall the fuzzer rather than producing useful coverage.
         serverSettings.insert(
             {{"async_insert_busy_timeout_min_ms", CHSetting(highRange, {}, false)},
              {"async_insert_poll_timeout_ms", CHSetting(highRange, {}, false)},
+             {"connect_timeout", CHSetting(highRange, {}, false)},
              {"connect_timeout_with_failover_ms", CHSetting(highRange, {}, false)},
              {"connect_timeout_with_failover_secure_ms", CHSetting(highRange, {}, false)},
              {"connection_pool_max_wait_ms", CHSetting(highRange, {}, false)},
+             {"distributed_replica_error_half_life", CHSetting(highRange, {}, false)},
              {"handshake_timeout_ms", CHSetting(highRange, {}, false)},
              {"hedged_connection_timeout_ms", CHSetting(highRange, {}, false)},
+             {"http_connection_timeout", CHSetting(highRange, {}, false)},
+             {"http_headers_read_timeout", CHSetting(highRange, {}, false)},
+             {"http_receive_timeout", CHSetting(highRange, {}, false)},
+             {"http_send_timeout", CHSetting(highRange, {}, false)},
              {"iceberg_expire_default_max_ref_age_ms",
               CHSetting(
                   [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 0, 300000)); },
@@ -1871,18 +1871,53 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
                   [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 0, 60000)); },
                   {},
                   false)},
+             {"iceberg_orphan_files_older_than_seconds", CHSetting(highRange, {}, false)},
+             /// ClickHouse cloud setting
+             {"ignore_cold_parts_seconds",
+              CHSetting(
+                  [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 0, 60)); },
+                  {},
+                  false)},
+             {"insert_quorum_timeout", CHSetting(highRange, {}, false)},
              {"kafka_max_wait_ms", CHSetting(highRange, {}, false)},
+             {"lock_acquire_timeout", CHSetting(highRange, {}, false)},
              {"log_queries_min_query_duration_ms", CHSetting(highRange, {}, false)},
              {"low_priority_query_wait_time_ms", CHSetting(highRange, {}, false)},
+             /// Query execution time limits. Bounded to >= 3s to avoid spurious TIMEOUT_EXCEEDED on normal queries.
+             {"max_estimated_execution_time",
+              CHSetting(
+                  [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 3, 3600)); },
+                  {},
+                  false)},
+             {"max_execution_time",
+              CHSetting(
+                  [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 3, 3600)); },
+                  {},
+                  false)},
+             {"max_execution_time_leaf",
+              CHSetting(
+                  [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.3, 3, 3600)); },
+                  {},
+                  false)},
              {"parallel_replicas_connect_timeout_ms", CHSetting(highRange, {}, false)},
+             {"query_cache_min_query_duration", CHSetting(highRange, {}, false)},
+             {"query_cache_ttl", CHSetting(highRange, {}, false)},
              {"queue_max_wait_ms", CHSetting(highRange, {}, false)},
              {"rabbitmq_max_wait_ms", CHSetting(highRange, {}, false)},
              {"read_backoff_min_interval_between_events_ms", CHSetting(highRange, {}, false)},
              {"read_backoff_min_latency_ms", CHSetting(highRange, {}, false)},
              {"receive_data_timeout_ms", CHSetting(highRange, {}, false)},
+             {"receive_timeout", CHSetting(highRange, {}, false)},
+             {"send_timeout", CHSetting(highRange, {}, false)},
              {"storage_system_stack_trace_pipe_read_timeout_ms", CHSetting(highRange, {}, false)},
              {"stream_flush_interval_ms", CHSetting(highRange, {}, false)},
-             {"stream_poll_timeout_ms", CHSetting(highRange, {}, false)}});
+             {"stream_poll_timeout_ms", CHSetting(highRange, {}, false)},
+             {"tcp_keep_alive_timeout", CHSetting(highRange, {}, false)},
+             {"timeout_before_checking_execution_speed", CHSetting(highRange, {}, false)},
+             {"wait_for_async_insert_timeout", CHSetting(highRange, {}, false)},
+             {"wait_for_window_view_fire_signal_timeout", CHSetting(highRange, {}, false)},
+             {"window_view_clean_interval", CHSetting(highRange, {}, false)},
+             {"window_view_heartbeat_interval", CHSetting(highRange, {}, false)}});
     }
     if (fc.enable_force_settings)
     {

@@ -279,7 +279,7 @@ file3.xml
 
 ### CLEAR command {#clear-command}
 
-Clears the terminal screen (similar to the `clear` command on Linux or Ctrl+L in many terminals). This is a client-side action: it is not sent to the SQL engine, so you can use it during demos in interactive mode without getting an `UNKNOWN_IDENTIFIER` error.
+Clears the terminal screen (similar to the `clear` command on Linux or Ctrl+L in many terminals). This is a client-side action: it is not sent to the SQL engine, so you can use it in interactive mode without getting an `UNKNOWN_IDENTIFIER` error.
 
 Supported forms: `clear`, `CLEAR`, `/clear` (optional trailing `;` is ignored). If standard output is not a terminal (for example, when piping output), the command is accepted but does not emit control sequences.
 

@@ -47,7 +47,7 @@ You can use the [log_queries_probability](/operations/settings/settings#log_quer
 - `master_thread_id` ([UInt64](/sql-reference/data-types/int-uint)) — OS initial ID of initial thread.
 - `current_database` ([LowCardinality(String)](/sql-reference/data-types/lowcardinality)) — Name of the current database.
 - `query` ([String](/sql-reference/data-types/string)) — Query string.
-- `normalized_query_hash` ([UInt64](/sql-reference/data-types/int-uint)) — The hash of normalized query - with wiped constanstans, etc.
+- `normalized_query_hash` ([UInt64](/sql-reference/data-types/int-uint)) — The hash of normalized query - with wiped constants, etc.
 - `is_initial_query` ([UInt8](/sql-reference/data-types/int-uint)) — Query type. Possible values: 1 — Query was initiated by the client, 0 — Query was initiated by another query for distributed query execution.
 - `connection_address` ([IPv6](/sql-reference/data-types/ipv6)) — The client IP address from which the connection was made. When connected through a proxy, this will be the address of the proxy.
 - `connection_port` ([UInt16](/sql-reference/data-types/int-uint)) — The client port from which the connection was made. When connected through a proxy, this will be the port of the proxy.

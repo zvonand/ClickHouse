@@ -339,9 +339,9 @@ by default). The data is also collected when the query finishes if the query tak
 - `ProfileEvent_CompileExpressionsMicroseconds` ([UInt64](/sql-reference/data-types/int-uint)) — Total time spent for compilation of expressions to LLVM code.
 - `ProfileEvent_CompileExpressionsBytes` ([UInt64](/sql-reference/data-types/int-uint)) — Number of bytes used for expressions compilation.
 - `ProfileEvent_ExecuteShellCommand` ([UInt64](/sql-reference/data-types/int-uint)) — Number of shell command executions.
-- `ProfileEvent_ExternalProcessingCompressedBytesTotal` ([UInt64](/sql-reference/data-types/int-uint)) — Number of compressed bytes written by external processing (sorting/aggragating/joining)
-- `ProfileEvent_ExternalProcessingUncompressedBytesTotal` ([UInt64](/sql-reference/data-types/int-uint)) — Amount of data (uncompressed, before compression) written by external processing (sorting/aggragating/joining)
-- `ProfileEvent_ExternalProcessingFilesTotal` ([UInt64](/sql-reference/data-types/int-uint)) — Number of files used by external processing (sorting/aggragating/joining)
+- `ProfileEvent_ExternalProcessingCompressedBytesTotal` ([UInt64](/sql-reference/data-types/int-uint)) — Number of compressed bytes written by external processing (sorting/aggregating/joining)
+- `ProfileEvent_ExternalProcessingUncompressedBytesTotal` ([UInt64](/sql-reference/data-types/int-uint)) — Amount of data (uncompressed, before compression) written by external processing (sorting/aggregating/joining)
+- `ProfileEvent_ExternalProcessingFilesTotal` ([UInt64](/sql-reference/data-types/int-uint)) — Number of files used by external processing (sorting/aggregating/joining)
 - `ProfileEvent_ExternalSortWritePart` ([UInt64](/sql-reference/data-types/int-uint)) — Number of times a temporary file was written to disk for sorting in external memory.
 - `ProfileEvent_ExternalSortMerge` ([UInt64](/sql-reference/data-types/int-uint)) — Number of times temporary files were merged for sorting in external memory.
 - `ProfileEvent_ExternalSortCompressedBytes` ([UInt64](/sql-reference/data-types/int-uint)) — Number of compressed bytes written for sorting in external memory.
@@ -1103,14 +1103,14 @@ by default). The data is also collected when the query finishes if the query tak
 - `ProfileEvent_SharedMergeTreeMergeMutationAssignmentFailedWithNothingToDo` ([UInt64](/sql-reference/data-types/int-uint)) — How many times we tried to assign merge or mutation and failed because nothing to merge
 - `ProfileEvent_SharedMergeTreeMergeMutationAssignmentFailedWithConflict` ([UInt64](/sql-reference/data-types/int-uint)) — How many times we tried to assign merge or mutation and failed because of conflict in Keeper
 - `ProfileEvent_SharedMergeTreeMergeMutationAssignmentSuccessful` ([UInt64](/sql-reference/data-types/int-uint)) — How many times we tried to assign merge or mutation
-- `ProfileEvent_SharedMergeTreeMergePartsMovedToOudated` ([UInt64](/sql-reference/data-types/int-uint)) — How many parts moved to oudated directory
+- `ProfileEvent_SharedMergeTreeMergePartsMovedToOudated` ([UInt64](/sql-reference/data-types/int-uint)) — How many parts moved to outdated directory
 - `ProfileEvent_SharedMergeTreeMergePartsMovedToCondemned` ([UInt64](/sql-reference/data-types/int-uint)) — How many parts moved to condemned directory
 - `ProfileEvent_SharedMergeTreeOutdatedPartsConfirmationRequest` ([UInt64](/sql-reference/data-types/int-uint)) — How many ZooKeeper requests were used to config outdated parts
 - `ProfileEvent_SharedMergeTreeOutdatedPartsConfirmationInvocations` ([UInt64](/sql-reference/data-types/int-uint)) — How many invocations were made to confirm outdated parts
 - `ProfileEvent_SharedMergeTreeOutdatedPartsHTTPRequest` ([UInt64](/sql-reference/data-types/int-uint)) — How many HTTP requests were send to confirm outdated parts
 - `ProfileEvent_SharedMergeTreeOutdatedPartsHTTPResponse` ([UInt64](/sql-reference/data-types/int-uint)) — How many HTTP responses were send to confirm outdated parts
 - `ProfileEvent_SharedMergeTreeCondemnedPartsKillRequest` ([UInt64](/sql-reference/data-types/int-uint)) — How many ZooKeeper requests were used to remove condemned parts
-- `ProfileEvent_SharedMergeTreeCondemnedPartsLockConflict` ([UInt64](/sql-reference/data-types/int-uint)) — How many times we failed to acquite lock because of conflict
+- `ProfileEvent_SharedMergeTreeCondemnedPartsLockConflict` ([UInt64](/sql-reference/data-types/int-uint)) — How many times we failed to acquire lock because of conflict
 - `ProfileEvent_SharedMergeTreeCondemnedPartsRemoved` ([UInt64](/sql-reference/data-types/int-uint)) — How many condemned parts were removed
 - `ProfileEvent_SharedMergeTreePartsKillerRuns` ([UInt64](/sql-reference/data-types/int-uint)) — How many times parts killer has been running
 - `ProfileEvent_SharedMergeTreePartsKillerMicroseconds` ([UInt64](/sql-reference/data-types/int-uint)) — How much time does parts killer main thread takes

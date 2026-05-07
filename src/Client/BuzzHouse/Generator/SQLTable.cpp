@@ -2936,7 +2936,20 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
         const String pkey_name = this->entries[0].getBottomName();
         const String fname = fmt::format("d{}.yaml", next.counter);
         std::ofstream yaml_file(fc.client_file_path / fname);
-        if (yaml_file.is_open())
+        if (!yaml_file.is_open())
+        {
+            /// user_files isn't writable from this process — fail closed by switching to a null
+            /// source so we don't generate a CREATE DICTIONARY pointing at a non-existent file.
+            /// This will still fail validation (REGEXP_TREE requires YAMLRegExpTree), but with a
+            /// meaningful "incompatible source/layout" error instead of CANNOT_OPEN_FILE.
+            LOG_DEBUG(
+                getLogger("BuzzHouse"),
+                "Failed to open YAML fixture {} for write — falling back to null dictionary source",
+                (fc.client_file_path / fname).generic_string());
+            cd->mutable_source()->Clear();
+            cd->mutable_source()->set_null_src(true);
+        }
+        else
         {
             for (uint32_t j = 0; j < 3; j++)
             {
@@ -2951,8 +2964,8 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
                 }
             }
             yaml_file.close();
+            yaml_dsd->set_path(fmt::format("{}/{}", fc.server_file_path.generic_string(), fname));
         }
-        yaml_dsd->set_path(fmt::format("{}/{}", fc.server_file_path.generic_string(), fname));
     }
     if (isRange && this->entries.size() > 1)
     {

@@ -1,5 +1,6 @@
 #include <Core/Joins.h>
 #include <Core/SortDescription.h>
+#include <Interpreters/ActionsDAG.h>
 #include <Interpreters/IJoin.h>
 #include <Interpreters/JoinOperator.h>
 #include <Interpreters/TableJoin.h>
@@ -121,9 +122,11 @@ bool sortMatchesStoragePrimaryKeyPrefix(const SortDescription & description, con
 ///
 /// Pattern matched: `LimitStep -> SortingStep -> [ExpressionStep] -> JoinStep`.
 /// The optional ExpressionStep is allowed only when every sort key column passes
-/// through it unchanged (i.e. the sort column name exists in the Expression's input
-/// header with the same name). This keeps the column reference unambiguously attached
-/// to one side of the join.
+/// through it unchanged. We verify pass-through at the ActionsDAG level: the output
+/// node for the sort column must be either an INPUT or a chain of ALIASes ending at
+/// an INPUT. Header-name presence alone is too weak - an output named like an input
+/// could still be a computed expression (e.g. `SELECT l.k + r.b AS k ORDER BY k`),
+/// and pushing the sort below the join using the input column would change results.
 size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & nodes, const Optimization::ExtraSettings & settings)
 {
     auto * limit_step = typeid_cast<LimitStep *>(parent_node->step.get());
@@ -157,12 +160,18 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
     if (sort_node->children.size() != 1)
         return 0;
 
-    /// Peel a chain of ExpressionSteps between Sort and Join. We require that the sort
-    /// columns are visible in each Expression's input header by the same name - otherwise
-    /// the column may have been computed from join output rather than passed through from
-    /// a single side. The cap of 4 is generous: in current plans the only steps between
-    /// Sort and Join after `mergeExpressions` are `Before ORDER BY + Projection` and
+    /// Peel a chain of ExpressionSteps between Sort and Join, translating the sort
+    /// description to the input level of each step. For each sort column we look up
+    /// the output node by name and walk through any `ALIAS` chain - if it ends at an
+    /// `INPUT` node, the column is a pure pass-through and we replace its name with
+    /// the input's name. Anything else (FUNCTION, COLUMN, ARRAY_JOIN, ...) means the
+    /// sort key was computed in this step rather than carried over, and pushing the
+    /// sort below the join would be unsound.
+    ///
+    /// The cap of 4 is generous: in current plans the only steps between Sort and
+    /// Join after `mergeExpressions` are `Before ORDER BY + Projection` and
     /// `Post Join Actions`, occasionally with one more wrapper.
+    SortDescription description = sort_step->getSortDescription();
     QueryPlan::Node * join_node = sort_node->children.front();
     for (size_t peeled = 0; peeled < 4; ++peeled)
     {
@@ -172,11 +181,20 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
         if (join_node->children.size() != 1)
             return 0;
 
-        const auto & expr_input_header = expression_step->getInputHeaders().front();
-        for (const auto & sort_col : sort_step->getSortDescription())
+        const ActionsDAG & dag = expression_step->getExpression();
+        for (auto & sort_col : description)
         {
-            if (!expr_input_header->has(sort_col.column_name))
+            const auto * out_node = dag.tryFindInOutputs(sort_col.column_name);
+            if (!out_node)
                 return 0;
+
+            while (out_node->type == ActionsDAG::ActionType::ALIAS)
+                out_node = out_node->children.front();
+
+            if (out_node->type != ActionsDAG::ActionType::INPUT)
+                return 0;
+
+            sort_col.column_name = out_node->result_name;
         }
         join_node = join_node->children.front();
     }
@@ -210,13 +228,13 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
     const auto & preserved_input_header = join_node->step->getInputHeaders().at(preserved_idx);
     const auto & other_input_header = join_node->step->getInputHeaders().at(1 - preserved_idx);
 
-    /// All sort columns must be in the preserved side's input header, by the same
-    /// name. Other names that may appear in the join output (right-side columns of a
-    /// LEFT JOIN, etc.) come from the non-preserved side and would make the
-    /// transformation unsound. We additionally require the column to NOT also appear
-    /// on the other side: if both inputs carry a column with this name the analyzer
-    /// would have renamed one, but defensively avoid ambiguity.
-    for (const auto & sort_col : sort_step->getSortDescription())
+    /// All sort columns must be in the preserved side's input header, by the (now
+    /// translated) name. Other names that may appear in the join output (right-side
+    /// columns of a LEFT JOIN, etc.) come from the non-preserved side and would make
+    /// the transformation unsound. We additionally require the column to NOT also
+    /// appear on the other side: if both inputs carry a column with this name the
+    /// analyzer would have renamed one, but defensively avoid ambiguity.
+    for (const auto & sort_col : description)
     {
         if (!preserved_input_header->has(sort_col.column_name))
             return 0;
@@ -256,7 +274,7 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
     {
         if (const auto * reading = findMergeTreeRead(preserved_input_node))
         {
-            if (sortMatchesStoragePrimaryKeyPrefix(sort_step->getSortDescription(),
+            if (sortMatchesStoragePrimaryKeyPrefix(description,
                                                     reading->getStorageMetadata()->getSortingKey()))
                 return 0;
         }
@@ -265,7 +283,7 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
     /// Build `Limit(n) <- Sort(K, limit=n)` and graft it on top of the preserved input.
     auto new_sort_step = std::make_unique<SortingStep>(
         preserved_input_header,
-        sort_step->getSortDescription(),
+        description,
         n,
         sort_step->getSettings());
 

@@ -59,5 +59,26 @@ FROM ( EXPLAIN actions = 0
     ORDER BY l.k DESC LIMIT 10
 );
 
+-- Alias shadowing: the user-visible alias `k` is a *computed* expression
+-- (`l.k + r.bonus`), so `ORDER BY k` cannot be pushed onto the preserved (left) input
+-- because `l.k` alone is not the sort key. The pass-through check must reject this.
+DROP TABLE IF EXISTS t_lb;
+DROP TABLE IF EXISTS t_rb;
+CREATE TABLE t_lb (id UInt64, k Int64) ENGINE = MergeTree() ORDER BY id;
+CREATE TABLE t_rb (id UInt64, bonus Int64) ENGINE = MergeTree() ORDER BY id;
+INSERT INTO t_lb VALUES (1, 100), (2, 90);
+INSERT INTO t_rb VALUES (1, 0), (2, 1000);
+
+-- Correct top-1 by computed `k` is id=2 (90 + 1000 = 1090). If the optimization
+-- were to fire and push `ORDER BY l.k` onto the left input, only id=1 (l.k = 100)
+-- would survive, giving the wrong answer.
+SELECT 'alias_shadow_correctness' AS label, id, k FROM (
+    SELECT l.id AS id, l.k + r.bonus AS k
+    FROM t_lb AS l LEFT JOIN t_rb AS r ON r.id = l.id
+    ORDER BY k DESC LIMIT 1
+);
+
+DROP TABLE t_lb;
+DROP TABLE t_rb;
 DROP TABLE t_l;
 DROP TABLE t_r;

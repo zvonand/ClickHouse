@@ -2141,7 +2141,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
                          rg, 0, rg.nextSmallNumber() < 3, false, t, ope->mutable_single_partition()->mutable_partition());
              }},
             /// Expire snapshots (Iceberg-specific)
-            {4,
+            {4 * static_cast<uint32_t>(t.isAnyIcebergEngine()),
              [&]
              {
                  ExpireSnapshots * es = ati->mutable_execute_command()->mutable_expire_snapshots();
@@ -2162,7 +2162,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
                      es->set_dry_run(rg.nextBool());
              }},
             /// Remove orphan files (Iceberg-specific)
-            {4,
+            {4 * static_cast<uint32_t>(t.isAnyIcebergEngine()),
              [&]
              {
                  RemoveOrphanFiles * ro = ati->mutable_execute_command()->mutable_remove_orphan_files();

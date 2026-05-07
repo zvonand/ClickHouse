@@ -2899,8 +2899,20 @@ void StatementGenerator::generateNextCreateDictionary(RandomGenerator & rg, Crea
                 case SQLTypeClass::INT:
                 case SQLTypeClass::FLOAT:
                 case SQLTypeClass::DECIMAL:
-                case SQLTypeClass::ENUM:
                     return "0";
+                case SQLTypeClass::ENUM: {
+                    /// regexp_tree parses enum YAML values via deserializeWholeText with
+                    /// enum_as_number=false, so we must emit a label, not a numeric id.
+                    const auto * et = static_cast<const EnumType *>(t);
+                    if (et->values.empty())
+                        return "0";
+                    String label = et->values[0].val;
+                    /// EnumValue::val stores the SQL form including surrounding single quotes
+                    /// (e.g. "'foo'" or "'-1'"); strip them for the YAML plain text.
+                    if (label.size() >= 2 && label.front() == '\'' && label.back() == '\'')
+                        label = label.substr(1, label.size() - 2);
+                    return label;
+                }
                 case SQLTypeClass::STRING:
                     return "text";
                 case SQLTypeClass::DATE:

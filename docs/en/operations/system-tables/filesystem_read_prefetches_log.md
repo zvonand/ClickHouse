@@ -1,5 +1,5 @@
 ---
-description: 'Contains a history of all prefetches done during reading from MergeTables backed by a remote filesystem.
+description: 'Contains a history of all prefetches done during reading from MergeTree tables backed by a remote filesystem.
 
 It is safe to truncate or drop this table at any time.'
 keywords: ['system table', 'filesystem_read_prefetches_log']
@@ -8,7 +8,7 @@ title: 'system.filesystem_read_prefetches_log'
 doc_type: 'reference'
 ---
 
-Contains a history of all prefetches done during reading from MergeTables backed by a remote filesystem.
+Contains a history of all prefetches done during reading from MergeTree tables backed by a remote filesystem.
 
 It is safe to truncate or drop this table at any time.
 

@@ -1,5 +1,5 @@
 ---
-description: 'Contains logging entries with the information files processes by S3Queue engine.
+description: 'Contains log entries with information about files processed by the AzureQueue engine.
 
 It is safe to truncate or drop this table at any time.'
 keywords: ['system table', 'azure_queue_log']
@@ -8,7 +8,7 @@ title: 'system.azure_queue_log'
 doc_type: 'reference'
 ---
 
-Contains logging entries with the information files processes by S3Queue engine.
+Contains log entries with information about files processed by the AzureQueue engine.
 
 It is safe to truncate or drop this table at any time.
 

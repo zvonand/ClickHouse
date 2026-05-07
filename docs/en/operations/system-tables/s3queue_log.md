@@ -1,5 +1,5 @@
 ---
-description: 'Contains logging entries with the information files processes by S3Queue engine.
+description: 'Contains log entries with information about files processed by the S3Queue engine.
 
 It is safe to truncate or drop this table at any time.'
 keywords: ['system table', 's3queue_log']
@@ -8,7 +8,7 @@ title: 'system.s3queue_log'
 doc_type: 'reference'
 ---
 
-Contains logging entries with the information files processes by S3Queue engine.
+Contains log entries with information about files processed by the S3Queue engine.
 
 It is safe to truncate or drop this table at any time.
 

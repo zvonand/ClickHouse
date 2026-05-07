@@ -1,20 +1,6 @@
 -- Tags: no-fasttest, no-ordinary-database
 
--- Regression test for STID 8146-795a:
--- `unum::usearch::cast_to_i8_gt::try_` is undefined behavior on inputs that contain NaN/Inf
--- (the cast `static_cast<std::int8_t>(NaN)` is UB) and on zero-magnitude vectors with `i8`
--- quantization (USearch normalizes by magnitude before quantizing, producing NaN per element).
--- The AST fuzzer drove a SELECT with such a reference vector and tripped UndefinedBehaviorSanitizer
--- under serverfuzz on master.
--- The fix in `MergeTreeIndexConditionVectorSimilarity::calculateApproximateNearestNeighbors` and
--- in the per-row indexing path rejects these inputs with `INCORRECT_QUERY` / `INCORRECT_DATA`
--- instead of letting USearch produce undefined behavior.
-
 SET enable_analyzer = 1;
--- Ensure synchronous INSERT so `serverError INCORRECT_DATA` checks see the validation exception
--- on the same connection (the per-row validator runs as part of the index aggregator during the
--- INSERT pipeline).
-SET async_insert = 0;
 
 DROP TABLE IF EXISTS tab_i8;
 DROP TABLE IF EXISTS tab_f32;
@@ -24,7 +10,7 @@ DROP TABLE IF EXISTS tab_f32;
 -- ----------------------------------------------------------------------------
 
 CREATE TABLE tab_i8 (id Int32, vec Array(Float32), INDEX idx vec TYPE vector_similarity('hnsw', 'L2Distance', 3, 'i8', 32, 128))
-ENGINE = MergeTree ORDER BY id SETTINGS index_granularity = 8192;
+ENGINE = MergeTree ORDER BY id;
 
 INSERT INTO tab_i8 VALUES (0, [1.0, 0.0, 0.0]), (1, [0.0, 1.0, 0.0]), (2, [0.0, 0.0, 1.0]);
 
@@ -59,7 +45,7 @@ DROP TABLE tab_i8;
 -- ----------------------------------------------------------------------------
 
 CREATE TABLE tab_f32 (id Int32, vec Array(Float32), INDEX idx vec TYPE vector_similarity('hnsw', 'L2Distance', 3))
-ENGINE = MergeTree ORDER BY id SETTINGS index_granularity = 8192;
+ENGINE = MergeTree ORDER BY id;
 
 INSERT INTO tab_f32 VALUES (0, [1.0, 0.0, 0.0]), (1, [0.0, 1.0, 0.0]), (2, [0.0, 0.0, 1.0]);
 

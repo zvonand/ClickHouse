@@ -1,4 +1,5 @@
 #include <Storages/MergeTree/MergeTreeIndexVectorSimilarity.h>
+#include <boost/qvm/scalar_traits.hpp>
 
 #if USE_USEARCH
 
@@ -307,50 +308,52 @@ MergeTreeIndexGranulePtr MergeTreeIndexAggregatorVectorSimilarity::getGranuleAnd
 namespace
 {
 
-/// Validates the elements of a vector that will be passed to USearch.
-///
-/// Two corner cases produce undefined behavior in `unum::usearch::cast_to_i8_gt::try_`:
-///  1. Any non-finite element (NaN or +/-Inf): the cast `static_cast<std::int8_t>(NaN)` is UB
-///     and is reported by UndefinedBehaviorSanitizer. NaN also makes the produced int8 vector
-///     meaningless.
-///  2. A zero-magnitude vector with `i8` quantization: USearch divides by the magnitude when
-///     quantizing, producing NaN per element, then casts to int8 (UB).
-///
-/// Both cases are also nonsensical at the user-facing level. We reject them early with a clear
-/// error rather than letting USearch produce undefined behavior.
+/// Check two things to prevent undefined behavior further down in Usearch
+/// - No vector element is +inf, -inf or nan.
+/// - In the case of i8 quantization (which is obscure): additionally, the vector magnitude must not be zero.
 template <typename T>
-void validateVectorElementsForUSearchOrThrow(
-    const T * data,
-    size_t dim,
+void checkVectorIsSane(
+    const T * vec,
+    size_t dimension,
     unum::usearch::scalar_kind_t scalar_kind,
     int error_code,
     std::string_view context)
 {
     double magnitude_sq = 0.0;
-    for (size_t i = 0; i != dim; ++i)
+    for (size_t i = 0; i != dimension; ++i)
     {
         /// `Float32`, `Float64`, and `BFloat16` all support `static_cast<double>`. NaN and Inf
         /// are preserved by the conversion, so the `isfinite` check below catches them
         /// regardless of the input scalar type.
-        const double v = static_cast<double>(data[i]);
-        if (!std::isfinite(v))
-            throw Exception(error_code,
-                "Vector for vector similarity index ({}) contains a non-finite value (NaN or Inf). "
-                "Vector elements must be finite numbers.",
-                context);
-        magnitude_sq += v * v;
+        T casted = static_cast<T>(vec[i]);
+        if constexpr (std::is_same_v<T, BFloat16>)
+        {
+            if (!casted.isFinite())
+                throw Exception(error_code,
+                    "Vector for vector similarity index ({}) must not contain non-finite values (NaN or Inf)", context);
+        }
+        else
+        {
+            if (!std::isfinite(casted))
+                throw Exception(error_code,
+                    "Vector for vector similarity index ({}) must not contain non-finite values (NaN or Inf)", context);
+        }
+
+        if (scalar_kind == unum::usearch::scalar_kind_t::i8_k)
+        {
+            double v = static_cast<double>(vec[i]);
+            magnitude_sq += v * v;
+        }
     }
 
     if (scalar_kind == unum::usearch::scalar_kind_t::i8_k && magnitude_sq == 0.0)
         throw Exception(error_code,
-            "Zero-magnitude vector for vector similarity index ({}) is not supported with `i8` "
-            "quantization, because USearch normalizes the vector by its magnitude before "
-            "quantizing to int8.",
+            "Zero-magnitude vectors for vector similarity index ({}) are not supported with `i8` quantization",
             context);
 }
 
 template <typename Column>
-void updateImpl(const ColumnArray * column_array, const ColumnArray::Offsets & column_array_offsets, USearchIndexWithSerializationPtr & index, size_t dimensions, unum::usearch::scalar_kind_t scalar_kind, size_t rows)
+void updateImpl(const ColumnArray * column_array, const ColumnArray::Offsets & column_array_offsets, USearchIndexWithSerializationPtr & index, size_t dimensions, [[maybe_unused]] unum::usearch::scalar_kind_t scalar_kind, size_t rows)
 {
     const auto & column_array_data = column_array->getData();
     const auto & column_array_data_float = typeid_cast<const Column &>(column_array_data);
@@ -385,12 +388,7 @@ void updateImpl(const ColumnArray * column_array, const ColumnArray::Offsets & c
 
         const typename Column::ValueType & value = column_array_data_float_data[column_array_offsets[row - 1]];
 
-        /// Reject NaN/Inf and (for `i8` quantization) zero-magnitude vectors before passing them to
-        /// USearch. The internal cast `unum::usearch::cast_to_i8_gt::try_` is UB on these inputs
-        /// (and produces meaningless results for non-`i8` quantizations as well).
-        validateVectorElementsForUSearchOrThrow(
-            &value, dimensions, scalar_kind, ErrorCodes::INCORRECT_DATA,
-            "indexed vector");
+        checkVectorIsSane(&value, dimensions, scalar_kind, ErrorCodes::INCORRECT_DATA, "indexed vector");
 
         unum::usearch::index_dense_t::add_result_t result;
 
@@ -559,13 +557,9 @@ NearestNeighbours MergeTreeIndexConditionVectorSimilarity::calculateApproximateN
         throw Exception(ErrorCodes::INCORRECT_QUERY, "The dimension of the reference vector in the query ({}) does not match the dimension in the index ({})",
             parameters->reference_vector.size(), index->dimensions());
 
-    /// Reject NaN/Inf and (for `i8` quantization) zero-magnitude reference vectors before passing
-    /// them to USearch. The internal cast `unum::usearch::cast_to_i8_gt::try_` is UB on these
-    /// inputs (and produces meaningless search results for non-`i8` quantizations as well).
-    validateVectorElementsForUSearchOrThrow(
+    checkVectorIsSane(
         parameters->reference_vector.data(), parameters->reference_vector.size(),
-        granule->scalar_kind, ErrorCodes::INCORRECT_QUERY,
-        "reference vector in the SELECT query");
+        granule->scalar_kind, ErrorCodes::INCORRECT_QUERY, "reference vector in the SELECT query");
 
     size_t limit = parameters->limit;
     if (parameters->additional_filters_present || is_rescoring)

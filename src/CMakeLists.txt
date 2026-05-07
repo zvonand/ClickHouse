@@ -316,6 +316,12 @@ add_object_library(clickhouse_interpreters_wasm Interpreters/WebAssembly)
 add_object_library(clickhouse_interpreters_merge_tree_transaction Interpreters/MergeTreeTransaction)
 add_object_library(clickhouse_columns Columns)
 add_object_library(clickhouse_storages Storages)
+
+# TODO: at v3 SLP-emitted YMM zero-stores in column construction add `vzeroupper`s around the
+# per-block dispatch and regress `generate_table_function #0/#1/#5` ~18% with no real win.
+if (ARCH_AMD64 AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3)
+    set_source_files_properties(Storages/StorageGenerateRandom.cpp PROPERTIES COMPILE_FLAGS "-march=x86-64-v2")
+endif()
 add_object_library(clickhouse_storages_mysql Storages/MySQL)
 add_object_library(clickhouse_storages_distributed Storages/Distributed)
 add_object_library(clickhouse_storages_mergetree Storages/MergeTree)

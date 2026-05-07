@@ -31,5 +31,17 @@ $CLICKHOUSE_LOCAL -q "select clear" 2>&1 | grep -F 'UNKNOWN_IDENTIFIER' > /dev/n
 echo "OK"
 
 echo "-- clickhouse-client -q clear is still SQL (non-interactive)"
-$CLICKHOUSE_CLIENT -q "clear" 2>&1 | grep -F 'UNKNOWN_IDENTIFIER' > /dev/null
+set +o errexit
+out=$($CLICKHOUSE_CLIENT -q "clear" 2>&1)
+rc=$?
+set -o errexit
+# Must not silently succeed (meta-command without gate); UNKNOWN_IDENTIFIER is 47.
+if [[ $rc -eq 0 ]]; then
+    echo "FAIL: clickhouse-client -q clear exited 0 (expected SQL error). Output: ${out}" >&2
+    exit 1
+fi
+if [[ $rc -ne 47 ]] && ! echo "$out" | grep -qF 'UNKNOWN_IDENTIFIER'; then
+    echo "FAIL: expected exit 47 or UNKNOWN_IDENTIFIER in output, got rc=${rc}: ${out}" >&2
+    exit 1
+fi
 echo "OK"

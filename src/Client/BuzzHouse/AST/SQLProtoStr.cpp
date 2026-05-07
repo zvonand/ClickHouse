@@ -5596,8 +5596,7 @@ CONV_FN(SystemCommand, cmd)
             break;
         case CmdType::kFlushObjectStorageQueue: {
             const auto & foq = cmd.flush_object_storage_queue();
-            ret += "FLUSH OBJECT STORAGE QUEUE ";
-            ExprSchemaTableToString(ret, foq.table());
+            SystemCommandOnCluster(ret, "FLUSH OBJECT STORAGE QUEUE", cmd, foq.table());
             ret += " PATH ";
             appendSQLStringLiteral(ret, foq.path());
             break;

@@ -24,14 +24,21 @@ INSERT INTO t_l SELECT number, repeat('a', 8) FROM numbers(1000);
 INSERT INTO t_r SELECT number, repeat('b', 8) FROM numbers(1000);
 
 -- Both flags on: defer to `optimizeReadInOrder`, no explicit inner Sort + Limit.
+-- The deferral inside `topKThroughJoin` keys on `optimize_read_in_order &&
+-- query_plan_read_in_order`, both of which the stateless test runner randomizes;
+-- pin them on so the deferral check is deterministic. `enable_parallel_replicas`
+-- is randomized too and would replace `ReadFromMergeTree` with a coordinator
+-- step that breaks the deferral's storage-step lookup.
 SELECT 'both_on' AS label, countIf(explain LIKE '%Sorting%') AS sort_count, countIf(explain LIKE '%Limit%') AS limit_count
 FROM ( EXPLAIN actions = 0
     SELECT l.k, r.value FROM t_l AS l LEFT JOIN t_r AS r ON r.k = l.k
     ORDER BY l.k DESC LIMIT 10
-    SETTINGS query_plan_read_in_order = 1, query_plan_read_in_order_through_join = 1,
+    SETTINGS optimize_read_in_order = 1,
+             query_plan_read_in_order = 1, query_plan_read_in_order_through_join = 1,
              query_plan_join_swap_table = false, query_plan_max_limit_for_top_k_optimization = 0,
              enable_join_runtime_filters = 0, enable_lazy_columns_replication = 0,
-             query_plan_optimize_lazy_materialization = 0
+             query_plan_optimize_lazy_materialization = 0,
+             enable_parallel_replicas = 0
 );
 
 -- `read_in_order_through_join` off: the second pass cannot stream through the
@@ -41,10 +48,12 @@ SELECT 'through_join_off' AS label, countIf(explain LIKE '%Sorting%') AS sort_co
 FROM ( EXPLAIN actions = 0
     SELECT l.k, r.value FROM t_l AS l LEFT JOIN t_r AS r ON r.k = l.k
     ORDER BY l.k DESC LIMIT 10
-    SETTINGS query_plan_read_in_order = 1, query_plan_read_in_order_through_join = 0,
+    SETTINGS optimize_read_in_order = 1,
+             query_plan_read_in_order = 1, query_plan_read_in_order_through_join = 0,
              query_plan_join_swap_table = false, query_plan_max_limit_for_top_k_optimization = 0,
              enable_join_runtime_filters = 0, enable_lazy_columns_replication = 0,
-             query_plan_optimize_lazy_materialization = 0
+             query_plan_optimize_lazy_materialization = 0,
+             enable_parallel_replicas = 0
 );
 
 -- Result equivalence across flag combinations.

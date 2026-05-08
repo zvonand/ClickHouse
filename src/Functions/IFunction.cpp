@@ -224,10 +224,13 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
             if (!isColumnConst(*arg.column))
                 all_columns_constant = false;
 
-            if (arg.type->isNullable() && isColumnConst(*arg.column) && arg.column->onlyNull())
+            if (arg.type->isNullable() && isColumnConst(*arg.column) && arg.column->onlyNull() && result_is_nullable)
             {
-                /// If any of input columns contains a null constant, the result is null constant
-                /// (or the default value of the result type when it cannot be Nullable).
+                /// If any of input columns contains a null constant and the result is Nullable,
+                /// the result is null constant.
+                /// For non-Nullable result types this shortcut is unsafe: substituting `default(result_type)`
+                /// is not the same as `f(default(input))` (e.g. `splitByChar(',', NULL)` = `['']`, not `[]`).
+                /// Fall through and let the function evaluate over the default values of the nested columns.
                 return result_type->createColumnConstWithDefaultValue(input_rows_count);
             }
 
@@ -288,15 +291,19 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
         ProfileEvents::increment(ProfileEvents::DefaultImplementationForNullsRows, input_rows_count);
         ProfileEvents::increment(ProfileEvents::DefaultImplementationForNullsRowsWithNulls, rows_with_nulls);
 
-        if (rows_without_nulls == 0)
+        if (rows_without_nulls == 0 && result_is_nullable)
         {
             /// Don't need to evaluate function if each row contains at least one null value and not all input columns are constant.
+            /// For non-Nullable result we still evaluate so the result is `f(default(input))`, not `default(result_type)`.
             return result_type->createColumnConstWithDefaultValue(input_rows_count)->convertToFullColumnIfConst();
         }
 
         double null_ratio = static_cast<double>(rows_with_nulls) / static_cast<double>(input_rows_count);
+        /// Short-circuit only when the result type is Nullable: for non-Nullable results the filtered-out
+        /// rows would be filled with `default(result_type)` via `expand`, which differs from `f(default(input))`.
         bool should_short_circuit
-            = short_circuit_function_evaluation_for_nulls && null_ratio >= short_circuit_function_evaluation_for_nulls_threshold;
+            = short_circuit_function_evaluation_for_nulls && null_ratio >= short_circuit_function_evaluation_for_nulls_threshold
+              && result_is_nullable;
 
         ColumnsWithTypeAndName temporary_columns = createBlockWithNestedColumns(args);
         auto temporary_result_type = removeNullable(result_type);

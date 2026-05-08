@@ -29,7 +29,9 @@ SELECT splitByWhitespace(toNullable('hello world'));
 SELECT splitByNonAlpha(toNullable('one,two;three'));
 SELECT alphaTokens(toNullable('one,two;three'));
 
--- All of the above with NULL input return the default value (empty array, not NULL)
+-- With NULL input, the function is evaluated over the default value of the nested column
+-- (an empty string), so the result is f('') -- not the default of the result type.
+-- For example, splitByChar(',', '') = [''] (one empty token), while extractAllGroups('', ...) = [].
 SELECT extractAllGroups(materialize(CAST(NULL AS Nullable(String))), '(\\w+)=(\\d+)');
 SELECT splitByChar(',', materialize(CAST(NULL AS Nullable(String))));
 SELECT splitByString('::', materialize(CAST(NULL AS Nullable(String))));
@@ -45,3 +47,11 @@ SELECT toTypeName(extractAllGroups(toNullable('x'), '(\\w+)'));
 -- LowCardinality(Nullable(String)) input must also work
 SELECT extractAll(toLowCardinality(toNullable('Hello world')), '(\\w+)');
 SELECT toTypeName(extractAll(toLowCardinality(toNullable('Hello')), '(\\w+)'));
+
+-- With short_circuit_function_evaluation_for_nulls enabled, NULL rows must still be
+-- materialised as f(default(input)) for non-Nullable result types -- not as
+-- default(result_type) (which would substitute [] for `splitByChar` instead of ['']).
+SET short_circuit_function_evaluation_for_nulls = 1;
+SET short_circuit_function_evaluation_for_nulls_threshold = 0.5;
+SELECT splitByChar(',', x) FROM (SELECT arrayJoin([NULL, NULL, NULL, '']::Array(Nullable(String))) AS x);
+SELECT extractAll(x, '(\\w+)') FROM (SELECT arrayJoin([NULL, NULL, NULL, 'a b']::Array(Nullable(String))) AS x);

@@ -222,7 +222,7 @@ IProcessor::Status IMergingTransformBase::prepare()
             {
                 input.setNeeded();
             }
-            else if (!input_chunk.hasRows() && !virtual_row && !input.isFinished())
+            if (!input_chunk.hasRows() && !virtual_row && !input.isFinished())
             {
                 input.setNeeded();
                 return Status::NeedData;

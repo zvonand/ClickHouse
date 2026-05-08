@@ -1637,7 +1637,10 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
            "write_through_distributed_cache_buffer_size"};
     /// NonZeroUInt64 row-count settings — must not receive 0
     DB::Strings nonzero_rows_values
-        = {"delta_lake_insert_max_rows_in_data_file", "merge_tree_min_read_task_size", "output_format_parquet_batch_size"};
+        = {"delta_lake_insert_max_rows_in_data_file",
+           "max_insert_block_size_rows",
+           "merge_tree_min_read_task_size",
+           "output_format_parquet_batch_size"};
     DB::Strings max_rows_values
         = {"cluster_table_function_buckets_batch_size",
            "cross_join_min_rows_to_compress",
@@ -1652,7 +1655,6 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
            "join_to_sort_minimum_perkey_rows",
            "iceberg_insert_max_partitions",
            "iceberg_insert_max_rows_in_data_file",
-           "max_insert_block_size_rows",
            "max_joined_block_size_rows",
            "max_limit_for_vector_search_queries",
            "max_rows_for_lazy_final",

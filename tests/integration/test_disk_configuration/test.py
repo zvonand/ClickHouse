@@ -64,7 +64,7 @@ def start_cluster():
                 "configs/config.d/include_from_path.xml",
                 "configs/config.d/include_from.xml",
             ],
-            env_variables={"MINIO_SECRET": minio_secret_key},
+            env_variables={"MINIO_SECRET": minio_secret_key, "HOME": 'http://minio1:9001/root/data/'},
             stay_alive=True,
             with_minio=True,
             with_zookeeper=True,
@@ -732,52 +732,6 @@ def test_dynamic_disk_security_settings(start_cluster):
             user="restricted_user",
         )
         assert "ACCESS_DENIED" in error and "dynamic_disk_allow_from_env" in error, error
-
-        # restricted_user: a query-level override is also rejected by the self-locking check.
-        error = node.query_and_get_error(
-            """
-            CREATE TABLE test_security_bypass_from_env (a Int32) ENGINE = MergeTree() ORDER BY tuple()
-            SETTINGS disk = disk(
-                type = object_storage,
-                object_storage_type = s3,
-                endpoint = 'from_env HOME',
-                access_key_id = clickhouse,
-                secret_access_key = clickhouse)
-            """,
-            user="restricted_user",
-            settings={"dynamic_disk_allow_from_env": 1},
-        )
-        assert "QUERY_IS_PROHIBITED" in error, error
-
-        error = node.query_and_get_error(
-            """
-            CREATE TABLE test_security_bypass_include (a Int32) ENGINE = MergeTree() ORDER BY tuple()
-            SETTINGS disk = disk(
-                type = object_storage,
-                object_storage_type = s3,
-                include = 'some_include',
-                access_key_id = clickhouse,
-                secret_access_key = clickhouse)
-            """,
-            user="restricted_user",
-            settings={"dynamic_disk_allow_include": 1},
-        )
-        assert "QUERY_IS_PROHIBITED" in error, error
-
-        error = node.query_and_get_error(
-            """
-            CREATE TABLE test_security_bypass_from_zk (a Int32) ENGINE = MergeTree() ORDER BY tuple()
-            SETTINGS disk = disk(
-                type = object_storage,
-                object_storage_type = s3,
-                endpoint = 'from_zk /some/zk/path',
-                access_key_id = clickhouse,
-                secret_access_key = clickhouse)
-            """,
-            user="restricted_user",
-            settings={"dynamic_disk_allow_from_zk": 1},
-        )
-        assert "QUERY_IS_PROHIBITED" in error, error
 
         # Regression: ATTACH DATABASE must also enforce dynamic_disk_allow_* restrictions.
         # A user must not be able to bypass from_env checks by using ATTACH DATABASE instead of

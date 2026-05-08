@@ -103,11 +103,7 @@ private:
 
     ColumnPtr executeConstBuckets(const ColumnsWithTypeAndName & arguments) const
     {
-        /// `getReturnTypeImpl` already verified that `arguments[1]` is an integer,
-        /// so we read the constant directly via `getInt`/`getUInt` instead of
-        /// materialising an intermediate `Field`.  The `Field` copy is a 32-byte
-        /// object, which `clang` lowers to YMM moves at `-march=x86-64-v3` and
-        /// then has to bracket every per-row callee with `vzeroupper`.
+        /// `getReturnTypeImpl` already verified `arguments[1]` is an integer; read it directly to avoid an intermediate `Field`.
         const IColumn & buckets_col = *arguments[1].column;
         BucketsType num_buckets = WhichDataType(arguments[1].type).isUInt()
             ? checkBucketsRange(buckets_col.getUInt(0))

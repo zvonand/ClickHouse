@@ -155,10 +155,9 @@ public:
 
     void add(AggregateDataPtr __restrict place, const IColumn ** columns, size_t row_num, Arena * arena) const override
     {
-        /// Avoid absl::InlinedVector: its constructor zero-initializes inline
-        /// storage with 256-bit AVX stores on x86-64-v3, which forces the
-        /// compiler to insert vzeroupper before every call in this function —
-        /// including the virtual call in the inner loop below.
+        /// Avoid `absl::InlinedVector`: its constructor zero-initializes the inline storage with 256-bit AVX stores on x86-64-v3,
+        /// which forces the compiler to insert `vzeroupper` before every call in this function, including the virtual call in
+        /// the inner loop below.
         constexpr size_t max_inline_args = 5;
         const IColumn * nested_inline[max_inline_args]; // NOLINT: intentionally uninitialized
         std::unique_ptr<const IColumn *[]> nested_heap;

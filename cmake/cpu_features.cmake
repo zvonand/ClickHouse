@@ -85,10 +85,10 @@ elseif (ARCH_PPC64LE)
 
 elseif (ARCH_AMD64)
     # x86-64 microarchitecture levels (https://en.wikipedia.org/wiki/X86-64#Microarchitecture_levels):
-    #   1 — SSE2 baseline, maximum compatibility with older/embedded hardware
-    #   2 — SSE4.2, SSSE3, POPCNT (ClickHouse's historical baseline)
-    #   3 — AVX2, BMI1/2, FMA, F16C, LZCNT, MOVBE etc. (default)
-    #   4 — AVX-512F/BW/CD/DQ/VL
+    #   1 - SSE2 baseline, maximum compatibility with older/embedded hardware
+    #   2 - SSE4.2, SSSE3, POPCNT (ClickHouse's historical baseline)
+    #   3 - AVX2, BMI1/2, FMA, F16C, LZCNT, MOVBE etc. (default)
+    #   4 - AVX-512F/BW/CD/DQ/VL
     set (X86_ARCH_LEVEL "3" CACHE STRING "x86-64 microarchitecture level (1, 2, 3, 4)")
     set_property (CACHE X86_ARCH_LEVEL PROPERTY STRINGS "1" "2" "3" "4")
 
@@ -96,22 +96,19 @@ elseif (ARCH_AMD64)
         message (FATAL_ERROR "X86_ARCH_LEVEL must be one of: 1, 2, 3, 4 (got '${X86_ARCH_LEVEL}')")
     endif ()
 
-    # Best-effort check: verify that the build host supports the requested
-    # microarchitecture level.  Build-time tools (tablegen, code generators)
-    # are compiled with these flags and will crash with SIGILL otherwise.
+    # Best-effort check: verify that the build host supports the requested microarchitecture level. Build-time tools
+    # (tablegen, code generators) are compiled with these flags and will crash with SIGILL otherwise.
     if (OS_LINUX AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "amd64|x86_64" AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 2)
-        # Test for a representative flag at each level. We intentionally keep this
-        # simple — no real CPU has avx2 without fma/bmi2, so checking the headline
-        # flag is enough while avoiding false positives from /proc/cpuinfo quirks
+        # Test for a representative flag at each level. We intentionally keep this simple - no real CPU has avx2 without
+        # fma/bmi2, so checking the headline flag is enough while avoiding false positives from /proc/cpuinfo quirks
         # (containers, nested virtualization, unusual flag naming).
         set (X86_REPRESENTATIVE_FLAG "sse4_2")
         if (X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3)
             set (X86_REPRESENTATIVE_FLAG "avx2")
         endif ()
         if (X86_ARCH_LEVEL VERSION_GREATER_EQUAL 4)
-            # `x86-64-v4` requires AVX-512 F/BW/CD/DQ/VL.  Knights Landing has
-            # `avx512f` but lacks BW/DQ/VL, so check one of those instead — any
-            # CPU with `avx512vl` will also have F.
+            # `x86-64-v4` requires AVX-512 F/BW/CD/DQ/VL. Knights Landing has `avx512f` but lacks BW/DQ/VL, so check one
+            # of those instead - any CPU with `avx512vl` will also have F.
             set (X86_REPRESENTATIVE_FLAG "avx512vl")
         endif ()
         execute_process(
@@ -120,7 +117,7 @@ elseif (ARCH_AMD64)
         if (NOT FLAGS)
             message (FATAL_ERROR
                 "The build machine does not support x86-64-v${X86_ARCH_LEVEL} "
-                "(${X86_REPRESENTATIVE_FLAG} not found in /proc/cpuinfo).  "
+                "(${X86_REPRESENTATIVE_FLAG} not found in /proc/cpuinfo). "
                 "Run cmake with -DX86_ARCH_LEVEL=<level> to lower the requirement.")
         endif ()
     endif ()

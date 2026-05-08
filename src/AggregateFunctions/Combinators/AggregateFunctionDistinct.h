@@ -24,14 +24,11 @@ struct AggregateFunctionDistinctSingleNumericData
     /// history will hold all values added so far
     Set history;
 
-    /// Returns true if the value did not exist in the history before
     bool add(const IColumn ** __restrict columns, size_t /* columns_num */, size_t row_num, Arena *)
     {
         return add(*columns[0], row_num);
     }
 
-    /// Single-column overload used by `addBatchSinglePlace` to avoid
-    /// re-dereferencing `columns[0]` on every row of the hot loop.
     bool add(const IColumn & column, size_t row_num)
     {
         const auto & vec = assert_cast<const ColumnVector<T> &>(column).getData();
@@ -217,15 +214,6 @@ public:
             addToNested(row_num, row_num + 1, place, columns, arena);
     }
 
-    /// The default `addBatchSinglePlace` from `IAggregateFunctionHelper` goes
-    /// through the `addFree` function pointer per row, which the compiler cannot
-    /// inline or hoist loop-invariant loads across.  This override gives the
-    /// compiler direct visibility of the loop body.
-    ///
-    /// For single-numeric Data types we call `data.add(column, row)` — an
-    /// overload that takes an already-dereferenced `IColumn &` — so the
-    /// `columns[0]` dereference is hoisted before the loop instead of
-    /// repeated per row.
     void addBatchSinglePlace(
         size_t row_begin, size_t row_end,
         AggregateDataPtr __restrict place,

@@ -80,12 +80,24 @@ WORK_DIR=""
 cleanup() { rm -f "$TMPFILE"; [ -n "$WORK_DIR" ] && rm -rf "$WORK_DIR"; true; }
 trap cleanup EXIT
 
-# Get all global defined symbols from the library
+if ! command -v llvm-nm >/dev/null 2>&1; then
+    echo "Error: llvm-nm not found in PATH (required for Rust C-symbol localization)" >&2
+    exit 1
+fi
+
+# Get all global defined symbols from the library. llvm-nm may print per-member errors for non-ELF archive
+# members (e.g. debug metadata objects) - those are non-fatal as long as at least one ELF member is read.
+# A truly broken/missing archive produces empty output and is caught below.
 llvm-nm "$LIB_PATH" 2>/dev/null \
     | grep -E '^[0-9a-f]+ [TDBCWV] ' \
     | awk '{print $3}' \
     | sort -u \
-    > "$TMPFILE"
+    > "$TMPFILE" || true
+
+if [ ! -s "$TMPFILE" ]; then
+    echo "Error: llvm-nm produced no symbols for $LIB_PATH; cannot localize Rust C symbols" >&2
+    exit 1
+fi
 
 # Build objcopy flags for symbols that exist in both lists
 LOCALIZE_FLAGS=""

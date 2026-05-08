@@ -622,13 +622,8 @@ public:
         }
     }
 
-    /// Hot path: both states still tiny (the histograms haven't grown yet).
-    /// Keep it inline so callers in tight loops (e.g. `SummingSortedAlgorithm`)
-    /// don't pay function-call overhead, and so the hot `tiny.merge` body is
-    /// not co-located with the cold transition code below — the latter brings
-    /// in YMM struct copies / unrolled `vpaddq` for the histogram add, which
-    /// would force `vzeroupper` before every call/return on the merge path
-    /// and bloat the function in icache.
+    /// On x86-64-v3, keep the cold transition path out-of-line so the hot tiny-merge body doesn't drag in YMM histogram
+    /// copies that force `vzeroupper` around every call.
     void merge(const QuantileTiming & rhs)
     {
         if (tiny.count + rhs.tiny.count <= TINY_MAX_ELEMS)

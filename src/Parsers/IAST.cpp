@@ -409,12 +409,13 @@ static bool decideParensEmission(const IAST & node, IAST::FormatStateStacked & f
         return false;
     }
 
-    /// `ASTSubquery` always emits its own enclosing `(SELECT ...)` parens.
+    /// `ASTSubquery` without an alias always emits its own enclosing `(SELECT ...)` parens.
     /// Adding the `parenthesized` flag's parens on top would produce `((SELECT ...))`,
     /// which the parser collapses back to a non-parenthesized subquery, breaking the
-    /// format-parse-format round-trip. The aliased-subquery case is already handled by
-    /// the alias-deferral branch above (which explicitly excludes `ASTSubquery`).
-    if (dynamic_cast<const ASTSubquery *>(&node))
+    /// format-parse-format round-trip. The aliased case is different: there `((SELECT ...) AS alias)`
+    /// is the canonical form (the alias-deferral branch above explicitly skips `ASTSubquery` so
+    /// the outer parens are emitted here instead), so we only suppress when the alias is empty.
+    if (const auto * subquery = dynamic_cast<const ASTSubquery *>(&node); subquery && subquery->alias.empty())
         return false;
 
     frame.need_parens = false;

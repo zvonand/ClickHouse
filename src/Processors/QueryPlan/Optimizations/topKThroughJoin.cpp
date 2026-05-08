@@ -271,10 +271,17 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
     /// than what we would do here. This mirrors the soundness sketch in the file header
     /// without the cost of an explicit Sort + Limit on top of the storage step.
     ///
-    /// Both `read_in_order` and `read_in_order_through_join` must be enabled for the
-    /// second-pass optimization to actually apply through the join. If either is off,
-    /// deferring here would silently disable both optimizations.
-    if (settings.read_in_order && settings.read_in_order_through_join)
+    /// The second pass only traverses INNER/LEFT joins via the left child with ANY/ALL
+    /// strictness (see `optimizeReadInOrder`); for `RIGHT` joins or non-ANY/ALL strictness
+    /// it would not pick the read-in-order through the join, so deferring would silently
+    /// disable both optimizations. Likewise, both `read_in_order` and
+    /// `read_in_order_through_join` must be enabled for the second pass to apply at all.
+    const bool second_pass_can_apply
+        = settings.read_in_order
+        && settings.read_in_order_through_join
+        && join_kind == JoinKind::Left
+        && (join_strictness == JoinStrictness::All || join_strictness == JoinStrictness::Any);
+    if (second_pass_can_apply)
     {
         if (const auto * reading = findMergeTreeRead(preserved_input_node))
         {

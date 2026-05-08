@@ -31,13 +31,10 @@ void ASTWithAlias::formatImpl(WriteBuffer & ostr, const FormatSettings & setting
     else if (frame.parenthesize_alias_inner_only && !alias.empty())
     {
         /// `IAST::format` deferred parens emission to us so we can produce `(expr) AS alias`
-        /// instead of `(expr AS alias)`. Both parse to the same AST (the parser sets
-        /// `parenthesized=true` on the aliased node either way), but only `(expr) AS alias`
-        /// re-formats to itself, which is required by the format-parse-format consistency check
-        /// in debug builds. The deferral fires only at the top level of an expression / SELECT
-        /// element / WHERE clause; inside an operator chain `IAST::format` keeps the parens
-        /// itself, producing `(expr AS alias)` so the alias does not terminate the SELECT
-        /// element parser early.
+        /// instead of `(expr AS alias)`. At the top level of an expression / SELECT element /
+        /// WHERE clause the latter re-formats to the former because the outer parens are not
+        /// needed. Inside an operator chain `IAST::format` keeps the parens itself, producing
+        /// `(expr AS alias)` so the alias does not terminate the SELECT element parser early.
         ostr.write('(');
         FormatStateStacked inner = frame;
         inner.parenthesize_alias_inner_only = false;

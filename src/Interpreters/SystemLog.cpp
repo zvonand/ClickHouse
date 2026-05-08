@@ -911,12 +911,10 @@ ASTPtr SystemLog<LogElement>::getCreateTableQuery()
 
     StorageWithComment & storage_with_comment = storage_with_comment_ast->as<StorageWithComment &>();
 
-    /// The engine string above wraps `PARTITION BY` and `ORDER BY` arguments in artificial
-    /// parentheses (e.g. ` PARTITION BY (toYYYYMM(event_date))`) so the parser accepts both
-    /// single-expression and tuple forms. With the new `IAST::parenthesized` flag, those
-    /// parentheses get persisted into the stored CREATE TABLE AST and reappear when the
-    /// table is shown via `system.tables.engine_full`. Strip the flag so the formatter
-    /// does not emit the artificial wrapping.
+    /// The default engine string wraps `PARTITION BY` / `ORDER BY` / `PRIMARY KEY` /
+    /// `SAMPLE BY` arguments in artificial parentheses so the parser accepts both
+    /// single-expression and tuple forms. Clear the `parenthesized` flag so the formatter
+    /// does not emit those artificial wrapping parens in `system.tables.engine_full`.
     if (auto * storage = storage_with_comment.storage->as<ASTStorage>())
     {
         if (storage->partition_by)

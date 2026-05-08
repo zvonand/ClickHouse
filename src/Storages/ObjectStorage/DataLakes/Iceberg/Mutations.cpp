@@ -766,6 +766,19 @@ void alter(
 
     if (i == MAX_TRANSACTION_RETRIES)
         throw Exception(ErrorCodes::LIMIT_EXCEEDED, "Too many unsuccessed retries to alter iceberg table");
+
+    /// Invalidate the metadata files cache so that subsequent operations on this table see the
+    /// schema we just wrote. Without this, when `iceberg_metadata_staleness_ms` is non-zero, a
+    /// follow-up read or `INSERT` may keep using the cached pre-`ALTER` schema while the writer
+    /// (which always reads fresh metadata) sees the post-`ALTER` schema, leading to a column-count
+    /// mismatch and an out-of-bounds access in `DataFileStatistics::getColumnSizes`.
+    /// Mirrors the cache invalidation in `IcebergStorageSink::initializeMetadata`.
+    if (persistent_table_components.metadata_cache)
+    {
+        persistent_table_components.metadata_cache->remove(persistent_table_components.table_path);
+        if (persistent_table_components.table_uuid)
+            persistent_table_components.metadata_cache->remove(*persistent_table_components.table_uuid);
+    }
 }
 
 #endif

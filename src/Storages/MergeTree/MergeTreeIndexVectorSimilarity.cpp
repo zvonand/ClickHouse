@@ -1,5 +1,4 @@
 #include <Storages/MergeTree/MergeTreeIndexVectorSimilarity.h>
-#include <boost/qvm/scalar_traits.hpp>
 
 #if USE_USEARCH
 
@@ -313,19 +312,16 @@ namespace
 /// - In the case of i8 quantization (which is obscure): additionally, the vector magnitude must not be zero.
 template <typename T>
 void checkVectorIsSane(
-    const T * vec,
+    const T * vector,
     size_t dimension,
     unum::usearch::scalar_kind_t scalar_kind,
     int error_code,
     std::string_view context)
 {
-    double magnitude_sq = 0.0;
+    double magnitude_squared = 0.0;
     for (size_t i = 0; i != dimension; ++i)
     {
-        /// `Float32`, `Float64`, and `BFloat16` all support `static_cast<double>`. NaN and Inf
-        /// are preserved by the conversion, so the `isfinite` check below catches them
-        /// regardless of the input scalar type.
-        T casted = static_cast<T>(vec[i]);
+        T casted = static_cast<T>(vector[i]);
         if constexpr (std::is_same_v<T, BFloat16>)
         {
             if (!casted.isFinite())
@@ -341,15 +337,14 @@ void checkVectorIsSane(
 
         if (scalar_kind == unum::usearch::scalar_kind_t::i8_k)
         {
-            double v = static_cast<double>(vec[i]);
-            magnitude_sq += v * v;
+            double v = static_cast<double>(vector[i]);
+            magnitude_squared += v * v;
         }
     }
 
-    if (scalar_kind == unum::usearch::scalar_kind_t::i8_k && magnitude_sq == 0.0)
+    if (scalar_kind == unum::usearch::scalar_kind_t::i8_k && magnitude_squared == 0.0)
         throw Exception(error_code,
-            "Zero-magnitude vectors for vector similarity index ({}) are not supported with `i8` quantization",
-            context);
+            "Zero-magnitude vectors for vector similarity index ({}) are not supported with `i8` quantization", context);
 }
 
 template <typename Column>

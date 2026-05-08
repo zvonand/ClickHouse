@@ -973,6 +973,12 @@ class Runner:
             inputs = self._parse_workflow_inputs(workflow_input)
             Info.set_workflow_inputs(inputs)
             print(f"Workflow inputs set: {inputs}")
+        elif local_run:
+            # No --workflow-input given — clear any stale file from a previous
+            # local run so Info.get_workflow_input_value does not return old
+            # values. In CI the YAML-generated heredoc has already written the
+            # real dispatch inputs before Runner.run is invoked.
+            Info.set_workflow_inputs({})
 
         if res and (not local_run or ((pr or branch) and sha)):
             res = False

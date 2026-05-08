@@ -171,9 +171,9 @@ void StorageSystemWasmModules::checkMutationIsPossible(const MutationCommands & 
     if (getModuleDeleteFilterFromAst(commands).has_value())
         return;
     throw Exception(ErrorCodes::BAD_ARGUMENTS,
-        "Only deletion of a module by name is supported. "
-        "Use query `DELETE FROM {} WHERE name = 'module_name'` or `DELETE FROM {} WHERE name LIKE 'pattern%'`",
-        getStorageID().getFullTableName(), getStorageID().getFullTableName());
+        "Only deletion by module name is supported on {}. "
+        "The WHERE clause must be `name = 'module_name'` or `name LIKE 'pattern'`.",
+        getStorageID().getFullTableName());
 }
 
 void StorageSystemWasmModules::mutate(const MutationCommands & commands, ContextPtr)

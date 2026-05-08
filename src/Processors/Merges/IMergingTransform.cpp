@@ -218,11 +218,15 @@ IProcessor::Status IMergingTransformBase::prepare()
             const auto & input_chunk = state.input_chunk.chunk;
 
             bool virtual_row = isVirtualRow(input_chunk);
-            if (!virtual_row && ((limit_hint && input_chunk.getNumRows() < limit_hint) || always_read_till_end))
+            if (!virtual_row && (!limit_hint || input_chunk.getNumRows() < limit_hint || always_read_till_end))
+            {
                 input.setNeeded();
-
-            if (!input_chunk.hasRows() && !virtual_row && !input.isFinished())
+            }
+            else if (!input_chunk.hasRows() && !virtual_row && !input.isFinished())
+            {
+                input.setNeeded();
                 return Status::NeedData;
+            }
 
             state.has_input = true;
         }

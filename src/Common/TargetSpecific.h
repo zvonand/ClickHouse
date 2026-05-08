@@ -237,7 +237,7 @@ DECLARE_X86_SAPPHIRE_SPECIFIC_CODE(
   *         }
   *         else
   *         {
-  *             testFunction(value);
+  *             testFunctionImpl(value);
   *         }
   *     }
   *};

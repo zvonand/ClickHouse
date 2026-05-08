@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Access/Common/AccessType.h>
 #include <Common/NamePrompter.h>
 #include <Databases/LoadingStrictnessLevel.h>
 #include <Interpreters/Context_fwd.h>
@@ -55,6 +56,10 @@ public:
         /// Used by restore to skip external databases when
         /// restore_replace_external_engines_to_null is set.
         bool is_external = false;
+        /// Source access type used by `addImplicitAccessRights` to bridge
+        /// `READ`/`WRITE ON <SOURCE>` grants to implicit `TABLE_ENGINE` grants.
+        /// Defaults to `std::nullopt` for non-source engines.
+        std::optional<AccessTypeObjects::Source> source_access_type = std::nullopt;
     };
 
     using CreatorFn = std::function<DatabasePtr(const Arguments & arguments)>;
@@ -74,6 +79,7 @@ public:
         .supports_settings = false,
         .supports_table_overrides = false,
         .is_external = false,
+        .source_access_type = std::nullopt,
     });
 
     const DatabaseEngines & getDatabaseEngines() const { return database_engines; }

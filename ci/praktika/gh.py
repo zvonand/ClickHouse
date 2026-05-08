@@ -303,45 +303,101 @@ class GH:
         return cls.do_command_with_retries(cmd)
 
     @classmethod
+    def _gh_graphql_json(cls, query, variables, verbose=False):
+        """Run a GraphQL query via ``gh api graphql`` and return parsed JSON.
+
+        ``variables`` is a mapping of name to value: ``int`` and ``bool``
+        values use ``-F`` (typed), everything else uses ``-f`` (raw string).
+        Raises ``RuntimeError`` on transport failure (empty output after
+        retries) or if the response cannot be parsed; the caller is
+        responsible for checking GraphQL ``errors`` if any. Failing loud
+        is intentional: a silent empty result is indistinguishable from
+        "no data" and causes the reviewer to lose prior context.
+        """
+        parts = [f"gh api graphql -f query={shlex.quote(query)}"]
+        for k, v in variables.items():
+            if isinstance(v, bool):
+                parts.append(f"-F {k}={'true' if v else 'false'}")
+            elif isinstance(v, int):
+                parts.append(f"-F {k}={int(v)}")
+            else:
+                parts.append(f"-f {k}={shlex.quote(str(v))}")
+        cmd = " ".join(parts)
+        out = cls.get_output_with_retries(cmd, verbose=verbose)
+        if not out:
+            raise RuntimeError(f"gh api graphql failed (no output) for cmd [{cmd}]")
+        try:
+            data = json.loads(out)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"gh api graphql returned non-JSON output [{out[:200]}]: {e}")
+        if "errors" in data and data["errors"]:
+            raise RuntimeError(f"gh api graphql returned errors: {data['errors']}")
+        return data
+
+    @classmethod
     def list_pr_review_threads(cls, pr=None, repo=None, verbose=False):
         """Return all review threads on a PR via GraphQL.
 
         Each thread carries its node ``id`` (the value to pass to the
         resolve/unresolve mutations), ``isResolved``, ``isOutdated``,
-        ``path``, ``line``, and the list of comments under it (with
-        ``databaseId`` for use as ``in_reply_to`` when replying).
-        Returns a list of thread dicts; an empty list on failure.
+        ``path``, ``line``, and the full list of comments under it (with
+        ``databaseId`` for use as ``in_reply_to`` when replying). Both
+        the thread list and each thread's comments are paginated, so
+        long PRs do not silently truncate. Raises ``RuntimeError`` on
+        any transport / parse failure: a failure to read prior
+        discussion must not be confused with "no prior discussion".
         """
         if not repo:
             repo = _Environment.get().REPOSITORY
         if not pr:
             pr = _Environment.get().PR_NUMBER
         owner, name = repo.split("/", 1)
-        query = (
-            "query($owner:String!,$name:String!,$pr:Int!){"
+
+        thread_query = (
+            "query($owner:String!,$name:String!,$pr:Int!,$after:String){"
             "repository(owner:$owner,name:$name){"
             "pullRequest(number:$pr){"
-            "reviewThreads(first:100){"
+            "reviewThreads(first:100,after:$after){"
+            "pageInfo{hasNextPage endCursor}"
             "nodes{id isResolved isOutdated path line "
-            "comments(first:50){nodes{databaseId author{login} body path line originalLine}}"
-            "}}}}}"
+            "comments(first:50){"
+            "pageInfo{hasNextPage endCursor}"
+            "nodes{databaseId author{login} body path line originalLine}"
+            "}}}}}}"
         )
-        cmd = (
-            f"gh api graphql "
-            f"-f query={shlex.quote(query)} "
-            f"-F owner={shlex.quote(owner)} "
-            f"-F name={shlex.quote(name)} "
-            f"-F pr={int(pr)}"
+        comments_query = (
+            "query($id:ID!,$after:String!){"
+            "node(id:$id){... on PullRequestReviewThread{"
+            "comments(first:50,after:$after){"
+            "pageInfo{hasNextPage endCursor}"
+            "nodes{databaseId author{login} body path line originalLine}"
+            "}}}}"
         )
-        out = cls.get_output_with_retries(cmd, verbose=verbose)
-        if not out:
-            return []
-        try:
-            data = json.loads(out)
-            return data["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
-            print(f"ERROR: Failed to parse review threads JSON: {e}")
-            return []
+
+        threads = []
+        thread_cursor = None
+        while True:
+            variables = {"owner": owner, "name": name, "pr": int(pr)}
+            if thread_cursor is not None:
+                variables["after"] = thread_cursor
+            data = cls._gh_graphql_json(thread_query, variables, verbose=verbose)
+            page = data["data"]["repository"]["pullRequest"]["reviewThreads"]
+            for thread in page["nodes"]:
+                comments = thread["comments"]
+                while comments["pageInfo"]["hasNextPage"]:
+                    sub = cls._gh_graphql_json(
+                        comments_query,
+                        {"id": thread["id"], "after": comments["pageInfo"]["endCursor"]},
+                        verbose=verbose,
+                    )
+                    next_page = sub["data"]["node"]["comments"]
+                    comments["nodes"].extend(next_page["nodes"])
+                    comments["pageInfo"] = next_page["pageInfo"]
+                threads.append(thread)
+            if not page["pageInfo"]["hasNextPage"]:
+                break
+            thread_cursor = page["pageInfo"]["endCursor"]
+        return threads
 
     @classmethod
     def _set_review_thread_resolution(cls, thread_id, resolve, verbose=False):

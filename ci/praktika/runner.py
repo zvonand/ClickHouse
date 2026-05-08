@@ -970,13 +970,9 @@ class Runner:
             )
 
         if workflow_input:
-            from .settings import _Settings
-
             inputs = self._parse_workflow_inputs(workflow_input)
-            os.makedirs(_Settings.TEMP_DIR, exist_ok=True)
-            with open(_Settings.WORKFLOW_INPUTS_FILE, "w", encoding="utf8") as f:
-                json.dump(inputs, f)
-            print(f"Workflow inputs written to [{_Settings.WORKFLOW_INPUTS_FILE}]: {inputs}")
+            Info.set_workflow_inputs(inputs)
+            print(f"Workflow inputs set: {inputs}")
 
         if res and (not local_run or ((pr or branch) and sha)):
             res = False

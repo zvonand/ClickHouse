@@ -901,6 +901,25 @@ class Runner:
         except FileNotFoundError:
             pass
 
+    @staticmethod
+    def _parse_workflow_inputs(workflow_input):
+        """Parse comma-separated `name=value` pairs from --workflow-input.
+
+        Splits on `,` then on the first `=`, so values may themselves contain
+        `=`. Whitespace around names and values is stripped. Entries without
+        an `=` are skipped with a warning.
+        """
+        inputs = {}
+        for pair in workflow_input.split(","):
+            if "=" in pair:
+                name, _, value = pair.partition("=")
+                inputs[name.strip()] = value.strip()
+            else:
+                print(
+                    f"WARNING: Skipping malformed --workflow-input entry [{pair}] (expected name=value)"
+                )
+        return inputs
+
     def run(
         self,
         workflow,
@@ -953,15 +972,7 @@ class Runner:
         if workflow_input:
             from .settings import _Settings
 
-            inputs = {}
-            for pair in workflow_input.split(","):
-                if "=" in pair:
-                    name, _, value = pair.partition("=")
-                    inputs[name.strip()] = value.strip()
-                else:
-                    print(
-                        f"WARNING: Skipping malformed --workflow-input entry [{pair}] (expected name=value)"
-                    )
+            inputs = self._parse_workflow_inputs(workflow_input)
             os.makedirs(_Settings.TEMP_DIR, exist_ok=True)
             with open(_Settings.WORKFLOW_INPUTS_FILE, "w", encoding="utf8") as f:
                 json.dump(inputs, f)

@@ -43,19 +43,15 @@ bool ParserKQLStatement::parseImpl(Pos & pos, ASTPtr & node, Expected & expected
                     ++pos;
                 }
 
-                /// Try to evaluate the value as a KQL expression
+                /// Translate the value as a KQL expression. Any parse/semantic exception
+                /// from `getExprFromToken` is propagated so that an invalid `let` value
+                /// surfaces a clear syntax error instead of silently substituting raw
+                /// tokens — consistent with all other `getExprFromToken` call sites.
                 String value;
                 {
                     Tokens val_tokens(raw_value.data(), raw_value.data() + raw_value.size(), 0, true);
                     IParser::Pos val_pos(val_tokens, pos.max_depth, pos.max_backtracks);
-                    try
-                    {
-                        value = ParserKQLBase::getExprFromToken(val_pos);
-                    }
-                    catch (const DB::Exception &)
-                    {
-                        value = raw_value;
-                    }
+                    value = ParserKQLBase::getExprFromToken(val_pos);
                 }
                 if (value.empty())
                     value = raw_value;

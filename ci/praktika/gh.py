@@ -230,7 +230,7 @@ class GH:
                 temp_file.write(comment_body)
                 temp_file_path = temp_file.name
 
-            cmd = f"gh pr comment {pr} --body-file {temp_file_path}"
+            cmd = f"gh pr comment {pr} --repo {repo} --body-file {temp_file_path}"
             return cls.do_command_with_retries(cmd)
         finally:
             if temp_file_path and os.path.exists(temp_file_path):
@@ -488,7 +488,9 @@ class GH:
             ) as temp_file:
                 temp_file.write(full_body)
                 temp_file_path = temp_file.name
-            cmd = f"gh pr comment {pr} --body-file {temp_file_path}"
+            # Pass --repo so gh does not probe git remotes (Docker mounts can hit
+            # "detected dubious ownership" and fail comment creation).
+            cmd = f"gh pr comment {pr} --repo {repo} --body-file {temp_file_path}"
             return cls.do_command_with_retries(cmd)
         finally:
             if temp_file_path and os.path.exists(temp_file_path):
@@ -591,7 +593,9 @@ class GH:
             res = cls.do_command_with_retries(cmd)
         else:
             if not only_update:
-                cmd = f"gh pr comment {pr} --body-file {temp_file_path}"
+                # Pass --repo so gh does not probe git remotes (Docker mounts can hit
+                # "detected dubious ownership" and fail comment creation).
+                cmd = f"gh pr comment {pr} --repo {repo} --body-file {temp_file_path}"
                 print(f"Create new comment")
                 res = cls.do_command_with_retries(cmd)
             else:

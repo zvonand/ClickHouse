@@ -57,16 +57,25 @@ FROM ( EXPLAIN actions = 0
 );
 
 -- Result equivalence across flag combinations.
+-- `enable_parallel_replicas = 0`: under parallel replicas, `ORDER BY l.k DESC`
+-- combined with `t_l ORDER BY k` engages read-in-order (`ReverseOrder`), and
+-- the coordinator may receive announcements with a different mode from the
+-- replica step that wraps the local plan, raising
+-- `Coordination mode mismatch for stream ...` from
+-- `ParallelReplicasReadingCoordinator::getOrCreateCoordinator`. This test
+-- verifies plan-level result equivalence, not distributed execution.
 SELECT 'result_both_on' AS label, count(*), max(k), min(k) FROM (
     SELECT l.k AS k, r.value FROM t_l AS l LEFT JOIN t_r AS r ON r.k = l.k
     ORDER BY l.k DESC LIMIT 10
-    SETTINGS query_plan_read_in_order = 1, query_plan_read_in_order_through_join = 1
+    SETTINGS query_plan_read_in_order = 1, query_plan_read_in_order_through_join = 1,
+             enable_parallel_replicas = 0
 );
 
 SELECT 'result_through_join_off' AS label, count(*), max(k), min(k) FROM (
     SELECT l.k AS k, r.value FROM t_l AS l LEFT JOIN t_r AS r ON r.k = l.k
     ORDER BY l.k DESC LIMIT 10
-    SETTINGS query_plan_read_in_order = 1, query_plan_read_in_order_through_join = 0
+    SETTINGS query_plan_read_in_order = 1, query_plan_read_in_order_through_join = 0,
+             enable_parallel_replicas = 0
 );
 
 DROP TABLE t_l;

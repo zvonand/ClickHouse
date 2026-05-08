@@ -38,9 +38,16 @@ FROM ( EXPLAIN actions = 0
 
 -- Result equivalence: `RIGHT JOIN` over identical 1..1000 ranges produces
 -- 1000 matched rows; the top 10 by `r.k DESC` are 999..990.
+-- `enable_parallel_replicas = 0`: under parallel replicas, `ORDER BY r.k DESC`
+-- combined with `t_r ORDER BY k` engages read-in-order (`ReverseOrder`), and
+-- the coordinator may receive announcements with a different mode from the
+-- replica step that wraps the local plan, raising
+-- `Coordination mode mismatch for stream ...`. This test verifies plan-level
+-- result equivalence, not distributed execution.
 SELECT 'right_join_result' AS label, count(*), max(rk), min(rk) FROM (
     SELECT r.k AS rk, r.value FROM t_l AS l RIGHT JOIN t_r AS r ON r.k = l.k
     ORDER BY r.k DESC LIMIT 10
+    SETTINGS enable_parallel_replicas = 0
 );
 
 DROP TABLE t_l;

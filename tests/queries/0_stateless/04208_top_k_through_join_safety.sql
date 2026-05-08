@@ -44,10 +44,15 @@ SELECT 'right_anti' AS label, count(*) FROM (
 
 -- The plan for `LEFT SEMI` must NOT contain a Limit + Sorting on the preserved (left)
 -- input subtree. Confirm there is exactly one Sort + Limit pair, the outer one.
+-- `enable_parallel_replicas = 0` keeps the plan local: the parallel-replicas
+-- stateless test job otherwise wraps the local plan in a `Union` over a
+-- `ReadFromRemoteParallelReplicas` step, which adds a second `Sorting` /
+-- `Limit` and inflates the count.
 SELECT 'left_semi_plan_sort_count' AS label, countIf(explain LIKE '%Sorting%') AS sort_count, countIf(explain LIKE '%Limit%') AS limit_count
 FROM ( EXPLAIN actions = 0
     SELECT l.id, l.k FROM t_l AS l LEFT SEMI JOIN t_r AS r ON r.id = l.id
     ORDER BY l.k DESC LIMIT 10
+    SETTINGS enable_parallel_replicas = 0
 );
 
 -- WITH TOTALS sets `alwaysReadTillEnd` on the LimitStep; the optimization must be
@@ -57,6 +62,7 @@ FROM ( EXPLAIN actions = 0
     SELECT l.id, l.k, count() AS c FROM t_l AS l LEFT JOIN t_r AS r ON r.id = l.id
     GROUP BY l.id, l.k WITH TOTALS
     ORDER BY l.k DESC LIMIT 10
+    SETTINGS enable_parallel_replicas = 0
 );
 
 -- Alias shadowing: the user-visible alias `k` is a *computed* expression

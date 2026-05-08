@@ -468,7 +468,7 @@ ConditionSelectivityEstimator::Selectivity ConditionSelectivityEstimator::Select
 {
     /// case1 : NULL or (false/NULL) = NULL
     /// case2 : false or NULL = NULL
-    /// case1 : true or (...) = true
+    /// case3 : true or (...) = true
     /// case2 : false/NULL or true = true
     return {
         true_sel + (1 - true_sel) * other.true_sel,

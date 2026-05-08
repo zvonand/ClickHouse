@@ -5,7 +5,7 @@ DROP TABLE IF EXISTS tab;
 -- Tests that NaN and +-Inf values in the reference vector and in the data are rejected.
 -- The presence of such values causes undefined behavior in usearch.
 
--- Test with Float32 and with BFloat32. The latter internally exercises a special path.
+-- Test with Float32 and with BFloat16. The latter internally exercises a special path.
 
 CREATE TABLE tab (id Int32, vec Array(Float32), INDEX idx vec TYPE vector_similarity('hnsw', 'L2Distance', 3))
 ENGINE = MergeTree ORDER BY id;

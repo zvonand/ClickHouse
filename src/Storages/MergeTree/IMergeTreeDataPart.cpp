@@ -132,6 +132,7 @@ namespace ErrorCodes
 namespace FailPoints
 {
     extern const char remove_merge_tree_part_delay[];
+    extern const char merge_tree_load_statistics_throw[];
 }
 
 namespace
@@ -1128,6 +1129,12 @@ ColumnsStatistics IMergeTreeDataPart::loadStatisticsWide(const NameSet & require
 
 ColumnsStatistics IMergeTreeDataPart::loadStatistics() const
 {
+    fiu_do_on(FailPoints::merge_tree_load_statistics_throw,
+    {
+        throw Exception(ErrorCodes::CANNOT_READ_ALL_DATA,
+                        "Injected failure in loadStatistics");
+    });
+
     auto component_guard = Coordination::setCurrentComponent("IMergeTreeDataPart::loadStatistics");
 
     if (auto * reader = getStatisticsPackedReader())
@@ -1154,12 +1161,13 @@ Estimates IMergeTreeDataPart::getEstimates() const
     if (estimates.has_value())
         return *estimates;
 
-    estimates = Estimates();
+    Estimates new_estimates;
     auto statistics = loadStatistics();
 
     for (const auto & [column_name, stats] : statistics)
-        estimates->emplace(column_name, stats->getEstimate());
+        new_estimates.emplace(column_name, stats->getEstimate());
 
+    estimates = std::move(new_estimates);
     return *estimates;
 }
 

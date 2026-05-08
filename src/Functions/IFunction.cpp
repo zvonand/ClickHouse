@@ -210,12 +210,62 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
 
     if (null_presence.has_nullable)
     {
-        /// If the result type cannot be Nullable (e.g. Array, Tuple, Map),
-        /// run the function on nested columns and return the result as-is.
-        /// For null rows, the nested column holds default values, so the function
-        /// produces results equivalent to feeding it the default of the input type
-        /// (e.g. an empty array for `extractAll(NULL, ...)`).
         const bool result_is_nullable = result_type->isNullable();
+
+        if (!result_is_nullable)
+        {
+            /// The result type cannot be Nullable (e.g. `Array`, `Tuple`, `Map`).
+            /// The framework convention here is `f(default(input))` for null rows: the function
+            /// runs over inputs where null rows have been normalized to the default value of
+            /// the (nested) input type. This is necessary because `createBlockWithNestedColumns`
+            /// alone does not overwrite null rows -- e.g. `nullIf(materialize('x'), materialize('x'))`
+            /// produces a Nullable column whose nested data still contains `'x'`, so running the
+            /// function on it would return `f('x')` instead of the desired `f('')`.
+            ColumnsWithTypeAndName patched_columns = createBlockWithNestedColumns(args);
+            auto temporary_result_type = removeNullable(result_type);
+
+            for (size_t i = 0; i < args.size(); ++i)
+            {
+                if (!args[i].type->isNullable())
+                    continue;
+                const auto & nested_type = patched_columns[i].type;
+
+                if (isColumnConst(*args[i].column))
+                {
+                    if (args[i].column->onlyNull())
+                        patched_columns[i].column = nested_type->createColumnConstWithDefaultValue(input_rows_count);
+                    continue;
+                }
+
+                const auto & nullable = assert_cast<const ColumnNullable &>(*args[i].column);
+                const auto & null_map = nullable.getNullMapData();
+
+                bool has_any_null = false;
+                for (size_t r = 0; r < input_rows_count; ++r)
+                {
+                    if (null_map[r])
+                    {
+                        has_any_null = true;
+                        break;
+                    }
+                }
+                if (!has_any_null)
+                    continue;
+
+                auto patched = nested_type->createColumn();
+                patched->reserve(input_rows_count);
+                for (size_t r = 0; r < input_rows_count; ++r)
+                {
+                    if (null_map[r])
+                        patched->insertDefault();
+                    else
+                        patched->insertFrom(*patched_columns[i].column, r);
+                }
+                patched_columns[i].column = std::move(patched);
+            }
+
+            return executeWithoutLowCardinalityColumns(patched_columns, temporary_result_type, input_rows_count, dry_run);
+        }
 
         bool all_columns_constant = true;
         bool all_numeric_types = true;
@@ -224,13 +274,9 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
             if (!isColumnConst(*arg.column))
                 all_columns_constant = false;
 
-            if (arg.type->isNullable() && isColumnConst(*arg.column) && arg.column->onlyNull() && result_is_nullable)
+            if (arg.type->isNullable() && isColumnConst(*arg.column) && arg.column->onlyNull())
             {
-                /// If any of input columns contains a null constant and the result is Nullable,
-                /// the result is null constant.
-                /// For non-Nullable result types this shortcut is unsafe: substituting `default(result_type)`
-                /// is not the same as `f(default(input))` (e.g. `splitByChar(',', NULL)` = `['']`, not `[]`).
-                /// Fall through and let the function evaluate over the default values of the nested columns.
+                /// If any of input columns contains a null constant, the result is null constant.
                 return result_type->createColumnConstWithDefaultValue(input_rows_count);
             }
 
@@ -257,8 +303,6 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
             auto temporary_result_type = removeNullable(result_type);
 
             auto res = executeWithoutLowCardinalityColumns(temporary_columns, temporary_result_type, input_rows_count, dry_run);
-            if (!result_is_nullable)
-                return res;
             return wrapInNullable(res, args, result_type, input_rows_count);
         }
 
@@ -291,19 +335,15 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
         ProfileEvents::increment(ProfileEvents::DefaultImplementationForNullsRows, input_rows_count);
         ProfileEvents::increment(ProfileEvents::DefaultImplementationForNullsRowsWithNulls, rows_with_nulls);
 
-        if (rows_without_nulls == 0 && result_is_nullable)
+        if (rows_without_nulls == 0)
         {
             /// Don't need to evaluate function if each row contains at least one null value and not all input columns are constant.
-            /// For non-Nullable result we still evaluate so the result is `f(default(input))`, not `default(result_type)`.
             return result_type->createColumnConstWithDefaultValue(input_rows_count)->convertToFullColumnIfConst();
         }
 
         double null_ratio = static_cast<double>(rows_with_nulls) / static_cast<double>(input_rows_count);
-        /// Short-circuit only when the result type is Nullable: for non-Nullable results the filtered-out
-        /// rows would be filled with `default(result_type)` via `expand`, which differs from `f(default(input))`.
         bool should_short_circuit
-            = short_circuit_function_evaluation_for_nulls && null_ratio >= short_circuit_function_evaluation_for_nulls_threshold
-              && result_is_nullable;
+            = short_circuit_function_evaluation_for_nulls && null_ratio >= short_circuit_function_evaluation_for_nulls_threshold;
 
         ColumnsWithTypeAndName temporary_columns = createBlockWithNestedColumns(args);
         auto temporary_result_type = removeNullable(result_type);
@@ -312,8 +352,6 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
         {
             /// Each row should be evaluated if there are no nulls or short circuiting is disabled.
             auto res = executeWithoutLowCardinalityColumns(temporary_columns, temporary_result_type, input_rows_count, dry_run);
-            if (!result_is_nullable)
-                return res;
             auto new_res = wrapInNullable(res, std::move(result_null_map));
             return new_res;
         }
@@ -335,8 +373,6 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
             auto mutable_res = IColumn::mutate(std::move(res));
             mutable_res->expand(filter_mask, false);
 
-            if (!result_is_nullable)
-                return std::move(mutable_res);
             auto new_res = wrapInNullable(std::move(mutable_res), std::move(result_null_map));
             return new_res;
         }

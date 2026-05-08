@@ -55,3 +55,14 @@ SET short_circuit_function_evaluation_for_nulls = 1;
 SET short_circuit_function_evaluation_for_nulls_threshold = 0.5;
 SELECT splitByChar(',', x) FROM (SELECT arrayJoin([NULL, NULL, NULL, '']::Array(Nullable(String))) AS x);
 SELECT extractAll(x, '(\\w+)') FROM (SELECT arrayJoin([NULL, NULL, NULL, 'a b']::Array(Nullable(String))) AS x);
+
+-- A `nullIf`-stripped row is semantically NULL but its underlying nested data still holds the
+-- original value. The framework must normalise null rows to the default of the input type
+-- before evaluating, otherwise it would compute `extractAll('hello world', ...)` for that row
+-- and incorrectly return `['hello','world']` instead of `[]`.
+SET short_circuit_function_evaluation_for_nulls = 0;
+SELECT extractAll(nullIf(materialize('hello world'), materialize('hello world')), '(\\w+)');
+SELECT
+    number,
+    extractAll(if(number = 0, nullIf(materialize('hello world'), materialize('hello world')), CAST('foo bar', 'Nullable(String)')), '(\\w+)')
+FROM numbers(2);

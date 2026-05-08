@@ -32,3 +32,6 @@ Array(String)
 []
 []
 ['a','b']
+[]
+0	[]
+1	['foo','bar']

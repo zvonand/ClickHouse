@@ -220,17 +220,20 @@ public:
         auto key_holder = derived.getKeyHolder(row, pool);
         if constexpr (Derived::has_pre_computed_hashes)
         {
-            if (row == PrefetchingHelper::iterationsToMeasure())
-                derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
-            const auto & hashes = derived.hashes.getData();
-            if (row + derived.prefetch_look_ahead < hashes.size())
-                data.prefetchByHash(hashes[row + derived.prefetch_look_ahead]);
-            return emplaceImpl<false>(key_holder, data, hashes[row]);
+            if (derived.can_precompute_hashes)
+            {
+                if (!derived.precomputed_hashes_initialized)
+                    derived.initPrecomputedHashes(data);
+
+                if (row == PrefetchingHelper::iterationsToMeasure())
+                    derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
+                const auto & hashes = derived.precomputed_hashes;
+                if (row + derived.prefetch_look_ahead < hashes.size())
+                    data.prefetchByHash(hashes[row + derived.prefetch_look_ahead]);
+                return emplaceImpl<false>(key_holder, data, hashes[row]);
+            }
         }
-        else
-        {
-            return emplaceImpl<true>(key_holder, data, 0);
-        }
+        return emplaceImpl<true>(key_holder, data, 0);
     }
 
     template <typename Data>
@@ -261,18 +264,24 @@ public:
         auto & derived = static_cast<Derived &>(*this);
         if constexpr (Derived::has_pre_computed_hashes)
         {
-            if (row == PrefetchingHelper::iterationsToMeasure())
-                derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
-            const auto & hashes = derived.hashes.getData();
-            if (row + derived.prefetch_look_ahead < hashes.size())
-                data.prefetchByHash(hashes[row + derived.prefetch_look_ahead]);
-
-            if (data.isEmptyCell(hashes[row]))
+            if (derived.can_precompute_hashes)
             {
-                if constexpr (has_mapped)
-                    return FindResult(nullptr, false, 0);
-                else
-                    return FindResult(false, 0);
+                if (!derived.precomputed_hashes_initialized)
+                    derived.initPrecomputedHashes(data);
+
+                if (row == PrefetchingHelper::iterationsToMeasure())
+                    derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
+                const auto & hashes = derived.precomputed_hashes;
+                if (row + derived.prefetch_look_ahead < hashes.size())
+                    data.prefetchByHash(hashes[row + derived.prefetch_look_ahead]);
+
+                if (data.isEmptyCell(hashes[row]))
+                {
+                    if constexpr (has_mapped)
+                        return FindResult(nullptr, false, 0);
+                    else
+                        return FindResult(false, 0);
+                }
             }
         }
 

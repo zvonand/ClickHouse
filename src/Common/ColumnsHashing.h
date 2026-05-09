@@ -373,7 +373,14 @@ struct HashMethodSerialized
     IColumn::SerializationSettings serialization_settings;
     PaddedPODArray<char> serialized_buffer;
     std::vector<std::string_view> serialized_keys;
-    WeakHash32 hashes{0};
+
+    /// Per-row canonical hashes computed from `serialized_keys` using the hash table's hash function.
+    /// Filled lazily on the first emplace/find call (because we need access to `Data::hash`).
+    /// Only used when `can_precompute_hashes` is true.
+    PaddedPODArray<size_t> precomputed_hashes;
+    bool precomputed_hashes_initialized = false;
+    bool can_precompute_hashes = false;
+
     std::unique_ptr<PrefetchingHelper> prefetching;
     size_t prefetch_look_ahead = PrefetchingHelper::getInitialLookAheadValue();
 
@@ -440,15 +447,31 @@ struct HashMethodSerialized
             }
         }
 
-        /// TODO(ab): We can compute hash when doing batch serialization
+        /// We can only precompute canonical per-row hashes when:
+        ///   1. We have the serialized keys upfront (batch serialization is in use), and
+        ///   2. We use the hash table's actual hash function (deferred to first emplace/find).
+        /// Without batch serialization, fall back to the regular `data.prefetch(key_holder)` path.
         if constexpr (has_pre_computed_hashes)
         {
-            hashes.reset(key_columns[0]->size());
-            for (size_t i = 0; i < keys_size; ++i)
-                hashes.update(key_columns[i]->getWeakHash32());
-
-            prefetching = std::make_unique<PrefetchingHelper>();
+            if (use_batch_serialize)
+            {
+                can_precompute_hashes = true;
+                prefetching = std::make_unique<PrefetchingHelper>();
+            }
         }
+    }
+
+    /// Compute per-row canonical hashes from `serialized_keys` using `Data::hash`.
+    /// Called once on the first `emplaceKey`/`findKey`, when `Data` becomes known.
+    template <typename Data>
+    NO_INLINE void initPrecomputedHashes(const Data & data)
+        requires(prealloc)
+    {
+        const size_t rows = serialized_keys.size();
+        precomputed_hashes.resize(rows);
+        for (size_t i = 0; i < rows; ++i)
+            precomputed_hashes[i] = data.hash(serialized_keys[i]);
+        precomputed_hashes_initialized = true;
     }
 
     bool shouldUseBatchSerialize() const

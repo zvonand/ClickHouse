@@ -632,7 +632,10 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 
     std::vector<std::pair<String, Pos>> operation_pos;
 
-    String table_name(pos->begin, pos->end);
+    /// KQL keywords are case-insensitive, so dispatch on the lowercased token
+    /// instead of the verbatim text — otherwise `PRINT 1` or `RANGE x from ...`
+    /// silently bypass the dedicated paths and fall through to table parsing.
+    String table_name = Poco::toLower(String(pos->begin, pos->end));
 
     if (table_name == "print")
         operation_pos.emplace_back(table_name, pos);
@@ -772,7 +775,10 @@ bool ParserKQLQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
         /// Use the standard operator parsing loop
         while (isValidKQLPos(pipe_pos) && pipe_pos->type != TokenType::Semicolon)
         {
-            String op_name(pipe_pos->begin, pipe_pos->end);
+            /// KQL operators are case-insensitive, so normalize before lookup —
+            /// `getOperator` expects lowercase names and `... | COUNT` would
+            /// otherwise return `nullptr` and reject a valid pipeline.
+            String op_name = Poco::toLower(String(pipe_pos->begin, pipe_pos->end));
 
             /// Handle "sort by" / "order by"
             if (op_name == "sort" || op_name == "order")

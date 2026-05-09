@@ -4,6 +4,7 @@
 #include <Analyzer/QueryNode.h>
 #include <Core/Settings.h>
 #include <Interpreters/Context.h>
+#include <base/arithmeticOverflow.h>
 
 namespace DB
 {
@@ -30,7 +31,10 @@ void OptimizeTrivialGroupByLimitPass::run(QueryTreeNodePtr & query_tree_node, Co
             UInt64 offset = 0;
             if (query->hasOffset())
                 offset = query->getOffset()->as<ConstantNode &>().getValue().safeGet<UInt64>();
-            mutable_context->setSetting("max_rows_to_group_by", limit + offset);
+            UInt64 max_rows = 0;
+            if (common::addOverflow(limit, offset, max_rows))
+                return;
+            mutable_context->setSetting("max_rows_to_group_by", max_rows);
             mutable_context->setSetting("group_by_overflow_mode", Field("any"));
         }
     }

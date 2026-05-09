@@ -23,4 +23,10 @@ SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k ORDER BY 
 SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k LIMIT 5)
 SETTINGS optimize_trivial_group_by_limit_query = 1, max_rows_to_group_by = 1000000, group_by_overflow_mode = 'throw';
 
+-- Overflow guard: `limit + offset` must not silently wrap to a smaller number.
+-- Without the guard, `LIMIT 18446744073709551615 OFFSET 100` would overflow `UInt64`
+-- to 99, truncating aggregation to 99 distinct keys and yielding 0 instead of 156.
+SELECT count() FROM (SELECT number % 256 AS k FROM numbers(1000) GROUP BY k LIMIT 18446744073709551615 OFFSET 100)
+SETTINGS optimize_trivial_group_by_limit_query = 1;
+
 DROP TABLE t_trivial_group_by_limit;

@@ -8,8 +8,10 @@
 --
 -- This test triggers an async insert flush failure (which calls
 -- `logExceptionBeforeStart` from `AsynchronousInsertQueue::processData` with
--- `internal=true`) and verifies that all three internal counters are bumped alongside
--- the existing user-visible `FailedInsertQuery` / `FailedQuery` increments.
+-- `internal=true`) and verifies that the relevant internal counters for the INSERT
+-- path (`FailedInternalQuery` and `FailedInternalInsertQuery`) are bumped alongside
+-- the existing user-visible `FailedQuery` and `FailedInsertQuery` increments.
+-- `FailedInternalSelectQuery` is not asserted here because the failing path is INSERT.
 
 DROP TABLE IF EXISTS t_failed_internal_async_flush;
 CREATE TABLE t_failed_internal_async_flush (a UInt32) ENGINE = MergeTree ORDER BY a;

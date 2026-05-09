@@ -212,12 +212,17 @@ void TableFunctionRemote::parseArguments(const ASTPtr & ast_function, ContextPtr
             }
         }
 
-        /// Username and password parameters are prohibited in cluster version of the function
+        /// Username and password parameters are prohibited in cluster version of the function.
+        /// The user name accepts both string literals and bare identifiers (the latter is
+        /// consistent with how the database and table arguments accept unquoted identifiers);
+        /// a bare identifier at that position used to be silently treated as a sharding key,
+        /// which led to confusing authentication errors when the user simply forgot the quotes
+        /// around the user name. The password must still be a string literal.
         if (!is_cluster_function)
         {
             if (arg_num < args.size())
             {
-                if (!get_string_literal(*args[arg_num], username))
+                if (!get_string_literal(*args[arg_num], username) && !tryGetIdentifierNameInto(args[arg_num], username))
                 {
                     username = "default";
                     sharding_key = args[arg_num];

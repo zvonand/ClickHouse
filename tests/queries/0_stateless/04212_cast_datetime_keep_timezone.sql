@@ -46,3 +46,28 @@ SELECT x = CAST(x, 'DateTime'), CAST(x, 'DateTime') = toDateTime(x);
 SELECT '-- toDateTime function behavior matches CAST behavior';
 WITH toDateTime('2023-01-02 03:04:05', 'America/Los_Angeles') AS x
 SELECT toTypeName(toDateTime(x)) = toTypeName(CAST(x, 'DateTime'));
+
+SELECT '-- accurateCast preserves the source time zone';
+WITH toDateTime('2023-01-02 03:04:05', 'America/Los_Angeles') AS x
+SELECT toTypeName(accurateCast(x, 'DateTime'));
+WITH toDateTime64('2023-01-02 03:04:05', 3, 'America/Los_Angeles') AS x
+SELECT toTypeName(accurateCast(x, 'DateTime64(6)'));
+
+SELECT '-- accurateCast: target with explicit time zone wins over source';
+WITH toDateTime('2023-01-02 03:04:05', 'America/Los_Angeles') AS x
+SELECT toTypeName(accurateCast(x, 'DateTime(\'UTC\')'));
+
+SELECT '-- accurateCastOrNull preserves the source time zone (result is Nullable)';
+WITH toDateTime('2023-01-02 03:04:05', 'America/Los_Angeles') AS x
+SELECT toTypeName(accurateCastOrNull(x, 'DateTime'));
+WITH toDateTime64('2023-01-02 03:04:05', 3, 'America/Los_Angeles') AS x
+SELECT toTypeName(accurateCastOrNull(x, 'DateTime64(6)'));
+
+SELECT '-- accurateCastOrNull: target with explicit time zone wins over source';
+WITH toDateTime('2023-01-02 03:04:05', 'America/Los_Angeles') AS x
+SELECT toTypeName(accurateCastOrNull(x, 'DateTime(\'UTC\')'));
+
+SELECT '-- accurateCast / accurateCastOrNull look through Nullable and LowCardinality wrappers';
+WITH toDateTime('2023-01-02 03:04:05', 'America/Los_Angeles') AS x
+SELECT toTypeName(accurateCast(toNullable(x), 'DateTime'));
+SELECT toTypeName(accurateCastOrNull(toNullable(toDateTime('2023-01-02 03:04:05', 'America/Los_Angeles')), 'DateTime'));

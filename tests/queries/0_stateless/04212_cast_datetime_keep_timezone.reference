@@ -22,3 +22,16 @@ DateTime
 1	1
 -- toDateTime function behavior matches CAST behavior
 1
+-- accurateCast preserves the source time zone
+DateTime(\'America/Los_Angeles\')
+DateTime64(6, \'America/Los_Angeles\')
+-- accurateCast: target with explicit time zone wins over source
+DateTime(\'UTC\')
+-- accurateCastOrNull preserves the source time zone (result is Nullable)
+Nullable(DateTime(\'America/Los_Angeles\'))
+Nullable(DateTime64(6, \'America/Los_Angeles\'))
+-- accurateCastOrNull: target with explicit time zone wins over source
+Nullable(DateTime(\'UTC\'))
+-- accurateCast / accurateCastOrNull look through Nullable and LowCardinality wrappers
+DateTime(\'America/Los_Angeles\')
+Nullable(DateTime(\'America/Los_Angeles\'))

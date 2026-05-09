@@ -81,5 +81,7 @@ SELECT * FROM file([], 'CSV', 'x UInt64'); -- { serverError BAD_ARGUMENTS }
 
 SELECT * FROM file([1, 2], 'CSV', 'x UInt64'); -- { serverError BAD_ARGUMENTS }
 
+SELECT * FROM file([currentDatabase() || '_file_array_arg_archive.zip::data.csv'], 'CSV', 'x UInt64'); -- { serverError BAD_ARGUMENTS }
+
 INSERT INTO FUNCTION file([currentDatabase() || '_file_array_arg_insert_1.csv', currentDatabase() || '_file_array_arg_insert_2.csv'], 'CSV', 'x UInt64')
 SELECT 1; -- { serverError DATABASE_ACCESS_DENIED }

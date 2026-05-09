@@ -1,3 +1,10 @@
+-- Tags: no-parallel
+-- ^ User-defined SQL functions are stored at the server level (not per
+-- database), so concurrent runs of this test would collide on the
+-- `CREATE FUNCTION` global namespace and fail with `FUNCTION_ALREADY_EXISTS`.
+-- All other UDF tests under `0_stateless/` use the same tag for this reason
+-- (e.g. `01856_create_function`, `02098`-`02103`, `02125`).
+
 -- Regression test for STID 4337-3161:
 -- "Logical error: Incorrect ASTSelectWithUnionQuery (modes: 1, selects: 3)"
 -- raised from `SelectIntersectExceptQueryMatcher::visit` when registering a

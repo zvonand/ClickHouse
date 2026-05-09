@@ -69,7 +69,8 @@ StorageFile::FileSource parseFileSourceFromStringArray(const Array & sources, co
     if (has_different_formats)
         result.format_from_filenames = {};
 
-    result.with_globs = result.paths.size() > 1;
+    /// Array sources are supported only for reading, even if the array contains a single path.
+    result.with_globs = true;
     if (!result.paths.empty())
         result.path_for_partitioned_write = result.paths.front();
 

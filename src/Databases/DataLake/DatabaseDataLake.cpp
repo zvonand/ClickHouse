@@ -950,7 +950,7 @@ void registerDatabaseDataLake(DatabaseFactory & factory)
 
         DatabaseDataLakeSettings database_settings;
         if (database_engine_define->settings)
-            database_settings.loadFromQuery(*database_engine_define, isLoadingFromExistingMetadata(args.mode));
+            database_settings.loadFromQuery(*database_engine_define, args.create_query.attach);
 
         const auto & auth_header_str = database_settings[DatabaseDataLakeSetting::auth_header].value;
         if (!auth_header_str.empty())

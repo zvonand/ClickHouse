@@ -77,6 +77,8 @@ FROM
 SELECT *
 FROM file([currentDatabase() || '_file_array_arg_different_format.csv', currentDatabase() || '_file_array_arg_different_format.tsv'], auto, 'x UInt64, y UInt64'); -- { serverError INCORRECT_DATA, CANNOT_READ_ALL_DATA, NUMBER_OF_COLUMNS_DOESNT_MATCH }
 
+SELECT * FROM file([concat(toString(rand()), '.csv')], 'CSV', 'x UInt64'); -- { serverError BAD_ARGUMENTS }
+
 SELECT * FROM file([], 'CSV', 'x UInt64'); -- { serverError BAD_ARGUMENTS }
 
 SELECT * FROM file([1, 2], 'CSV', 'x UInt64'); -- { serverError BAD_ARGUMENTS }

@@ -85,7 +85,7 @@ void TableFunctionFile::parseFirstArguments(const ASTPtr & arg, const ContextPtr
     if (!literal)
         throw Exception(
             ErrorCodes::BAD_ARGUMENTS,
-            "The first argument of table function '{}' must be a literal path, array of paths, or file descriptor",
+            "The first argument of table function '{}' must be a path, an array of paths, or a file descriptor",
             getName());
 
     auto type = literal->value.getType();

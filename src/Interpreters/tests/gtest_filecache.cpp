@@ -1585,7 +1585,7 @@ TEST_F(FileCacheTest, SLRUFreeSpaceKeepingProtectedOnly)
                                  /* write_cache_per_user_directory */false);
 
     const auto key = DB::FileCacheKey::fromPath("104307_protected_only_key");
-    const auto origin = FileCache::getCommonOrigin();
+    const auto & origin = FileCache::getCommonOrigin();
     auto key_metadata = std::make_shared<KeyMetadata>(key, origin, &cache_metadata);
 
     CacheStateGuard state_guard;

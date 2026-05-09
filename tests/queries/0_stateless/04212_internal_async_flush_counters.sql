@@ -26,13 +26,19 @@ WHERE event IN (
     'FailedInternalInsertQuery'
 );
 
--- Submit several async inserts with a tight busy timeout, then drop the table so the
--- queued data has nowhere to land. The async flush thread will report
--- `UNKNOWN_TABLE` via `logExceptionBeforeStart(..., internal=true)`.
+-- Use a very long busy timeout so the async insert queue does NOT auto-flush our
+-- entries before we drop the table. The explicit `SYSTEM FLUSH ASYNC INSERT QUEUE`
+-- below is what triggers the failure deterministically. Disable adaptive timeout so
+-- the queue cannot decide to drain early.
 SET async_insert = 1;
 SET wait_for_async_insert = 0;
-SET async_insert_busy_timeout_min_ms = 100;
-SET async_insert_busy_timeout_max_ms = 100;
+SET async_insert_use_adaptive_busy_timeout = 0;
+SET async_insert_busy_timeout_min_ms = 600000;
+SET async_insert_busy_timeout_max_ms = 600000;
+
+-- Make DROP synchronous so the table is fully gone before we force the flush. This
+-- avoids any race between the Atomic-database drop visibility and the queue draining.
+SET database_atomic_wait_for_drop_and_detach_synchronously = 1;
 
 INSERT INTO t_failed_internal_async_flush VALUES (1);
 INSERT INTO t_failed_internal_async_flush VALUES (2);
@@ -41,6 +47,8 @@ INSERT INTO t_failed_internal_async_flush VALUES (3);
 DROP TABLE t_failed_internal_async_flush;
 
 -- Force the queue to drain so the failure is observed before we read the counters.
+-- `SYSTEM FLUSH ASYNC INSERT QUEUE` schedules processing for every queued entry and
+-- waits for completion via `pool.wait()` regardless of the busy timeout above.
 SYSTEM FLUSH ASYNC INSERT QUEUE;
 
 -- Each counter should have been bumped at least once by our async flush failure.

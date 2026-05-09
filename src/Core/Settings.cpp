@@ -4431,6 +4431,16 @@ Possible values:
    - 0 — Optimization disabled.
    - 1 — Optimization enabled.
 )", 0) \
+    DECLARE(Bool, optimize_trivial_group_by_limit_query, true, R"(
+Enables or disables the optimization of a trivial query `SELECT agg() FROM table GROUP BY key LIMIT n` by setting `max_rows_to_group_by = n` with `group_by_overflow_mode = 'any'`. The aggregation stops once `n` distinct keys are produced.
+
+Has no effect when `max_rows_to_group_by` is non-zero in the user's settings.
+
+Possible values:
+
+   - 0 — Optimization disabled.
+   - 1 — Optimization enabled.
+)", 0) \
     DECLARE(Bool, optimize_count_from_files, true, R"(
 Enables or disables the optimization of counting number of rows from files in different input formats. It applies to table functions/engines `file`/`s3`/`url`/`hdfs`/`azureBlobStorage`.
 

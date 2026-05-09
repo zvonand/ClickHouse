@@ -24,8 +24,8 @@ settings parallel_distributed_insert_select=2, max_distributed_depth=1;
 select * from dst_02224;
 
 truncate table dst_02224;
-insert into function remote('127.{1,2}', currentDatabase(), dst_02224, key)
-select * from remote('127.{1,2}', currentDatabase(), src_02224, key)
+insert into function remote('127.{1,2}', currentDatabase(), dst_02224, identity(key))
+select * from remote('127.{1,2}', currentDatabase(), src_02224, identity(key))
 settings parallel_distributed_insert_select=2, max_distributed_depth=1;
 select * from dst_02224;
 -- { echoOff }

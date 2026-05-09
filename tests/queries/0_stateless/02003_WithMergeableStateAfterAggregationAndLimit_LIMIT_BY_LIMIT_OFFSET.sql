@@ -12,7 +12,7 @@ FROM remote('127.{1,2}', view(
     SELECT number%20 number
     FROM numbers(40)
     WHERE (number % 2) = (shardNum() - 1)
-), number)
+), identity(number))
 GROUP BY number
 ORDER BY number ASC
 LIMIT 1 BY number
@@ -26,7 +26,7 @@ FROM remote('127.{1,2}', view(
     SELECT number%20 number
     FROM numbers(40)
     WHERE (number % 2) = (shardNum() - 1)
-), number)
+), identity(number))
 GROUP BY number
 ORDER BY number ASC
 LIMIT 1 BY number

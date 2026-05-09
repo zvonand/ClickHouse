@@ -24,7 +24,7 @@ SYSTEM DISABLE FAILPOINT merge_tree_load_statistics_throw;
 SELECT count() FROM t WHERE a > 2000000
 SETTINGS use_statistics_for_part_pruning = 1;
 
-SYSTEM FLUSH LOGS;
+SYSTEM FLUSH LOGS query_log;
 
 -- Key assertion: SelectedParts for query 2 should be 0
 SELECT ProfileEvents['SelectedParts']

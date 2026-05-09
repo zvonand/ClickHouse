@@ -69,7 +69,9 @@ def recover_git_state() -> None:
     which would otherwise poison every later PR processed in the same run.
     """
     try:
-        git_dir = git_runner("git rev-parse --git-dir")
+        # `--absolute-git-dir` -- avoid a relative `.git` resolved against
+        # Python's cwd (which is `tests/ci/`, not the repo root).
+        git_dir = git_runner("git rev-parse --absolute-git-dir")
     except CalledProcessError:
         return
     lock = Path(git_dir) / "index.lock"
@@ -85,9 +87,15 @@ def recover_git_state() -> None:
     # Best-effort cleanup of any in-progress merge / cherry-pick and the
     # working tree. None of these are required to succeed -- they only run
     # to bring the tree back to a usable state for the next PR.
-    Shell.run(f"{GIT_PREFIX} merge --abort", verbose=True)
-    Shell.run(f"{GIT_PREFIX} cherry-pick --abort", verbose=True)
-    Shell.run(f"{GIT_PREFIX} reset --hard HEAD", verbose=True)
+    for cmd in (
+        f"{GIT_PREFIX} merge --abort",
+        f"{GIT_PREFIX} cherry-pick --abort",
+        f"{GIT_PREFIX} reset --hard HEAD",
+    ):
+        try:
+            git_runner(cmd)
+        except CalledProcessError as e:
+            logging.info("recover_git_state: %s -> %s (ignored)", cmd, e)
 
 
 class ReleaseBranch:

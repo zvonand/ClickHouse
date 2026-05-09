@@ -5,7 +5,7 @@ DROP ROW POLICY IF EXISTS pol1 ON tab;
 
 SET enable_analyzer = 1;
 
-CREATE TABLE tab (x UInt32, y String, version UInt32) ENGINE = ReplacingMergeTree(version) ORDER BY x;
+CREATE TABLE tab (x UInt32, y String, version UInt32) ENGINE = ReplacingMergeTree(version) ORDER BY x SETTINGS index_granularity = 8192;
 
 INSERT INTO tab VALUES (1, 'aaa', 1), (2, 'bbb', 1);
 INSERT INTO tab VALUES (1, 'ccc', 2);

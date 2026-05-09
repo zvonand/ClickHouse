@@ -74,7 +74,7 @@ FROM
     ORDER BY x
 );
 
-SELECT count()
+SELECT sum(x + y)
 FROM file([currentDatabase() || '_file_array_arg_different_format.csv', currentDatabase() || '_file_array_arg_different_format.tsv'], auto, 'x UInt64, y UInt64'); -- { serverError INCORRECT_DATA, CANNOT_READ_ALL_DATA, NUMBER_OF_COLUMNS_DOESNT_MATCH, CANNOT_PARSE_INPUT_ASSERTION_FAILED }
 
 SELECT * FROM file([concat(toString(rand()), '.csv')], 'CSV', 'x UInt64'); -- { serverError BAD_ARGUMENTS }

@@ -60,6 +60,36 @@ class BackportException(Exception):
     pass
 
 
+def recover_git_state() -> None:
+    """
+    Best-effort recovery of the working tree after a git command crashed
+    (e.g. an internal assertion in `merge-ort`) and left `.git/index.lock`
+    behind. In that state subsequent commands -- including
+    `git merge --abort` -- fail with "Unable to create '.git/index.lock'",
+    which would otherwise poison every later PR processed in the same run.
+    """
+    try:
+        git_dir = git_runner("git rev-parse --git-dir")
+    except CalledProcessError:
+        return
+    lock = Path(git_dir) / "index.lock"
+    if lock.exists():
+        logging.warning(
+            "Removing stale %s left by a crashed git process", lock
+        )
+        try:
+            lock.unlink()
+        except OSError as e:
+            logging.error("Failed to remove %s: %s", lock, e)
+            return
+    # Best-effort cleanup of any in-progress merge / cherry-pick and the
+    # working tree. None of these are required to succeed -- they only run
+    # to bring the tree back to a usable state for the next PR.
+    Shell.run(f"{GIT_PREFIX} merge --abort", verbose=True)
+    Shell.run(f"{GIT_PREFIX} cherry-pick --abort", verbose=True)
+    Shell.run(f"{GIT_PREFIX} reset --hard HEAD", verbose=True)
+
+
 class ReleaseBranch:
     CHERRYPICK_DESCRIPTION = f"""## Do not merge this PR manually
 
@@ -289,7 +319,15 @@ close it.
                 self._backported = True
                 return
         except CalledProcessError:
-            git_runner(f"{GIT_PREFIX} merge --abort")
+            try:
+                git_runner(f"{GIT_PREFIX} merge --abort")
+            except CalledProcessError:
+                # `merge --abort` itself can fail when the merge process
+                # crashed (e.g. merge-ort assertion) and left
+                # `.git/index.lock` behind -- the lock blocks any further
+                # git command in this checkout. Clean it up so subsequent
+                # PRs in the same run are not poisoned.
+                recover_git_state()
 
         # Push, create the cherry-pick PR and label it
         for branch in [self.cherrypick_branch, self.backport_branch]:
@@ -672,6 +710,10 @@ class BackportPRs:
                     "During processing the PR #%s error occurred: %s", pr.number, e
                 )
                 self.error = e
+                # Whatever went wrong, make sure the next PR starts from a
+                # clean working tree -- a leftover `.git/index.lock` from a
+                # crashed git process would otherwise break every later PR.
+                recover_git_state()
 
     def _rolling_out_branches(self) -> List[str]:
         """

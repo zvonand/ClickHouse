@@ -130,6 +130,13 @@ std::vector<std::pair<size_t, Field>> DataFileStatistics::getUpperBounds() const
     return result;
 }
 
+void IcebergStatisticsTransform::transform(Chunk & chunk)
+{
+    stats->update(chunk);
+    cur_chunk = chunk.clone();
+}
+
+
 #endif
 
 }

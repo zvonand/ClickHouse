@@ -45,6 +45,38 @@ private:
     size_t max_partitions_count;
 };
 
+class IcebergPartitionCalculator final : public ISimpleTransform
+{
+public:
+    explicit IcebergPartitionCalculator(
+        Poco::JSON::Array::Ptr partition_specification,
+        Poco::JSON::Array::Ptr schema,
+        ContextPtr context,
+        SharedHeader sample_block_)
+        : ISimpleTransform(sample_block_, sample_block_, true)
+        , partitioner(partition_specification, schema, context, sample_block_)
+        {}
+
+    String getName() const override { return "IcebergStatisticsTransform"; }Collapse commentComment on line R64
+
+    void transform(Chunk & chunk) override;
+    Row getPartitionValue() const
+    {
+        return partition_value;
+    }
+
+    const ChunkPartitioner & getChunkPartitioner() const
+    {
+        return partitioner;
+    }
+
+protected:
+    ChunkPartitioner partitioner;
+    Row partition_value;
+};
+
+using IcebergPartitionCalculatorPtr = std::shared_ptr<IcebergPartitionCalculator>;
+
 #endif
 
 }

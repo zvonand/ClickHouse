@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Processors/ISimpleTransform.h>
 #include "config.h"
 
 #include <Poco/JSON/Array.h>
@@ -8,6 +9,10 @@
 
 #include <Core/Range.h>
 #include <Processors/Chunk.h>
+
+#include <IO/Progress.h>
+#include <Processors/Transforms/ExceptionKeepingTransform.h>
+#include <Access/EnabledQuota.h>
 
 namespace DB
 {
@@ -36,6 +41,34 @@ private:
     std::vector<Int64> null_counts;
     std::vector<Range> ranges;
 };
+
+using DataFileStatisticsPtr = std::shared_ptr<DataFileStatistics>;
+
+class IcebergStatisticsTransform final : public ISimpleTransform
+{
+public:
+    explicit IcebergStatisticsTransform(
+        SharedHeader header,
+        DataFileStatisticsPtr stats_)
+        : ISimpleTransform(header, header, true)
+        , stats(stats_)
+        {}
+
+    String getName() const override { return "IcebergStatisticsTransform"; }
+
+    void transform(Chunk & chunk) override;
+    DataFileStatisticsPtr getResultStats() const
+    {
+        return stats;
+    }
+
+protected:
+    DataFileStatisticsPtr stats;
+
+    Chunk cur_chunk;
+};
+
+using IcebergStatisticsTransformPtr = std::shared_ptr<IcebergStatisticsTransform>;
 
 #endif
 

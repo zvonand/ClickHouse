@@ -22,7 +22,9 @@ void OptimizeTrivialGroupByLimitPass::run(QueryTreeNodePtr & query_tree_node, Co
         return;
 
     auto * query = query_tree_node->as<QueryNode>();
-    if (query && query->hasGroupBy() && query->hasLimit() && !query->hasHaving() && !query->hasOrderBy() && !query->hasWindow())
+    if (query && query->hasGroupBy() && query->hasLimit() && !query->hasHaving() && !query->hasOrderBy() && !query->hasWindow()
+        && !query->isGroupByWithTotals() && !query->isGroupByWithRollup() && !query->isGroupByWithCube()
+        && !query->isGroupByWithGroupingSets())
     {
         auto & mutable_context = query->getMutableContext();
         if (settings[Setting::max_rows_to_group_by] == 0)

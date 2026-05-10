@@ -113,8 +113,16 @@ if [ -n "$LOCALIZE_FLAGS" ]; then
     # that cause llvm-objcopy to fail.  In that case, fall back to extracting
     # individual members, processing only valid ELF objects, and repacking.
     if ! $OBJCOPY $LOCALIZE_FLAGS "$LIB_PATH" 2>/dev/null; then
-        # Anchor to the end of the path so a directory containing `objcopy` is not rewritten.
-        AR="${OBJCOPY/%objcopy/ar}"
+        # Substitute only inside the basename so a directory containing `objcopy`
+        # is not rewritten and a versioned name like `llvm-objcopy-21` still maps
+        # to `llvm-ar-21`.
+        OBJCOPY_NAME="${OBJCOPY##*/}"
+        AR_NAME="${OBJCOPY_NAME/objcopy/ar}"
+        if [ "$OBJCOPY_NAME" = "$OBJCOPY" ]; then
+            AR="$AR_NAME"
+        else
+            AR="${OBJCOPY%/*}/$AR_NAME"
+        fi
         WORK_DIR=$(mktemp -d)
 
         (cd "$WORK_DIR" && "$AR" x "$LIB_PATH")

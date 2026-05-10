@@ -177,7 +177,7 @@ void SerializationInfoTuple::writeJSONFields(WriteBuffer & out, const String * n
             writeChar(',', out);
         first = false;
 
-        elem->writeJSON(out);
+        elem->writeJSON(out, nullptr);
     }
 
     writeChar(']', out);

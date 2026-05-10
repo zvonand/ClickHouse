@@ -70,7 +70,7 @@ public:
     virtual void serialializeKindStackBinary(WriteBuffer & out) const;
     virtual void deserializeFromKindsBinary(ReadBuffer & in);
 
-    virtual void writeJSON(WriteBuffer & out, const String * name = nullptr) const;
+    virtual void writeJSON(WriteBuffer & out, const String * name) const;
     virtual void toJSON(Poco::JSON::Object & object) const;
     virtual void fromJSON(const Poco::JSON::Object & object);
 

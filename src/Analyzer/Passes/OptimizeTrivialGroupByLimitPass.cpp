@@ -1,5 +1,6 @@
 #include <Analyzer/Passes/OptimizeTrivialGroupByLimitPass.h>
 
+#include <Analyzer/AggregationUtils.h>
 #include <Analyzer/ConstantNode.h>
 #include <Analyzer/QueryNode.h>
 #include <Core/Settings.h>
@@ -24,7 +25,8 @@ void OptimizeTrivialGroupByLimitPass::run(QueryTreeNodePtr & query_tree_node, Co
     auto * query = query_tree_node->as<QueryNode>();
     if (query && query->hasGroupBy() && query->hasLimit() && !query->hasHaving() && !query->hasOrderBy() && !query->hasWindow()
         && !query->isGroupByWithTotals() && !query->isGroupByWithRollup() && !query->isGroupByWithCube()
-        && !query->isGroupByWithGroupingSets())
+        && !query->isGroupByWithGroupingSets()
+        && !hasAggregateFunctionNodes(query->getProjectionNode()))
     {
         auto & mutable_context = query->getMutableContext();
         if (settings[Setting::max_rows_to_group_by] == 0)

@@ -12,10 +12,10 @@ print '-- array_length()';
 print array_length(dynamic(['John', 'Denver', 'Bob', 'Marley'])) == 4;
 print array_length(dynamic([1, 2, 3])) == 3;
 print '-- array_sum()';
--- FIXME: arraySum does not support Array(Dynamic) type — fails with
--- ILLEGAL_TYPE_OF_ARGUMENT in clickhouse-server (passes in clickhouse-local)
--- print array_sum(dynamic([2, 5, 3])) == 10;
--- print array_sum(dynamic([2.5, 5.5, 3])) == 11;
+-- `arraySum` does not support `Array(Dynamic)` type — fails with
+-- `ILLEGAL_TYPE_OF_ARGUMENT` in `clickhouse-server` (passes in `clickhouse-local`).
+print array_sum(dynamic([2, 5, 3])) == 10; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sum(dynamic([2.5, 5.5, 3])) == 11; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 print '-- array_index_of()';
 print array_index_of(dynamic(['John', 'Denver', 'Bob', 'Marley']), 'Marley');
 print array_index_of(dynamic([1, 2, 3]), 2);
@@ -78,33 +78,35 @@ print array_split(dynamic([1,2,3,4,5]), 2);
 -- print array_split(dynamic([1,2,3,4,5]), dynamic([1,3]));
 -- print array_split(dynamic([1,2,3,4,5]), dynamic([-1,-2]));
 print '-- array_sort_asc()';
--- FIXME: Nested type Dynamic cannot be inside Nullable type — kql_array_sort_asc fails with Array(Dynamic)
--- print array_sort_asc(dynamic([null, 'd', 'a', 'c', 'c']));
--- print array_sort_asc(dynamic([4, 1, 3, 2]));
--- print array_sort_asc(dynamic(['b', 'a', 'c']), dynamic(['q', 'p', 'r']))[0];
--- print array_sort_asc(dynamic(['q', 'p', 'r']), dynamic(['clickhouse','hello', 'world']));
--- print array_sort_asc( dynamic(['d', null, 'a', 'c', 'c']) , false);
--- print array_sort_asc( dynamic(['d', null, 'a', 'c', 'c']) , 1 > 2);
--- print array_sort_asc( dynamic([null, null, null]) , false);
--- print array_sort_asc(dynamic([2, 1, null,3, null]), dynamic([20, 10, 40, 30, 50]), 1 < 2)[0];
--- print array_sort_asc(dynamic(['1','3','4','5','2']),dynamic(["a","b","c","d","e"]), dynamic(["a","b","c","d","e"]), dynamic(["a","b","c","d","e"]))[3];
--- print array_sort_asc(split("John,Paul,George,Ringo", ","));
--- print array_sort_asc(dynamic([null,"blue","yellow","green",null]));
--- print array_sort_asc(dynamic([null,"blue","yellow","green",null]), false);
+-- Nested type `Dynamic` cannot be inside `Nullable` type — `kql_array_sort_asc` fails with `Array(Dynamic)`
+-- on `clickhouse-server` (passes in `clickhouse-local`).
+print array_sort_asc(dynamic([null, 'd', 'a', 'c', 'c'])); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_asc(dynamic([4, 1, 3, 2])); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_asc(dynamic(['b', 'a', 'c']), dynamic(['q', 'p', 'r']))[0]; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_asc(dynamic(['q', 'p', 'r']), dynamic(['clickhouse','hello', 'world'])); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_asc( dynamic(['d', null, 'a', 'c', 'c']) , false); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_asc( dynamic(['d', null, 'a', 'c', 'c']) , 1 > 2); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_asc( dynamic([null, null, null]) , false); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_asc(dynamic([2, 1, null,3, null]), dynamic([20, 10, 40, 30, 50]), 1 < 2)[0]; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_asc(dynamic(['1','3','4','5','2']),dynamic(["a","b","c","d","e"]), dynamic(["a","b","c","d","e"]), dynamic(["a","b","c","d","e"]))[3]; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_asc(split("John,Paul,George,Ringo", ","));
+print array_sort_asc(dynamic([null,"blue","yellow","green",null])); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_asc(dynamic([null,"blue","yellow","green",null]), false); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 print '-- array_sort_desc()';
--- FIXME: Nested type Dynamic cannot be inside Nullable type — kql_array_sort_desc fails with Array(Dynamic)
--- print array_sort_desc(dynamic([null, 'd', 'a', 'c', 'c']));
--- print array_sort_desc(dynamic([4, 1, 3, 2]));
--- print array_sort_desc(dynamic(['b', 'a', 'c']), dynamic(['q', 'p', 'r']))[0];
--- print array_sort_desc(dynamic(['q', 'p', 'r']), dynamic(['clickhouse','hello', 'world']));
--- print array_sort_desc( dynamic(['d', null, 'a', 'c', 'c']) , false);
--- print array_sort_desc( dynamic(['d', null, 'a', 'c', 'c']) , 1 > 2);
--- print array_sort_desc( dynamic([null, null, null]) , false);
--- print array_sort_desc(dynamic([2, 1, null,3, null]), dynamic([20, 10, 40, 30, 50]), 1 < 2)[0];
--- print array_sort_desc(dynamic(['1','3','4','5','2']),dynamic(["a","b","c","d","e"]), dynamic(["a","b","c","d","e"]), dynamic(["a","b","c","d","e"]))[3];
--- print array_sort_desc(split("John,Paul,George,Ringo", ","));
--- print array_sort_desc(dynamic([null,"blue","yellow","green",null]));
--- print array_sort_desc(dynamic([null,"blue","yellow","green",null]), false);
+-- Nested type `Dynamic` cannot be inside `Nullable` type — `kql_array_sort_desc` fails with `Array(Dynamic)`
+-- on `clickhouse-server` (passes in `clickhouse-local`).
+print array_sort_desc(dynamic([null, 'd', 'a', 'c', 'c'])); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_desc(dynamic([4, 1, 3, 2])); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_desc(dynamic(['b', 'a', 'c']), dynamic(['q', 'p', 'r']))[0]; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_desc(dynamic(['q', 'p', 'r']), dynamic(['clickhouse','hello', 'world'])); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_desc( dynamic(['d', null, 'a', 'c', 'c']) , false); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_desc( dynamic(['d', null, 'a', 'c', 'c']) , 1 > 2); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_desc( dynamic([null, null, null]) , false); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_desc(dynamic([2, 1, null,3, null]), dynamic([20, 10, 40, 30, 50]), 1 < 2)[0]; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_desc(dynamic(['1','3','4','5','2']),dynamic(["a","b","c","d","e"]), dynamic(["a","b","c","d","e"]), dynamic(["a","b","c","d","e"]))[3]; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_desc(split("John,Paul,George,Ringo", ","));
+print array_sort_desc(dynamic([null,"blue","yellow","green",null])); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+print array_sort_desc(dynamic([null,"blue","yellow","green",null]), false); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 print '-- jaccard_index()';
 print jaccard_index(dynamic([1, 1, 2, 2, 3, 3]), dynamic([1, 2, 3, 4, 4, 4]));
 print jaccard_index(dynamic([1, 2, 3]), dynamic([]));

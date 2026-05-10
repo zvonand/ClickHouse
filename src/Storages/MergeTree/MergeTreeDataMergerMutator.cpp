@@ -126,6 +126,33 @@ PartsRanges splitByMergePredicate(PartsRanges && ranges, const MergePredicatePtr
     return checkRanges(std::move(mergeable_ranges));
 }
 
+std::unordered_map<String, PartsRanges> combineByPartitions(PartsRanges && ranges)
+{
+    std::unordered_map<String, PartsRanges> ranges_by_partitions;
+
+    for (auto && range : ranges)
+    {
+        chassert(!range.empty());
+        ranges_by_partitions[range.front().info.getPartitionId()].push_back(std::move(range));
+    }
+
+    return ranges_by_partitions;
+}
+
+CollectedPartsRanges collectAllPossibleRanges(
+    const PartsCollectorPtr & parts_collector,
+    const StorageMetadataPtr & metadata_snapshot,
+    const StoragePolicyPtr & storage_policy,
+    const time_t & current_time,
+    const std::optional<PartitionIdsHint> & partitions_hint,
+    LogSeriesLimiter & series_log)
+{
+    ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::MergerMutatorsGetPartsForMergeElapsedMicroseconds);
+    return parts_collector->grabAllPossibleRanges(metadata_snapshot, storage_policy, current_time, partitions_hint, series_log);
+}
+
+}
+
 std::expected<void, PreformattedMessage> canMergeAllParts(const PartsRange & range, const MergePredicatePtr & merge_predicate)
 {
     for (size_t i = 1; i < range.size(); ++i)
@@ -140,17 +167,25 @@ std::expected<void, PreformattedMessage> canMergeAllParts(const PartsRange & ran
     return {};
 }
 
-std::unordered_map<String, PartsRanges> combineByPartitions(PartsRanges && ranges)
+PartitionsStatistics calculateStatisticsForPartitions(const PartsRanges & ranges)
 {
-    std::unordered_map<String, PartsRanges> ranges_by_partitions;
+    PartitionsStatistics stats;
 
-    for (auto && range : ranges)
+    for (const auto & range : ranges)
     {
         chassert(!range.empty());
-        ranges_by_partitions[range.front().info.getPartitionId()].push_back(std::move(range));
+        PartitionStatistics & partition_stats = stats[range.front().info.getPartitionId()];
+
+        partition_stats.part_count += range.size();
+
+        for (const auto & part : range)
+        {
+            partition_stats.min_age = std::min(partition_stats.min_age, part.age);
+            partition_stats.total_size += part.size;
+        }
     }
 
-    return ranges_by_partitions;
+    return stats;
 }
 
 String getBestPartitionToOptimizeEntire(
@@ -214,7 +249,7 @@ String getBestPartitionToOptimizeEntire(
     return best_partition_it->first;
 }
 
-CollectedPartsRanges grabAllPossibleRanges(
+PartsRanges grabAllPossibleRanges(
     const PartsCollectorPtr & parts_collector,
     const StorageMetadataPtr & metadata_snapshot,
     const StoragePolicyPtr & storage_policy,
@@ -223,18 +258,7 @@ CollectedPartsRanges grabAllPossibleRanges(
     LogSeriesLimiter & series_log)
 {
     ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::MergerMutatorsGetPartsForMergeElapsedMicroseconds);
-    return parts_collector->grabAllPossibleRanges(metadata_snapshot, storage_policy, current_time, partitions_hint, series_log);
-}
-
-std::expected<PartsRange, PreformattedMessage> grabAllPartsInsidePartition(
-    const PartsCollectorPtr & parts_collector,
-    const StorageMetadataPtr & metadata_snapshot,
-    const StoragePolicyPtr & storage_policy,
-    const time_t & current_time,
-    const std::string & partition_id)
-{
-    ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::MergerMutatorsGetPartsForMergeElapsedMicroseconds);
-    return parts_collector->grabAllPartsInsidePartition(metadata_snapshot, storage_policy, current_time, partition_id);
+    return parts_collector->grabAllPossibleRanges(metadata_snapshot, storage_policy, current_time, partitions_hint, series_log).ranges;
 }
 
 MergeSelectorChoices chooseMergesFrom(
@@ -274,6 +298,15 @@ MergeSelectorChoices chooseMergesFrom(
     return choices;
 }
 
+std::expected<PartsRange, PreformattedMessage> grabAllPartsInsidePartition(
+    const PartsCollectorPtr & parts_collector,
+    const StorageMetadataPtr & metadata_snapshot,
+    const StoragePolicyPtr & storage_policy,
+    const time_t & current_time,
+    const std::string & partition_id)
+{
+    ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::MergerMutatorsGetPartsForMergeElapsedMicroseconds);
+    return parts_collector->grabAllPartsInsidePartition(metadata_snapshot, storage_policy, current_time, partition_id);
 }
 
 std::string convertMergeConstraintsToString(const MergeConstraints & constraints)
@@ -345,7 +378,7 @@ PartitionIdsHint MergeTreeDataMergerMutator::getPartitionsThatMayBeMerged(
     const bool can_use_ttl_merges = !ttl_merges_blocker.isCancelled();
     LogSeriesLimiter series_log(log, 1, /*interval_s_=*/60 * 30);
 
-    auto collected = grabAllPossibleRanges(parts_collector, metadata_snapshot, storage_policy, current_time, std::nullopt, series_log);
+    auto collected = collectAllPossibleRanges(parts_collector, metadata_snapshot, storage_policy, current_time, std::nullopt, series_log);
     if (collected.ranges.empty())
         return {};
 
@@ -403,7 +436,7 @@ std::expected<MergeSelectorChoices, SelectMergeFailure> MergeTreeDataMergerMutat
     const bool can_use_ttl_merges = !ttl_merges_blocker.isCancelled();
     LogSeriesLimiter series_log(log, 1, /*interval_s_=*/60 * 30);
 
-    auto collected = grabAllPossibleRanges(parts_collector, metadata_snapshot, storage_policy, current_time, partitions_hint, series_log);
+    auto collected = collectAllPossibleRanges(parts_collector, metadata_snapshot, storage_policy, current_time, partitions_hint, series_log);
     if (collected.ranges.empty())
     {
         return std::unexpected(SelectMergeFailure{

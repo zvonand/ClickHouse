@@ -3,7 +3,6 @@
 #include <Storages/MergeTree/Compaction/MergeSelectorApplier.h>
 #include <Storages/MergeTree/Compaction/MergeSelectors/TTLMergeSelector.h>
 #include <Storages/MergeTree/Compaction/PartProperties.h>
-#include <Storages/MergeTree/Compaction/PartitionStatistics.h>
 #include <Storages/MergeTree/Compaction/PartsCollectors/IPartsCollector.h>
 #include <Storages/MergeTree/Compaction/MergePredicates/IMergePredicate.h>
 
@@ -140,14 +139,13 @@ private:
 std::string convertMergeConstraintsToString(const MergeConstraints & constraints);
 
 std::expected<void, PreformattedMessage> canMergeAllParts(const PartsRange & range, const MergePredicatePtr & merge_predicate);
-
-PartitionsStatistics calculateStatisticsForPartitions(const PartsRanges & ranges);
+std::unordered_map<String, PartitionStatistics> calculateStatisticsForPartitions(const PartsRanges & ranges);
 
 String getBestPartitionToOptimizeEntire(
     size_t max_total_size_to_merge,
     const ContextPtr & context,
     const MergeTreeSettingsPtr & settings,
-    const PartitionsStatistics & stats,
+    const std::unordered_map<String, PartitionStatistics> & stats,
     const LoggerPtr & log);
 
 PartsRanges grabAllPossibleRanges(

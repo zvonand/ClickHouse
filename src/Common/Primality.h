@@ -7,6 +7,7 @@
 #include <base/defines.h>
 #include <base/extended_types.h>
 #include <base/types.h>
+#include <Common/Concepts.h>
 #include <Common/HashTable/Hash.h>
 
 #include <boost/multiprecision/cpp_int.hpp>
@@ -18,6 +19,12 @@
 
 namespace DB::Primality
 {
+
+template <typename T>
+concept is_native_uint = is_any_of<T, UInt8, UInt16, UInt32, UInt64>;
+
+template <typename T>
+concept is_big_uint = is_any_of<T, UInt128, UInt256>;
 
 namespace detail
 {
@@ -171,11 +178,9 @@ inline bool isDivisibleByFirst15Primes(const T & num)
 
 }
 
-template <typename T>
+template <is_native_uint T>
 inline UInt8 isPrime(T num)
 {
-    static_assert(std::is_same_v<T, UInt8> || std::is_same_v<T, UInt16> || std::is_same_v<T, UInt32> || std::is_same_v<T, UInt64>);
-
     if constexpr (std::is_same_v<T, UInt8> || std::is_same_v<T, UInt16>) /// guaranteed to be in [0..65535], so covered by the bitmap
         return detail::testBit(detail::prime_bitmap, num);
     else
@@ -197,11 +202,16 @@ inline UInt8 isPrime(T num)
     }
 }
 
-template <typename T>
-UInt8 isProbablePrimeWide(const T & num, unsigned rounds)
+/// `rounds` is unused for narrow types - the result is exact regardless.
+template <is_native_uint T>
+inline UInt8 isProbablePrime(T num, unsigned /*rounds*/)
 {
-    static_assert(std::is_same_v<T, UInt128> || std::is_same_v<T, UInt256>);
+    return isPrime(num);
+}
 
+template <is_big_uint T>
+UInt8 isProbablePrime(const T & num, unsigned rounds)
+{
     /// If the wide value fits in UInt64, use the deterministic UInt64 path.
     if (num <= std::numeric_limits<UInt64>::max())
         return isPrime<UInt64>(static_cast<UInt64>(num.items[0]));

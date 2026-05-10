@@ -74,14 +74,8 @@ public:
                 [&](const auto & col)
                 {
                     const auto & data = col.getData();
-                    using ValueType = std::decay_t<decltype(data[0])>;
                     for (size_t i = 0; i < input_rows_count; ++i)
-                    {
-                        if constexpr (std::is_same_v<ValueType, UInt128> || std::is_same_v<ValueType, UInt256>)
-                            result_data[i] = Primality::isProbablePrimeWide(data[i], rounds);
-                        else
-                            result_data[i] = Primality::isPrime(data[i]);
-                    }
+                        result_data[i] = Primality::isProbablePrime(data[i], rounds);
                     return true;
                 }))
             throw Exception(

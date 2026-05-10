@@ -7,6 +7,12 @@
 set -exu
 set -o pipefail
 
+# Capture the job start timestamp so the result file (written by the EXIT trap)
+# can report a real `start_time` and `duration`. Praktika's CIDB inserter
+# rejects `null` `start_time` (it calls `datetime.utcfromtimestamp(start_time)`
+# which fails with `'NoneType' object cannot be interpreted as an integer`).
+JOB_START_TIME=$(date +%s)
+
 TMP_PATH=$(readlink -f ./ci/tmp/)
 OUTPUT_PATH="$TMP_PATH/sqlancer_output"
 PID_FILE="$TMP_PATH/clickhouse-server.pid"
@@ -85,11 +91,13 @@ write_result() {
     local escaped_overall_info
     escaped_overall_info="$(json_escape "$info")"
 
+    local job_duration=$(( $(date +%s) - JOB_START_TIME ))
+
     printf '{\n' > $RESULT_FILE
     printf '  "name": "SQLancer",\n' >> $RESULT_FILE
     printf '  "status": "%s",\n' "$status" >> $RESULT_FILE
-    printf '  "start_time": null,\n' >> $RESULT_FILE
-    printf '  "duration": null,\n' >> $RESULT_FILE
+    printf '  "start_time": %d,\n' "$JOB_START_TIME" >> $RESULT_FILE
+    printf '  "duration": %d,\n' "$job_duration" >> $RESULT_FILE
     printf '  "results": [%s\n  ],\n' "$results_json" >> $RESULT_FILE
     printf '  "files": [%s],\n' "$files_json" >> $RESULT_FILE
     printf '  "info": "%s"\n' "$escaped_overall_info" >> $RESULT_FILE

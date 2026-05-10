@@ -36,4 +36,4 @@ select * from dist_01757 where dummy in (0, 1) settings optimize_skip_unused_sha
 drop table dist_01757;
 
 -- fuzzed
-SELECT * FROM remote('127.0.0.{1,2}', numbers(40), identity(number)) ORDER BY 'a' LIMIT 1 BY number SETTINGS optimize_skip_unused_shards = 1, force_optimize_skip_unused_shards=0 format Null
+SELECT * FROM remote('127.0.0.{1,2}', numbers(40), number) ORDER BY 'a' LIMIT 1 BY number SETTINGS optimize_skip_unused_shards = 1, force_optimize_skip_unused_shards=0 format Null

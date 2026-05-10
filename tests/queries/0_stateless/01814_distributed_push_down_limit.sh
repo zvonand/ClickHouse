@@ -91,7 +91,7 @@ function test_distributed_push_down_limit_0()
 function test_distributed_push_down_limit_1()
 {
     local args=(
-        "remote('127.{2,3}', $CLICKHOUSE_DATABASE, data_01814, identity(key))"
+        "remote('127.{2,3}', $CLICKHOUSE_DATABASE, data_01814, key)"
         0 # offset
         --distributed_push_down_limit 1
         --optimize_skip_unused_shards 1
@@ -108,7 +108,7 @@ function test_distributed_push_down_limit_1_offset()
         --optimize_distributed_group_by_sharding_key 1
     )
 
-    $CLICKHOUSE_CLIENT "${settings_and_opts[@]}" -q "select * from remote('127.{2,3}', $CLICKHOUSE_DATABASE, data_01814, identity(key)) group by key order by key desc limit 5, 10"
+    $CLICKHOUSE_CLIENT "${settings_and_opts[@]}" -q "select * from remote('127.{2,3}', $CLICKHOUSE_DATABASE, data_01814, key) group by key order by key desc limit 5, 10"
 }
 
 function main()

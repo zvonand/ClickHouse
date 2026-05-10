@@ -1,16 +1,17 @@
 -- Tags: shard
 
--- Regression test for the following query:
+-- regression test for the following query:
 --
---     select * from remote('127.1', system.one, identity(dummy))
+--     select * from remote('127.1', system.one, dummy)
 --
--- that produced the following error before:
+-- that produce the following error before:
 --
 --     Unknown column: dummy, there are only columns .
 --
--- A bare identifier at the same position (e.g. `dummy`) is interpreted as
--- the user name, so we wrap the column reference in a function to make the
--- intent unambiguous.
+-- NOTE: that wrapping column into any function works before.
+select * from remote('127.1', system.one, dummy) format Null;
 select * from remote('127.1', system.one, identity(dummy)) format Null;
 select * from remote('127.1', view(select * from system.one), identity(dummy)) format Null;
 select * from remote('127.{1,2}', view(select * from system.one), identity(dummy)) format Null;
+select * from remote('127.1', view(select * from system.one), dummy) format Null;
+select * from remote('127.{1,2}', view(select * from system.one), dummy) format Null;

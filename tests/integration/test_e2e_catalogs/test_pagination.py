@@ -176,3 +176,61 @@ def test_mock_actually_paginates(started_cluster):
         "Mock should paginate ns_alpha tables on the first call"
     )
     assert len(first_tables["identifiers"]) == TABLES_PAGE_SIZE
+
+
+def test_broken_pagination_loop_is_detected(started_cluster):
+    """Monotonic-progress guard prevents a runaway pagination loop.
+
+    The mock exposes a parallel ``/broken_loop/v1`` URL whose listing
+    endpoints always echo back the same ``next-page-token`` regardless of
+    the incoming ``pageToken``. Without a guard, ClickHouse's pagination
+    loop would request the same page forever and hang ``SHOW TABLES`` /
+    ``system.tables`` until the pytest 900-second timeout fires.
+
+    With the guard in place (``RestCatalog::getNamespaces`` and
+    ``RestCatalog::getTables`` both throw ``DATALAKE_DATABASE_ERROR``
+    when ``next-page-token`` repeats), the listing aborts on the second
+    HTTP request. ``DatabaseDataLake::getTablesIterator`` already swallows
+    catalog errors so ``SHOW TABLES`` doesn't fail outright; instead it
+    completes promptly with an empty result and the guard message ends up
+    in the server log. We assert both: the query returns no rows in well
+    under the pytest timeout, AND the guard's error string appears in the
+    ClickHouse server log.
+    """
+    import time
+
+    node = started_cluster.instances["node1"]
+    db = "iceberg_rest_pagination_broken_db"
+    node.query(f"DROP DATABASE IF EXISTS {db}")
+    base_url = f"http://{MOCK_HOST}:{MOCK_PORT}/broken_loop/v1"
+    node.query(
+        f"""CREATE DATABASE {db}
+                ENGINE = DataLakeCatalog('{base_url}')
+                SETTINGS catalog_type = 'rest', warehouse = 'mock'""",
+        settings={"allow_database_iceberg": 1},
+    )
+
+    # 1) ``SHOW TABLES`` must complete promptly. If the guard is missing,
+    #    this hangs in ``RestCatalog::getNamespaces`` / ``getTables`` until
+    #    the pytest-timeout kills the test.
+    start = time.monotonic()
+    rows = node.query(f"SHOW TABLES FROM {db} FORMAT TSV").strip().splitlines()
+    elapsed = time.monotonic() - start
+    assert elapsed < 30.0, (
+        f"SHOW TABLES on a broken-loop catalog took {elapsed:.1f}s — "
+        f"the monotonic-progress guard is not aborting the loop."
+    )
+
+    # 2) Listing was aborted before any table was collected.
+    assert rows == [], (
+        f"Expected no tables from the broken-loop catalog (the guard "
+        f"aborts the iteration before any table is reached). Got: {rows}"
+    )
+
+    # 3) The guard's error message ends up in the server log via
+    #    ``tryLogCurrentException`` in ``DatabaseDataLake``.
+    assert node.contains_in_log("twice in a row"), (
+        "Expected the monotonic-progress guard's error message "
+        "(`...returned the same next-page-token... twice in a row...`) "
+        "to be logged when the broken-loop catalog is queried."
+    )

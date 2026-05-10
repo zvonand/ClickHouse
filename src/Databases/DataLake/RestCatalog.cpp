@@ -709,6 +709,16 @@ RestCatalog::Namespaces RestCatalog::getNamespaces(const std::string & base_name
 
             if (next_page_token.empty())
                 break;
+            /// Monotonic-progress guard: if the server returns the same `next-page-token` we
+            /// just submitted as `pageToken`, iterating further would loop forever. Treat
+            /// it as a malformed catalog response rather than hanging `SHOW TABLES` /
+            /// `system.tables`.
+            if (next_page_token == page_token)
+                throw DB::Exception(
+                    DB::ErrorCodes::DATALAKE_DATABASE_ERROR,
+                    "Iceberg REST catalog returned the same `next-page-token` (`{}`) twice in a row "
+                    "while listing namespaces under `{}` — refusing to loop.",
+                    next_page_token, base_namespace);
             page_token = std::move(next_page_token);
         }
         return all_namespaces;
@@ -831,6 +841,16 @@ DB::Names RestCatalog::getTables(const std::string & base_namespace, size_t limi
             break;
         if (next_page_token.empty())
             break;
+        /// Monotonic-progress guard: if the server returns the same `next-page-token` we
+        /// just submitted as `pageToken`, iterating further would loop forever. Treat
+        /// it as a malformed catalog response rather than hanging `SHOW TABLES` /
+        /// `system.tables`.
+        if (next_page_token == page_token)
+            throw DB::Exception(
+                DB::ErrorCodes::DATALAKE_DATABASE_ERROR,
+                "Iceberg REST catalog returned the same `next-page-token` (`{}`) twice in a row "
+                "while listing tables in namespace `{}` — refusing to loop.",
+                next_page_token, base_namespace);
         page_token = std::move(next_page_token);
     }
 

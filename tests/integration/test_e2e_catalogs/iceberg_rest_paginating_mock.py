@@ -24,6 +24,12 @@ Pagination uses the Iceberg REST OpenAPI v1 contract:
 When the response omits ``next-page-token``, iteration ends. We use the
 decimal offset as the token, which is convenient for tests.
 
+A second ``/broken_loop/v1/...`` family of routes always returns the *same*
+``next-page-token`` regardless of the incoming ``pageToken``, simulating a
+buggy or malicious catalog server that never advances. This is used by
+``test_broken_pagination_loop_is_detected`` to pin the monotonic-progress
+guard in ``RestCatalog::getNamespaces`` / ``RestCatalog::getTables``.
+
 Usage:
 
     python3 iceberg_rest_paginating_mock.py <port>
@@ -118,6 +124,42 @@ def list_tables(namespace):
     if next_token is not None:
         body["next-page-token"] = next_token
     return body
+
+
+# ---------------------------------------------------------------------------
+# Broken-loop endpoints: always return the *same* ``next-page-token``
+# regardless of the incoming ``pageToken``. A non-guarded client would loop
+# forever; ClickHouse's monotonic-progress guard must catch this and raise.
+# ---------------------------------------------------------------------------
+
+BROKEN_TOKEN = "stuck"
+
+
+@route("/broken_loop/v1/config")
+def broken_config():
+    response.content_type = "application/json"
+    return {"defaults": {}, "overrides": {}}
+
+
+@route("/broken_loop/v1/namespaces")
+def broken_list_namespaces():
+    response.content_type = "application/json"
+    if request.query.get("parent"):
+        return {"namespaces": []}
+    # One item per page, ``next-page-token`` never advances.
+    return {
+        "namespaces": [["ns_alpha"]],
+        "next-page-token": BROKEN_TOKEN,
+    }
+
+
+@route("/broken_loop/v1/namespaces/<namespace>/tables")
+def broken_list_tables(namespace):
+    response.content_type = "application/json"
+    return {
+        "identifiers": [{"namespace": [namespace], "name": "t1"}],
+        "next-page-token": BROKEN_TOKEN,
+    }
 
 
 if __name__ == "__main__":

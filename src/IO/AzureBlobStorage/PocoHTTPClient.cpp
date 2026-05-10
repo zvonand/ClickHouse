@@ -428,7 +428,6 @@ std::unique_ptr<Azure::Core::Http::RawResponse> PocoAzureHTTPClient::makeRequest
             if (redirects_left > 0)
             {
                 auto location = poco_response.get("location");
-                remote_host_filter.checkURL(Poco::URI(location));
 
                 if (!location.empty())
                 {

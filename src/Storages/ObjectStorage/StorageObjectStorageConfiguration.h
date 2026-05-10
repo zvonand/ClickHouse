@@ -287,9 +287,6 @@ public:
 
     virtual void drop(ContextPtr) {}
 
-    /// Background processing hooks. By default a configuration does not run any
-    /// background work; subclasses opt in by overriding `isBackgroundExecutable`
-    /// and providing a `scheduleDataProcessingJob` implementation.
     virtual bool isBackgroundExecutable() const
     {
         return false;

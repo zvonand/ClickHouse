@@ -179,9 +179,6 @@ public:
         return configuration;
     }
 
-    /// IBackgroundOperation. Default `StorageObjectStorageConfiguration` reports
-    /// `isBackgroundExecutable() == false`, so `startup` / `shutdown` are no-ops
-    /// for engines that don't opt into background processing.
     bool scheduleDataProcessingJob(BackgroundJobsAssignee & assignee) override;
 
     bool scheduleDataMovingJob(BackgroundJobsAssignee & /*assignee*/) override

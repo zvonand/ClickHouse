@@ -139,16 +139,10 @@ private:
 
 std::string convertMergeConstraintsToString(const MergeConstraints & constraints);
 
-/// Verify that `merge_predicate` allows merging every adjacent pair of parts in `range`.
-/// Returns the first failure reason, or success if all adjacent pairs can merge.
 std::expected<void, PreformattedMessage> canMergeAllParts(const PartsRange & range, const MergePredicatePtr & merge_predicate);
 
-/// Aggregate per-partition statistics (part count, total size, min age) from already-collected ranges.
-/// Useful when ranges come from a source other than `IPartsCollector` (which fills stats itself).
 PartitionsStatistics calculateStatisticsForPartitions(const PartsRanges & ranges);
 
-/// If "force-merge entire partition" is enabled and there are enough free pool slots,
-/// pick the oldest partition that exceeds the configured age threshold. Returns its id, or {}.
 String getBestPartitionToOptimizeEntire(
     size_t max_total_size_to_merge,
     const ContextPtr & context,
@@ -156,8 +150,6 @@ String getBestPartitionToOptimizeEntire(
     const PartitionsStatistics & stats,
     const LoggerPtr & log);
 
-/// Wrapper around `IPartsCollector::grabAllPossibleRanges` that returns just the ranges
-/// (no statistics) and instruments the call with `MergerMutatorsGetPartsForMergeElapsedMicroseconds`.
 PartsRanges grabAllPossibleRanges(
     const PartsCollectorPtr & parts_collector,
     const StorageMetadataPtr & metadata_snapshot,
@@ -166,8 +158,6 @@ PartsRanges grabAllPossibleRanges(
     const std::optional<PartitionIdsHint> & partitions_hint,
     LogSeriesLimiter & series_log);
 
-/// Apply the merge selector to a set of ranges, log the chosen merges, and return them.
-/// Pure wrapper that adds profiling and logging around `MergeSelectorApplier::chooseMergesFrom`.
 MergeSelectorChoices chooseMergesFrom(
     const MergeSelectorApplier & selector,
     const IMergePredicate & predicate,
@@ -181,7 +171,6 @@ MergeSelectorChoices chooseMergesFrom(
     time_t current_time,
     const LoggerPtr & log);
 
-/// Wrapper around `IPartsCollector::grabAllPartsInsidePartition` with profiling instrumentation.
 std::expected<PartsRange, PreformattedMessage> grabAllPartsInsidePartition(
     const PartsCollectorPtr & parts_collector,
     const StorageMetadataPtr & metadata_snapshot,

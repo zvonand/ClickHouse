@@ -52,10 +52,7 @@ inline int openpty(int *pm, int *ps, char *name, const struct termios *tio, cons
 	}
 
 	if (name)
-	{
-		strncpy(name, slave_name_buf, 19);
-		name[19] = '\0';
-	}
+		strcpy(name, slave_name_buf);
 
 	if (tio) tcsetattr(s, TCSANOW, tio);
 	if (ws) ioctl(s, TIOCSWINSZ, ws);

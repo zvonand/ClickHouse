@@ -20,6 +20,7 @@ public:
     explicit DataFileStatistics(Poco::JSON::Array::Ptr schema_);
 
     void update(const Chunk & chunk);
+    void merge(const DataFileStatistics & other);
 
     std::vector<std::pair<size_t, size_t>> getColumnSizes() const;
     std::vector<std::pair<size_t, size_t>> getNullCounts() const;

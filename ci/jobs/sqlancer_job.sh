@@ -178,7 +178,21 @@ done
 ls "$OUTPUT_PATH"
 
 if [ -f "$PID_FILE" ]; then
-    kill "$(cat "$PID_FILE")" || true
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    # Validate the PID before sending a signal: it must be numeric, the process
+    # must still exist, and it must actually be a `clickhouse` process. This
+    # protects against signalling an unrelated process if the PID file is
+    # stale or the PID has been reused.
+    if [[ "$pid" =~ ^[0-9]+$ ]] && [ -r "/proc/$pid/comm" ]; then
+        proc_comm="$(cat "/proc/$pid/comm" 2>/dev/null || true)"
+        if [ "$proc_comm" = "clickhouse" ]; then
+            kill "$pid" || true
+        else
+            echo "Warning: PID $pid in $PID_FILE is not a clickhouse process (comm=[$proc_comm]); not signalling"
+        fi
+    else
+        echo "Warning: PID file $PID_FILE contains invalid or stale PID [$pid]; not signalling"
+    fi
 else
     echo "Warning: PID file not found at $PID_FILE"
 fi

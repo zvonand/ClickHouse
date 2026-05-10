@@ -561,7 +561,7 @@ public:
                 std::vector<size_t> inserted_cells;
                 auto callback = [this, &inserted_cells](const VolnitskyTraits::Ngram ngram, const int offset)
                 {
-                    return this->putNGramBase(ngram, offset, this->last, &inserted_cells);
+                    return this->putNGramBase(ngram, offset, this->last, inserted_cells);
                 };
 
                 const size_t needle_ngrams = cur_needle_size - sizeof(VolnitskyTraits::Ngram) + 1;
@@ -735,15 +735,19 @@ public:
         }
     }
 
-    void putNGramBase(const VolnitskyTraits::Ngram ngram, const int offset, const size_t num, std::vector<size_t> * inserted_cells = nullptr)
+    /** Inserts an n-gram into the open-addressing hash table for the needle identified by `num`.
+      * `inserted_cells` accumulates the indices of all cells written by this insertion so that
+      * the caller can roll the inserts back if some later n-gram for the same needle fails to
+      * convert (in which case the partial state would otherwise leak into searches for other needles).
+      */
+    void putNGramBase(const VolnitskyTraits::Ngram ngram, const int offset, const size_t num, std::vector<size_t> & inserted_cells)
     {
         size_t cell_num = ngram % VolnitskyTraits::hash_size;
 
         while (hash[cell_num].off)
             cell_num = (cell_num + 1) % VolnitskyTraits::hash_size;
 
-        if (inserted_cells)
-            inserted_cells->push_back(cell_num);
+        inserted_cells.push_back(cell_num);
 
         hash[cell_num] = {static_cast<VolnitskyTraits::Id>(num), static_cast<VolnitskyTraits::Offset>(offset)};
     }

@@ -7,7 +7,6 @@
 #include <Common/HashTable/HashTableKeyHolder.h>
 #include <Interpreters/KeysNullMap.h>
 #include <Common/HashTable/Prefetching.h>
-#include <Interpreters/AggregationCommon.h>
 
 namespace DB
 {

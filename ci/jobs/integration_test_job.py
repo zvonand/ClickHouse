@@ -758,7 +758,7 @@ tar -czf ./ci/tmp/logs.tar.gz \
             workers,
             args.options,
             info,
-            no_strict=is_targeted_check,  # targeted check might want to run test that was removed on a merge-commit
+            no_strict=is_targeted_check or is_flaky_check,  # targeted check might want to run test that was removed on a merge-commit; flaky check might pick up a changed test filtered out by SKIP_LIST in the private fork
         )
     )
 

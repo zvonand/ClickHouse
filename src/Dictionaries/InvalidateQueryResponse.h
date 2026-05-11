@@ -15,7 +15,6 @@ public:
     InvalidateQueryResponse & operator=(const InvalidateQueryResponse &) = delete;
 
     bool updateAndCheckModified(const std::string & new_response);
-    std::string get() const;
 
 private:
     mutable std::mutex mutex;

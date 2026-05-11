@@ -1,0 +1,8 @@
+SELECT substring(x, (x -> x))
+SELECT f(a, (x -> y))
+SELECT f(a, b, (c -> d))
+[2,3,4]
+[11,22,33]
+[2,3]
+SELECT f(a, ((x, y) -> z))
+SELECT (x -> (x + 1))

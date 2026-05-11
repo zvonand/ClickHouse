@@ -751,17 +751,25 @@ public:
         if (operands.size() != 1 || !operators.empty() || !mergeElement())
             return false;
 
-        /// 2. If there is already tuple do nothing
+        /// `mergeElement` just pushed the current operand to `elements`. Only that
+        /// last element belongs to the lambda's left-hand side — any earlier
+        /// elements come from previous comma-separated function arguments and
+        /// must be preserved as-is. Otherwise we would silently change the
+        /// function's arity (e.g. parse `f(x, y -> z)` as `f((x, y) -> z)`),
+        /// breaking the AST format/re-parse round-trip invariant.
+
+        /// 2. If the lhs is already a tuple, use it as-is.
         if (tryGetFunctionName(elements.back()) == "tuple")
         {
             pushOperand(std::move(elements.back()));
             elements.pop_back();
         }
-        /// 3. Put all elements in a single tuple
+        /// 3. Otherwise wrap just the lhs (the last element) in a one-element tuple.
         else
         {
-            auto function = makeASTOperator("tuple", std::move(elements));
-            elements.clear();
+            ASTPtr lhs = std::move(elements.back());
+            elements.pop_back();
+            auto function = makeASTOperator("tuple", ASTs{std::move(lhs)});
             pushOperand(function);
         }
 

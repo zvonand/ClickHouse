@@ -180,15 +180,17 @@ ls "$OUTPUT_PATH"
 if [ -f "$PID_FILE" ]; then
     pid="$(cat "$PID_FILE" 2>/dev/null || true)"
     # Validate the PID before sending a signal: it must be numeric, the process
-    # must still exist, and it must actually be a `clickhouse` process. This
-    # protects against signalling an unrelated process if the PID file is
-    # stale or the PID has been reused.
-    if [[ "$pid" =~ ^[0-9]+$ ]] && [ -r "/proc/$pid/comm" ]; then
-        proc_comm="$(cat "/proc/$pid/comm" 2>/dev/null || true)"
-        if [ "$proc_comm" = "clickhouse" ]; then
+    # must still exist, and `/proc/<pid>/exe` must resolve to the exact
+    # `clickhouse` binary that this job started. This protects against
+    # signalling an unrelated process on a shared runner if the PID file is
+    # stale or the PID has been reused by another `clickhouse` process.
+    expected_exe="$(readlink -f "$CLICKHOUSE_BIN" 2>/dev/null || true)"
+    if [[ "$pid" =~ ^[0-9]+$ ]] && [ -e "/proc/$pid/exe" ]; then
+        proc_exe="$(readlink -f "/proc/$pid/exe" 2>/dev/null || true)"
+        if [ -n "$expected_exe" ] && [ "$proc_exe" = "$expected_exe" ]; then
             kill "$pid" || true
         else
-            echo "Warning: PID $pid in $PID_FILE is not a clickhouse process (comm=[$proc_comm]); not signalling"
+            echo "Warning: PID $pid in $PID_FILE does not belong to this job's clickhouse binary (exe=[$proc_exe], expected=[$expected_exe]); not signalling"
         fi
     else
         echo "Warning: PID file $PID_FILE contains invalid or stale PID [$pid]; not signalling"

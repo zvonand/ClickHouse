@@ -114,9 +114,12 @@ Int64 nullableCompareAt(const IColumn & left_column, const IColumn & right_colum
     return left_notnull->compareAt(lhs_pos, rhs_pos, *right_notnull, MergeJoin::nulls_direction);
 }
 
+// Compare first key column with (left NULL != right NULL) logic & track
 template <bool has_left_nulls, bool has_right_nulls>
 Int64 nullableCompareTrackAt(const IColumn & left_column, const IColumn & right_column, size_t lhs_pos, size_t rhs_pos)
 {
+    static_assert(MergeJoin::nulls_direction == -1); // NULLs are first
+
     const IColumn * left_notnull = &left_column;
     const IColumn * right_notnull = &right_column;
     const ColumnNullable * left_nullable = nullptr;
@@ -127,11 +130,15 @@ Int64 nullableCompareTrackAt(const IColumn & left_column, const IColumn & right_
         left_nullable = checkAndGetColumn<ColumnNullable>(&left_column);
         if (left_nullable)
         {
-            size_t null_pos = lhs_pos;
-            while (null_pos < left_nullable->size() && left_nullable->isNullAt(null_pos))
-                ++null_pos;
-            if (null_pos > lhs_pos)
-                return -static_cast<Int64>(null_pos - lhs_pos);
+            // Source block is sorted with 'NULLs are first' order. Check NULLs only for lhs_pos == 0.
+            if (!lhs_pos)
+            {
+                size_t null_pos = 0;
+                while (null_pos < left_nullable->size() && left_nullable->isNullAt(null_pos))
+                    ++null_pos;
+                if (null_pos)
+                    return -static_cast<Int64>(null_pos);
+            }
 
             left_notnull = &left_nullable->getNestedColumn();
         }
@@ -142,35 +149,23 @@ Int64 nullableCompareTrackAt(const IColumn & left_column, const IColumn & right_
         right_nullable = checkAndGetColumn<ColumnNullable>(&right_column);
         if (right_nullable)
         {
-            size_t null_pos = rhs_pos;
-            while (null_pos < right_nullable->size() && right_nullable->isNullAt(null_pos))
-                ++null_pos;
-            if (null_pos > rhs_pos)
-                return null_pos - rhs_pos;
+            // Source block is sorted with 'NULLs are first' order. Check NULLs only for rhs_pos == 0.
+            // It also known we've already skipped all left NULLs.
+            if (!rhs_pos)
+            {
+                size_t null_pos = 0;
+                while (null_pos < right_nullable->size() && right_nullable->isNullAt(null_pos))
+                    ++null_pos;
+                if (null_pos)
+                    return null_pos;
+            }
 
             right_notnull = &right_nullable->getNestedColumn();
         }
     }
 
-    Int64 res = left_notnull->compareTrackAt(lhs_pos, rhs_pos, *right_notnull, MergeJoin::nulls_direction);
-
-    if (left_nullable && res < 0)
-    {
-        size_t pos = lhs_pos + 1;
-        size_t end = lhs_pos - res;
-        for (; pos < end; ++pos)
-            if (left_nullable->isNullAt(pos))
-                return -static_cast<Int64>(pos - lhs_pos);
-    }
-    if (right_nullable && res > 0)
-    {
-        size_t pos = rhs_pos + 1;
-        size_t end = rhs_pos + res;
-        for (; pos < end; ++pos)
-            if (right_nullable->isNullAt(pos))
-                return pos - rhs_pos;
-    }
-    return res;
+    // No need to check if column values have NULLs inside the track. It's the first key column.
+    return left_notnull->compareTrackAt(lhs_pos, rhs_pos, *right_notnull, MergeJoin::nulls_direction);
 }
 
 /// Get first and last row from sorted block
@@ -304,6 +299,10 @@ public:
 
         if (impl.sort_columns_size == 0)
             throw Exception(ErrorCodes::LOGICAL_ERROR, "MergeJoinCursor requires sort_columns size greater then 0");
+
+        /// We use zero position as 'is first range in block' detector
+        if (position())
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "MergeJoinCursor is expected to have initial position 0");
     }
 
     size_t position() const { return impl.getPos(); }

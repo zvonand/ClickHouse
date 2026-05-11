@@ -148,6 +148,19 @@ String toString(TargetArch arch);
  */
 #   define DUMMY_FUNCTION_DEFINITION [[maybe_unused]] void _dummy_function_definition();
 
+/// Goes hand in hand with the `-march=x86-64-v2` override on `FunctionsHashingMisc.cpp` (and other v2-overridden TUs):
+/// when the file is compiled at v2, the `Default` namespace inherits v2 codegen. The `x86_64_v3` per-function attribute
+/// here is what gives those template instantiations an AVX2/YMM specialization the runtime dispatcher can pick. Removing
+/// it caused +12-18% regressions on `general_purpose_hashes_on_UUID #30/#32` (hiveHash/javaHash on UUID columns).
+#define DECLARE_X86_64_V3_SPECIFIC_CODE(...) \
+BEGIN_X86_64_V3_SPECIFIC_CODE \
+namespace TargetSpecific::x86_64_v3 { \
+    DUMMY_FUNCTION_DEFINITION \
+    using namespace DB::TargetSpecific::x86_64_v3; \
+    __VA_ARGS__ \
+} \
+END_TARGET_SPECIFIC_CODE
+
 #define DECLARE_X86_64_V4_SPECIFIC_CODE(...) \
 BEGIN_X86_64_V4_SPECIFIC_CODE \
 namespace TargetSpecific::x86_64_v4 { \
@@ -181,6 +194,7 @@ END_TARGET_SPECIFIC_CODE
 
 /* Multitarget code is disabled, just delete target-specific code.
  */
+#define DECLARE_X86_64_V3_SPECIFIC_CODE(...)
 #define DECLARE_X86_64_V4_SPECIFIC_CODE(...)
 #define DECLARE_X86_ICELAKE_SPECIFIC_CODE(...)
 #define DECLARE_X86_SAPPHIRE_SPECIFIC_CODE(...)
@@ -194,13 +208,18 @@ namespace TargetSpecific::Default { \
 }
 
 
-/// Only enable extra v4 by default
+/// Only enable extra v3 and v4 by default
 #define DECLARE_MULTITARGET_CODE(...) \
 DECLARE_DEFAULT_CODE         (__VA_ARGS__) \
+DECLARE_X86_64_V3_SPECIFIC_CODE    (__VA_ARGS__) \
 DECLARE_X86_64_V4_SPECIFIC_CODE   (__VA_ARGS__) \
 
 DECLARE_DEFAULT_CODE(
     constexpr auto BuildArch = TargetArch::Default;
+)
+
+DECLARE_X86_64_V3_SPECIFIC_CODE(
+    constexpr auto BuildArch = TargetArch::x86_64_v3;
 )
 
 DECLARE_X86_64_V4_SPECIFIC_CODE(

@@ -34,7 +34,7 @@ PtyClientDescriptorSet::PtyClientDescriptorSet(const String & term_name_, int wi
     winsize.ws_ypixel = static_cast<uint16_t>(height_pixels);
     int pty_master_raw = -1;
     int pty_slave_raw = -1;
-    if (openpty(&pty_master_raw, &pty_slave_raw, nullptr, nullptr, &winsize) != 0)
+    if (openPty(pty_master_raw, pty_slave_raw, winsize) != 0)
     {
         throw ErrnoException(ErrorCodes::SYSTEM_ERROR, "Cannot open pty");
     }

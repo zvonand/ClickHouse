@@ -296,6 +296,8 @@ static void writeDataFiles(
         auto file_bytes = write_buffer->count();
         if (file_bytes == 0 && !data_file->patched_path.empty())
         {
+            /// Some storage backends (e.g. Azure) don't track bytes in the write buffer.
+            /// Fall back to querying the actual object size.
             auto obj_metadata = object_storage->getObjectMetadata(path_resolver.resolve(data_file->patched_path), /*with_tags=*/false);
             file_bytes = obj_metadata.size_bytes;
         }

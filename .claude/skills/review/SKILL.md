@@ -56,21 +56,22 @@ INPUTS YOU WILL RECEIVE
 - CI status and logs (if available)
 - Tests added/modified and their results
 
-If any of these are missing, note it under "Missing context" and proceed as far as possible.
+If any of these are missing, note it under "Missing context / blind spots" and proceed as far as possible.
 
-REVIEW PRIORITIES (IN ORDER)
-1) **Central premise / feature contract**
-   - First derive what the PR claims to make true from the title, description, changed tests, docs, and code shape. Review whether the implementation actually satisfies that contract in all relevant paths.
+REQUIRED REVIEW GATES
+Do not choose a final verdict until these gates are addressed. If a gate cannot be fully validated, say so under "Missing context / blind spots" and explain what evidence would close it.
+
+1) **Contract**
+   - Derive the behavior the PR promises from title, description, metadata, tests, docs, and code shape. Treat PR metadata as part of the promise: `Performance Improvement` claims a measured benefit even if the description is vague; `Bug Fix` claims the bug is fixed.
    - State findings as violated invariants or broken contracts, not as checklist matches. Example shape: "`X` promises cached results are partitioned by all semantics-affecting inputs, but `Y` is omitted, so two different plans can share one cache entry."
-2) **Correctness, safety, and data integrity**
-   - Look for bugs that can produce wrong results, data loss/corruption, undefined behavior, leaks, races, deadlocks, privilege issues, or unsafe failure modes, even if they are not mentioned by the PR description.
-3) **Boundary behavior and system integration**
-   - Check caller contracts, edge inputs, concurrent/background operations, upgrade/downgrade paths, retries, partial failures, and interactions with neighboring subsystems. Many real bugs live outside the changed lines.
-4) **Evidence and tests**
-   - Ask whether the PR has focused evidence for its material claims and changed invariants. Missing proof for important behavior is a review concern even when the code looks plausible.
-   - PR metadata is part of the claim: `Performance Improvement` requires measurement evidence, and `Bug Fix` requires regression coverage or a clear explanation why focused coverage is impractical. Correctness tests alone do not prove measured benefits.
+2) **Impacted surface**
+   - Follow the changed invariant through unchanged callers/callees, sibling implementations, settings/options, supported and unsupported modes, APIs, lifecycle transitions, and cross-component boundaries. New settings/flags/options must be implemented consistently where supported and rejected where unsupported.
+3) **Failure and divergence**
+   - Check state transitions and failure paths: startup, steady state, shutdown, retries, cancellation, exceptions, partial progress, async work already in flight, and anything that can still mutate after a guard or role check fires. For stateful/distributed changes, also check what can diverge over time across metadata, paths, identities, leases, caches, and ownership.
+4) **Evidence**
+   - Map each material claim to proof before approving. Performance claims need before/after measurements, a benchmark, or a focused performance test; correctness claims need regression coverage or a clear reason coverage is impractical. Missing proof for important behavior is a review concern even when the code looks plausible.
 5) **Lower-priority quality**
-   - Then review performance, build time, CI/script reliability, PR metadata, documentation, diagnostics, and maintainability. These matter, but should not crowd out feature-contract and correctness review.
+   - After the contract and high-impact risks are covered, review performance regressions, build time, CI/script reliability, PR metadata, documentation, diagnostics, and maintainability.
 
 SIGNAL AND UNCERTAINTY
 - Avoid reporting minor issues when unsure: style preferences, naming opinions, speculative refactors, and micro-optimizations should be omitted unless they clearly affect correctness, maintainability, or user-facing quality.
@@ -112,28 +113,17 @@ WHAT TO REVIEW VS WHAT TO IGNORE
   - Switching quote style, etc.
 - Bikeshedding on API naming when the change is already consistent with existing code.
 
-EXPLORATION PROMPTS (NON-EXHAUSTIVE)
+TRIGGERED EXPANSIONS
 
-Use these prompts to widen the search, not as a contract. A finding is valid because it violates a behavior, safety, compatibility, or operational invariant, not because it matches a listed prompt. If the PR suggests a different risk, follow that risk even if it is not listed here.
+Run these only when the trigger appears. They are small expansion passes, not a universal matrix. A finding is valid because it violates a behavior, safety, compatibility, or operational invariant, not because it matches a listed trigger.
 
-**Understand the central invariant**
-- What must be true for the PR's main claim to be correct?
-- Which inputs, settings, query shapes, storage states, versions, or background operations can invalidate that claim?
-- What would fail if the new code were removed, bypassed, called twice, called concurrently, or called with a different caller than intended?
-
-**Read beyond the changed lines**
-- Check callers, callees, symmetric implementations, old and new code paths, and state transitions that share the same invariant.
-- For core areas such as query execution, storage engines, replication, Keeper/coordination, system tables, and MergeTree internals, read enough of the modified file and neighboring subsystem to understand the invariant being changed.
-- When a PR adds a resource dimension or selector, follow all access paths to verify the selected instance is correct everywhere it matters.
-
-**After finding a serious issue**
-- Do not stop at the first blocker. Treat it as evidence that an invariant is fragile, then continue following that invariant through related entry points, lifecycle transitions, and mostly unchanged code.
-- Check whether the same broken assumption affects reads, writes, metadata, cleanup, recovery, retries, or ownership changes as applicable to the PR. Group related issues when they share a cause, but do not omit distinct user-impacting paths.
-
-**Probe boundaries and failure modes**
-- Consider lifetimes, cleanup on exceptions, partial initialization, cancellation, retries, concurrent/background work, and changed throwing behavior across `noexcept` or destructor boundaries.
-- For user-controlled paths, privileges, formats, protocols, cache keys, metadata, or on-disk state, check compatibility, versioning, isolation between semantically different cases, and upgrade/downgrade behavior.
-- For Python/shell/CI code, prioritize destructive commands, quoting, `shell=True`, privilege boundaries, and failure paths over style.
+- **After first serious invariant failure:** fan out once through the same invariant in foreground paths, background paths, DDL/mutating entrypoints, lifecycle transitions, and sibling engines/settings. Group related issues when they share a cause, but do not omit distinct user-impacting paths.
+- **New setting/flag/option:** grep consumers that share the settings class or configuration surface. Each relevant engine/mode/API must implement it, reject it, or make an explicit harmless no-op contract.
+- **Ownership, leadership, leases, locks, or failover:** inspect ownership gain, ownership loss, active in-flight work, delayed commits after waits, and anything that can still mutate after the guard changes state.
+- **Subclass adds guards:** inspect inherited mutating operations it does not override, especially `rename`, `drop`, `truncate`, `alter`, partition commands, and background callbacks.
+- **Shared storage or distributed state:** identify which state is shared and which remains local. If local state affects correctness after failover/restart, it must be synchronized, rejected, or explicitly unsupported.
+- **Tests weaker than contract:** if a test asserts weaker behavior than the PR promises, treat it as suspicious evidence rather than validation.
+- **Delegated review:** subagent or helper output can provide leads, but it does not close required gates for the highest-risk touched subsystem; keep enough local tracing to verify the invariant.
 
 **Use concrete traces for suspicious code**
 - When you find suspicious callee logic, pick a minimal boundary input and trace execution step by step with concrete values. Do not dismiss it by abstract reasoning.
@@ -208,8 +198,8 @@ Focus on problems — do not describe what was checked and found to be fine. Use
 - Evaluate `Changelog entry` quality using `clickhouse-pr-description` criteria (specific change, user impact, and migration guidance for backward-incompatible changes).
 - If any item is incorrect, provide the exact replacement text.
 
-**Missing context** (omit if none)
-- Bullet list of critical info you lacked. Prefix each item with ⚠️ (e.g., ⚠️ No CI logs available, ⚠️ No benchmarks provided).
+**Missing context / blind spots** (omit if none)
+- Bullet list of critical info or impacted surfaces you could not fully validate. Prefix each item with ⚠️ and say what would close the gap.
 - If PR motivation/reason is not clear from the title and description, add a ⚠️ item explicitly stating that motivation is unclear.
 
 **Findings** (omit if no findings)
@@ -226,7 +216,7 @@ Focus on problems — do not describe what was checked and found to be fine. Use
 
 
 **Tests** (omit if adequate)
-- Only include this section if evidence is **missing or insufficient**. Prefix each missing test/evidence item with ⚠️. Ask for the smallest focused test, benchmark, or measurement that would prove the relevant behavior, invariant, or claimed benefit.
+- Only include this section if evidence is **missing or insufficient**. Prefix each missing test/evidence item with ⚠️. Ask for the smallest focused test, benchmark, or measurement that would prove the relevant behavior, invariant, or claimed benefit. For `Performance Improvement`, missing before/after evidence belongs here even if the implementation looks reasonable.
 
 **ClickHouse-Specific Rule Notes** (omit if none)
 - Include only actual ClickHouse-specific rule concerns that are not already clear from `Findings` or `Tests`.
@@ -240,12 +230,12 @@ Focus on problems — do not describe what was checked and found to be fine. Use
 
 **Final Verdict**
 - Status: **✅ Approve** / **⚠️ Request changes** / **❌ Block**
-- If not approving, list the **minimum** required actions.
+- Approve only if there are no unresolved contract violations, no unresolved high-impact plausible risks, and no missing evidence for material claims. A `Performance Improvement` without performance evidence, or a `Bug Fix` without regression evidence or a clear exception, should be **⚠️ Request changes**. If not approving, list the **minimum** required actions.
 
 STYLE & CONDUCT
 - Be precise, evidence-based, and neutral.
 - Prefer small, surgical suggestions over broad rewrites.
-- Do not assume unstated behavior; if necessary, ask for clarification in "Missing context."
+- Do not assume unstated behavior; if necessary, ask for clarification in "Missing context / blind spots."
 - Avoid changing scope: review what's in the PR; suggest follow-ups separately.
 - Avoid uncertain minor comments. For serious plausible risks, state the uncertainty and request the needed verification or tests.
 - When performing a code review, **ignore `/.github/workflows/*` files**.

@@ -119,19 +119,13 @@ CLICKHOUSE RISK CHECKLIST
 
 When reading diffs, scan for these classes of bugs:
 
-**1) Memory & lifetime**
-- Raw pointers where ownership is unclear or inconsistent with surrounding code.
-- Missing `delete` / `free` / `unmap` / `close` on early returns or exceptions.
-- Containers or views returning references/iterators to temporary or moved-from objects.
-- Use of `std::string_view`, spans, or references to buffers whose lifetime is not guaranteed.
-- Manual `new`/`delete` instead of RAII where the surrounding code uses RAII types.
+**1) Lifetime, ownership, and resources**
+- Unclear ownership of raw pointers, file descriptors, sockets, mapped memory, or other manually managed resources.
+- Missing cleanup on early returns, exceptions, loop exits, or partially-initialized states. Prefer RAII when the surrounding code supports it.
+- Returning references, iterators, `std::string_view`, spans, or borrowed buffers whose owner can be temporary, moved-from, or shorter-lived.
+- Smart-pointer/refcount misuse: cycles, double ownership, forgotten release, or ownership transfer that is inconsistent with surrounding code.
 
-**2) Resource management**
-- Opened file descriptors or sockets not closed on all paths (including error paths).
-- Leaks in loops where allocation happens inside the loop but deallocation depends on conditions.
-- Misuse of `std::unique_ptr` / `std::shared_ptr` / intrusive refcounts: cycles, double ownership, or forgotten release.
-
-**3) Concurrency & threading**
+**2) Concurrency & threading**
 - Access to shared state without a lock or atomic: look for member variable reads/writes that happen outside the guarded region, especially on fast paths that skip locking as an optimization.
 - Lock scope too narrow (TOCTOU): a check is performed under a lock, the lock is released, and then an action is taken based on the check — the state may have changed in between.
 - Lock ordering changes that could introduce ABBA deadlocks: if two locks are now acquired in different orders on different paths, a deadlock is possible.
@@ -140,14 +134,14 @@ When reading diffs, scan for these classes of bugs:
 - Using non-thread-safe containers (e.g. `std::unordered_map`, most STL containers) from multiple threads without a lock.
 - Mutable globals or singletons modified from multiple threads.
 
-**4) Error handling & observability**
+**3) Error handling & observability**
 - Ignored return values of functions that can fail (IO, network, syscalls).
 - Exception safety on all control-flow paths: early returns, loop continues, callbacks, and branches added by the PR — not just the happy path. Check that every resource acquired before a potentially-throwing call is released on the exception path (RAII or explicit catch).
 - **Changed-throws and `noexcept` boundary checklist:** whenever a PR adds a new throw path (or broadens throws), find all call sites using `grep` (not only diff/direct callers), verify each is exception-safe, and trace the full caller chain including RAII-triggered callbacks (e.g. `scope_guard` / `BasicScopeGuard` destructor callbacks, subscription/notification handlers, C callbacks). Confirm exceptions are caught before any destructor/`noexcept` boundary or intentionally converted to a logged non-throwing path. Watch for partial try/catch coverage; unhandled exceptions crossing a `noexcept` boundary call `std::terminate`.
 - Inconsistent error codes or messages that make debugging impossible.
 - Missing logs for serious failure modes (data loss risk, query aborts, background task failures).
 
-**5) Data correctness & serialization**
+**4) Data correctness & serialization**
 - Changes to on-disk or wire formats without:
   - Explicit versioning,
   - Clear upgrade/downgrade behavior,
@@ -155,13 +149,13 @@ When reading diffs, scan for these classes of bugs:
 - Schema or metadata evolution without migration logic or feature flags.
 - Silent truncation, overflow, or lossy conversions.
 
-**6) Performance & algorithmic behavior**
+**5) Performance & algorithmic behavior**
 - New allocations or copies in tight loops.
 - Unbounded structures (maps, vectors) that can grow without limits in long-running processes.
 - Accidental O(N²) patterns on large inputs.
 - Extra syscalls, unnecessary fsyncs, sleeps, or polling in hot paths.
 
-**7) Server-side file access & path traversal**
+**6) Server-side file access & path traversal**
 - Any setting, table function argument, or SQL-accessible parameter that accepts a **file path** and causes the server to read or write that path is a potential arbitrary file access vulnerability. A user with the required privilege (e.g., `CREATE DATABASE`, `CREATE TABLE`) could read sensitive server-side files (`/etc/shadow`, config files with secrets, other users' data) or write to unexpected locations.
 - When a new file-path setting or argument is introduced, check that it is restricted by one of:
   - `user_files_path` validation (like the `file()` table function),
@@ -170,14 +164,14 @@ When reading diffs, scan for these classes of bugs:
 - Watch for file paths that surface contents in error messages on parse failure — even a "read then validate" pattern can leak file contents through exceptions.
 - This applies to all code paths that use `ReadBufferFromFile`, `WriteBufferToFile`, `std::ifstream`, or similar with user-controlled paths.
 
-**8) Compilation time & build impact**
+**7) Compilation time & build impact**
 - ClickHouse has ~10k translation units; compilation time is a key developer productivity concern.
 - Adding non-trivial code (function bodies, method implementations, template definitions) to widely-included headers instead of moving it to `.cpp` files. Large function bodies in headers force recompilation of every translation unit that includes them. Prefer keeping only declarations, forward declarations, and truly trivial inline functions in `.h` files.
 - Adding or pulling heavy transitive includes into high-fan-out headers. When a header is included by hundreds or thousands of translation units, every extra `#include` it carries multiplies across the entire build. Watch for foundational headers like `Exception.h`, `IColumn.h`, `IDataType.h`, `typeid_cast.h`, `assert_cast.h`, and `Context_fwd.h` gaining new includes. Prefer forward declarations, dedicated lightweight `_fwd.h` headers, or moving the dependency into `.cpp` files.
 - Unnecessary template instantiations: template code that unconditionally instantiates specializations for cases that are statically known to be unreachable. Use `if constexpr` to prune template variants that do not apply (e.g., instantiating a `division_by_nullable=true` variant for non-division operations). Each unnecessary instantiation multiplies compile time and binary size.
 - Large `constexpr` evaluation in headers: complex `constexpr` loops or recursive `constexpr` functions in headers that the compiler must evaluate in every translation unit. Extract them into `.cpp` files or break them into smaller units.
 
-**9) Repository bloat**
+**8) Repository bloat**
 - ClickHouse is a huge monorepo; every byte committed to git is cloned by every contributor forever and can never be fully removed without history rewriting.
 - **Binary blobs** (JARs, compiled executables, archives, images, dataset files, model weights) must **never** be committed directly. Flag any new binary file larger than ~100 KB as a blocker. Check `file` type and size for any non-text addition.
 - **Chunked / split binaries** are a red flag — they indicate someone tried to work around size limits while still committing the same blob.
@@ -186,7 +180,7 @@ When reading diffs, scan for these classes of bugs:
 - **Test data** (Parquet files, Avro files, small JSON fixtures) under ~1 MB total is usually fine, but anything larger should be generated at test time or downloaded.
 - When a PR adds new files under `tests/integration/`, `tests/queries/`, or any other directory, always scan for unexpectedly large or binary additions — contributors sometimes commit build artifacts or data files without realizing the permanent cost.
 
-**10) Beyond-the-diff exploration: callers, symmetry, and trust boundaries**
+**9) Beyond-the-diff exploration: callers, symmetry, and trust boundaries**
 
 Apply this to every PR. Always look past the changed lines far enough to understand the affected callers, invariants, and neighboring code paths. Go deeper when a PR changes behavior in one path, exposes existing code to new callers, adds support for multiple instances of a resource, or wraps existing internal code for a wider audience (library function → SQL function, CLI tool → server endpoint, internal reader → table function, background-only path → user-reachable query). The diff may look fine, but the surrounding system may rely on assumptions that no longer hold.
 
@@ -202,7 +196,7 @@ Workflow:
    **Anti-pattern to avoid:** finding a suspicious access, writing "this is technically safe because [memory layout / padding / practical likelihood]", and moving on. If you cannot prove safety via a concrete trace, report it. Pre-existing bugs that were harmless in the old calling context become exploitable under user-controlled input — that is the whole point of this checklist.
 7. **Verify test coverage.** The PR's tests must include adversarial edge cases that the original caller would never produce: empty inputs, minimal-length inputs, malformed inputs, NULLs, maximum-length inputs.
 
-**11) Shell-command safety in Python / shell scripts**
+**10) Shell-command safety in Python / shell scripts**
 - Destructive or privileged commands (`rm -rf`, `mv`, `cp -r`, `find … -delete`, `chmod`, `chown`, `dd`, `kill`, `sudo …`) with substituted arguments passed to `shell=True` (`subprocess.run`/`Popen`, `os.system`) or to in-tree wrappers that use `shell=True` under the hood (ClickHouse's `Shell.check` / `Shell.run` / `Shell.get_output`).
 - Unquoted variables in destructive commands inside `.sh` scripts.
 - Prefer `shutil.rmtree` or argv-list `subprocess.run`; if a shell wrapper is unavoidable, use `shlex.quote` and `--`.
@@ -226,9 +220,9 @@ CLICKHOUSE RULES (MANDATORY)
 - **Safe rollout**
   Ensure incremental rollout is feasible in both OSS and Cloud (feature flags, safe defaults, non-disruptive changes).
 - **Compilation time**
-  Follow checklist **8) Compilation time & build impact**. Treat violations there as ClickHouse-rule issues.
+  Follow checklist **7) Compilation time & build impact**. Treat violations there as ClickHouse-rule issues.
 - **No large / binary files in git**
-  Binary blobs (JARs, archives, compiled artifacts, datasets >1 MB, fat dependency bundles) must never be committed. They permanently bloat the repository for every clone and cannot be removed without history rewriting. Test dependencies should be downloaded at test time, built from source inside the test container, or pulled from Docker images. Follow checklist **9) Repository bloat**. Any violation is a blocker.
+  Binary blobs (JARs, archives, compiled artifacts, datasets >1 MB, fat dependency bundles) must never be committed. They permanently bloat the repository for every clone and cannot be removed without history rewriting. Test dependencies should be downloaded at test time, built from source inside the test container, or pulled from Docker images. Follow checklist **8) Repository bloat**. Any violation is a blocker.
 - **PR metadata quality**
   For PR-number reviews, verify PR template metadata against `.github/PULL_REQUEST_TEMPLATE.md`: `Changelog category` correctness, required `Changelog entry` quality, and alignment with `clickhouse-pr-description` changelog guidance (specificity, user impact, and migration details for backward-incompatible changes). **Revert PRs are exempt** from this rule — mark the row as ➖ and do not produce findings about missing template fields.
 

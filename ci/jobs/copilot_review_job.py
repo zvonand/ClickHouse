@@ -24,6 +24,7 @@ import sys
 import tempfile
 import time
 import traceback
+import urllib.parse
 
 from ci.praktika import Secret
 from ci.praktika.info import Info
@@ -44,6 +45,17 @@ def _join_prompt(*sections):
     return "\n\n".join(section.rstrip() for section in sections if section).rstrip() + "\n"
 
 
+def _repo_from_pr_url(pr_url):
+    path_parts = urllib.parse.urlparse(pr_url).path.strip("/").split("/")
+    if len(path_parts) >= 4 and path_parts[2] == "pull":
+        return f"{path_parts[0]}/{path_parts[1]}"
+    return ""
+
+
+def _pr_repository(info):
+    return _repo_from_pr_url(info.pr_url) or info.repo_name
+
+
 def _pre_review_instructions():
     return """\
 Review instructions:
@@ -53,24 +65,37 @@ Review instructions:
 """
 
 
-def _pre_review_tools(pr_number):
+def _review_target(info):
+    repo_name = _pr_repository(info)
+    return f"""\
+Review target:
+- PR URL: {info.pr_url}
+- PR repository: `{repo_name}`
+- Always derive the PR repository from the PR URL or the CI event. For ClickHouse reviews this will be either
+  `ClickHouse/ClickHouse` or `ClickHouse/ClickHouse-private`. Do not infer the review repository from
+  the local checkout remote, because local checkouts may point to a fork.
+"""
+
+
+def _pre_review_tools(pr_number, repo_name):
     return f"""\
 Tools:
 - Prefix every `gh` call with `{GH_PREFIX}`.
+- Pass the explicit PR repository to every helper or `gh` command that accepts it: `--repo {repo_name}`.
 - Post a new inline review comment by writing the body to a file and running:
-  `{GH_PREFIX} python3 ci/praktika/gh.py post-pr-line-comment --file <body.md> --commit <sha> --path <file> --line <N> [--side RIGHT|LEFT]`.
+  `{GH_PREFIX} python3 ci/praktika/gh.py post-pr-line-comment --file <body.md> --commit <sha> --path <file> --line <N> --repo {repo_name} [--side RIGHT|LEFT]`.
   This wrapper handles `-F body=@<file>` correctly so the file content is uploaded as the body.
 - Do NOT call `gh api .../pulls/.../comments` directly: past runs have posted the literal `@<file>`
   string as the body when the wrong `gh` flag was used.
 - Do NOT use `gh pr review`; that posts a single batched review, not individual line comments.
 - Fetch inline review threads with:
-  `{GH_PREFIX} python3 ci/praktika/gh.py list-pr-review-threads --pr {pr_number}`.
+  `{GH_PREFIX} python3 ci/praktika/gh.py list-pr-review-threads --pr {pr_number} --repo {repo_name}`.
   The command returns JSON; each thread carries its node `id`, `isResolved`, `path`, `line`, and
   `comments.nodes` with author, body, and `databaseId`.
 - Fetch top-level conversation with:
-  `{GH_PREFIX} gh api '/repos/{{owner}}/{{repo}}/issues/{pr_number}/comments' --paginate`.
+  `{GH_PREFIX} gh api '/repos/{repo_name}/issues/{pr_number}/comments' --paginate`.
 - Reply on an existing thread with:
-  `{GH_PREFIX} python3 ci/praktika/gh.py post-pr-line-comment --file <body.md> --reply-to <parent_databaseId>`.
+  `{GH_PREFIX} python3 ci/praktika/gh.py post-pr-line-comment --file <body.md> --reply-to <parent_databaseId> --repo {repo_name}`.
   Use the `databaseId` of the first comment on the thread as `<parent_databaseId>`, and omit
   `--commit`, `--path`, and `--line`.
 - Resolve or unresolve bot-authored review threads with:
@@ -120,9 +145,11 @@ Do NOT post the summary yourself: the job script will post it after you finish.
 
 
 def _pre_review_prompt(info):
+    repo_name = _pr_repository(info)
     return _join_prompt(
         _pre_review_instructions(),
-        _pre_review_tools(info.pr_number),
+        _review_target(info),
+        _pre_review_tools(info.pr_number, repo_name),
         _pre_review_procedure(info.pr_url),
         _pre_review_output(),
     )
@@ -158,6 +185,7 @@ Do NOT post the summary yourself: the job script will post it after you finish.
 
 def _post_review_prompt(info, ci_report_url):
     return _join_prompt(
+        _review_target(info),
         _post_review_tools(ci_report_url),
         _post_review_procedure(info.pr_url),
         _post_review_output(),

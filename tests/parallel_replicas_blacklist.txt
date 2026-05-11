@@ -225,9 +225,6 @@
 01583_const_column_in_set_index
     max rows: 2.00, current rows: 11.00
 01585_use_index_for_global_in_with_null
-    max rows: 5.00, current rows: 20.00
-00489_pk_subexpression
-00926_adaptive_index_granularity_pk
 
 01624_soft_constraints
 

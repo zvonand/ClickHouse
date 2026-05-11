@@ -1,14 +1,4 @@
-"""Reproducer for https://github.com/ClickHouse/ClickHouse/issues/94176.
-
-`system.iceberg_history` parses snapshot summary fields (`added-data-files`,
-`added-records`, `added-files-size`, `changed-partition-count`) as `Int32`,
-even though writers such as Spark/Databricks routinely produce values that
-exceed `INT32_MAX` (e.g. a multi-GB `added-files-size`). Reading such a
-table causes a `Not a valid integer` exception, the table is logged as
-broken and skipped, and `system.iceberg_history` returns no rows for it.
-"""
-
-import json
+gimport json
 import re
 
 import pytest

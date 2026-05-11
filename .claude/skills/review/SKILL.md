@@ -68,6 +68,7 @@ REVIEW PRIORITIES (IN ORDER)
    - Check caller contracts, edge inputs, concurrent/background operations, upgrade/downgrade paths, retries, partial failures, and interactions with neighboring subsystems. Many real bugs live outside the changed lines.
 4) **Evidence and tests**
    - Ask whether the PR has focused evidence for its material claims and changed invariants. Missing proof for important behavior is a review concern even when the code looks plausible.
+   - PR metadata is part of the claim: `Performance Improvement` requires measurement evidence, and `Bug Fix` requires regression coverage or a clear explanation why focused coverage is impractical. Correctness tests alone do not prove measured benefits.
 5) **Lower-priority quality**
    - Then review performance, build time, CI/script reliability, PR metadata, documentation, diagnostics, and maintainability. These matter, but should not crowd out feature-contract and correctness review.
 

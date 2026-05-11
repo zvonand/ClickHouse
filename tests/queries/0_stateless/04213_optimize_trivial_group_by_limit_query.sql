@@ -29,6 +29,20 @@ SETTINGS optimize_trivial_group_by_limit_query = 1, max_rows_to_group_by = 10000
 SELECT count() FROM (SELECT number % 256 AS k FROM numbers(1000) GROUP BY k LIMIT 18446744073709551615 OFFSET 100)
 SETTINGS optimize_trivial_group_by_limit_query = 1;
 
+-- Negative LIMIT / OFFSET: analyzer keeps these as `Int64`, so reading them as
+-- `UInt64` via `safeGet` would throw. The pass must skip the optimization
+-- instead of failing the query. ClickHouse supports negative `LIMIT`/`OFFSET`
+-- (they mean "take rows starting from the end"), so the queries below must
+-- run successfully.
+SELECT count() FROM (SELECT k FROM (SELECT number AS k FROM numbers(10)) GROUP BY k LIMIT -3)
+SETTINGS optimize_trivial_group_by_limit_query = 1;
+SELECT count() FROM (SELECT k FROM (SELECT number AS k FROM numbers(10)) GROUP BY k LIMIT -3)
+SETTINGS optimize_trivial_group_by_limit_query = 0;
+SELECT count() FROM (SELECT k FROM (SELECT number AS k FROM numbers(10)) GROUP BY k LIMIT 3 OFFSET -2)
+SETTINGS optimize_trivial_group_by_limit_query = 1;
+SELECT count() FROM (SELECT k FROM (SELECT number AS k FROM numbers(10)) GROUP BY k LIMIT 3 OFFSET -2)
+SETTINGS optimize_trivial_group_by_limit_query = 0;
+
 -- Optimization must not fire for `GROUP BY` modifiers (`WITH ROLLUP`, `WITH CUBE`,
 -- `WITH GROUPING SETS`, `WITH TOTALS`): forcing `max_rows_to_group_by` with
 -- `group_by_overflow_mode = 'any'` would silently drop groups and corrupt the

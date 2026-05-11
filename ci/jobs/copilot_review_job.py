@@ -8,8 +8,8 @@ Copilot errors are logged as warnings only. Posting the review comment is
 done by the job script itself (not copilot) and fails the job if it does not work.
 
 Copilot writes the review to REVIEW_FILE; the job script then posts it via
-`ci/praktika/gh.py post-or-update --tag review` so the comment is always posted
-as the pre-authenticated app, not the Copilot robot.
+`python3 -m ci.praktika.gh post-or-update --tag review` so the comment is
+always posted as the pre-authenticated app, not the Copilot robot.
 
 The Copilot CLI occasionally hits transient GitHub authorization errors mid-run
 ("Authorization error, you may need to run /login"). The whole `gh auth` +
@@ -83,24 +83,24 @@ Tools:
 - Prefix every `gh` call with `{GH_PREFIX}`.
 - Pass the explicit PR repository to every helper or `gh` command that accepts it: `--repo {repo_name}`.
 - Post a new inline review comment by writing the body to a file and running:
-  `{GH_PREFIX} python3 ci/praktika/gh.py post-pr-line-comment --file <body.md> --commit <sha> --path <file> --line <N> --repo {repo_name} [--side RIGHT|LEFT]`.
+  `{GH_PREFIX} python3 -m ci.praktika.gh post-pr-line-comment --file <body.md> --commit <sha> --path <file> --line <N> --repo {repo_name} [--side RIGHT|LEFT]`.
   This wrapper handles `-F body=@<file>` correctly so the file content is uploaded as the body.
 - Do NOT call `gh api .../pulls/.../comments` directly: past runs have posted the literal `@<file>`
   string as the body when the wrong `gh` flag was used.
 - Do NOT use `gh pr review`; that posts a single batched review, not individual line comments.
 - Fetch inline review threads with:
-  `{GH_PREFIX} python3 ci/praktika/gh.py list-pr-review-threads --pr {pr_number} --repo {repo_name}`.
+  `{GH_PREFIX} python3 -m ci.praktika.gh list-pr-review-threads --pr {pr_number} --repo {repo_name}`.
   The command returns JSON; each thread carries its node `id`, `isResolved`, `path`, `line`, and
   `comments.nodes` with author, body, and `databaseId`.
 - Fetch top-level conversation with:
   `{GH_PREFIX} gh api '/repos/{repo_name}/issues/{pr_number}/comments' --paginate`.
 - Reply on an existing thread with:
-  `{GH_PREFIX} python3 ci/praktika/gh.py post-pr-line-comment --file <body.md> --reply-to <parent_databaseId> --repo {repo_name}`.
+  `{GH_PREFIX} python3 -m ci.praktika.gh post-pr-line-comment --file <body.md> --reply-to <parent_databaseId> --repo {repo_name}`.
   Use the `databaseId` of the first comment on the thread as `<parent_databaseId>`, and omit
   `--commit`, `--path`, and `--line`.
 - Resolve or unresolve bot-authored review threads with:
-  `{GH_PREFIX} python3 ci/praktika/gh.py resolve-pr-review-thread --thread-id <thread_node_id>`
-  `{GH_PREFIX} python3 ci/praktika/gh.py unresolve-pr-review-thread --thread-id <thread_node_id>`.
+  `{GH_PREFIX} python3 -m ci.praktika.gh resolve-pr-review-thread --thread-id <thread_node_id>`
+  `{GH_PREFIX} python3 -m ci.praktika.gh unresolve-pr-review-thread --thread-id <thread_node_id>`.
 """
 
 
@@ -207,7 +207,7 @@ def _post_review():
     """Post REVIEW_FILE as a PR comment. Raises on failure, failing the job."""
     subprocess.run(
         [
-            sys.executable, "ci/praktika/gh.py",
+            sys.executable, "-m", "ci.praktika.gh",
             "post-or-update", "--tag", "review", "--file", REVIEW_FILE,
         ],
         check=True,

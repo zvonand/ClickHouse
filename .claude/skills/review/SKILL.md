@@ -15,8 +15,8 @@ allowed-tools: Task, Bash, Read, Glob, Grep, WebFetch, AskUserQuestion
 ## Obtaining the Diff
 
 **If a PR number is given:**
-- Fetch PR metadata (title, description, base/head refs, changed files).
 - Fetch the full PR diff.
+- Fetch PR metadata (title, description, base/head refs, comments, changed files).
 - Note the PR title, description, and linked issues
 - **Detect revert PRs** before validating template metadata. A PR is a revert when the title starts with `Revert "..."` (the GitHub default), or the body matches `Reverts ClickHouse/ClickHouse#<N>` / `This reverts commit <sha>`. Revert PRs are **exempt** from PR template validation: skip `Changelog category` and `Changelog entry` checks for them, and do not flag missing template fields. Only verify that the body identifies the reverted PR or commit.
 - For non-revert PRs, validate PR template metadata against `.github/PULL_REQUEST_TEMPLATE.md`:
@@ -74,9 +74,11 @@ PRIMARY GOALS (IN ORDER)
 7) **ClickHouse-specific compliance**
    - Deletion logging, serialization versioning, compatibility, settings, experimental gates, Cloud/OSS rollout.
 
-FALSE POSITIVES ARE WORSE THAN MISSED NITS
-- Prefer **high precision**: if you are not reasonably confident that something is a real problem or a serious risk, do **not** flag it.
-- When in doubt between "possible minor style issue" and "no issue" – choose **no issue**.
+SIGNAL AND UNCERTAINTY
+- Avoid reporting minor issues when unsure: style preferences, naming opinions, speculative refactors, and micro-optimizations should be omitted unless they clearly affect correctness, maintainability, or user-facing quality.
+- Do not suppress potentially serious findings only because the proof is incomplete. If the evidence points to a plausible correctness, safety, data-loss, security, compatibility, or operational risk, report it as a concern and state exactly what would prove the code correct.
+- Prefer requesting focused tests when runtime behavior is the missing proof. Name the concrete scenario, edge case, concurrency interleaving, upgrade path, or failure mode the test must cover.
+- Use confidence-aware wording: definite bugs belong in `Findings`; plausible serious risks can be framed as "needs verification" or "missing/insufficient tests". Do not present speculation as fact.
 
 WHAT TO REVIEW VS WHAT TO IGNORE
 
@@ -113,7 +115,7 @@ WHAT TO REVIEW VS WHAT TO IGNORE
   - Switching quote style, etc.
 - Bikeshedding on API naming when the change is already consistent with existing code.
 
-C++ / CLICKHOUSE RISK CHECKLIST
+CLICKHOUSE RISK CHECKLIST
 
 When reading diffs, scan for these classes of bugs:
 
@@ -159,14 +161,7 @@ When reading diffs, scan for these classes of bugs:
 - Accidental O(N²) patterns on large inputs.
 - Extra syscalls, unnecessary fsyncs, sleeps, or polling in hot paths.
 
-**7) Compilation time & build impact**
-- ClickHouse has ~10k translation units; compilation time is a key developer productivity concern.
-- Adding non-trivial code (function bodies, method implementations, template definitions) to widely-included headers instead of moving it to `.cpp` files. Large function bodies in headers force recompilation of every translation unit that includes them. Prefer keeping only declarations, forward declarations, and truly trivial inline functions in `.h` files.
-- Adding or pulling heavy transitive includes into high-fan-out headers. When a header is included by hundreds or thousands of translation units, every extra `#include` it carries multiplies across the entire build. Watch for foundational headers like `Exception.h`, `IColumn.h`, `IDataType.h`, `typeid_cast.h`, `assert_cast.h`, and `Context_fwd.h` gaining new includes. Prefer forward declarations, dedicated lightweight `_fwd.h` headers, or moving the dependency into `.cpp` files.
-- Unnecessary template instantiations: template code that unconditionally instantiates specializations for cases that are statically known to be unreachable. Use `if constexpr` to prune template variants that do not apply (e.g., instantiating a `division_by_nullable=true` variant for non-division operations). Each unnecessary instantiation multiplies compile time and binary size.
-- Large `constexpr` evaluation in headers: complex `constexpr` loops or recursive `constexpr` functions in headers that the compiler must evaluate in every translation unit. Extract them into `.cpp` files or break them into smaller units.
-
-**8) Server-side file access & path traversal**
+**7) Server-side file access & path traversal**
 - Any setting, table function argument, or SQL-accessible parameter that accepts a **file path** and causes the server to read or write that path is a potential arbitrary file access vulnerability. A user with the required privilege (e.g., `CREATE DATABASE`, `CREATE TABLE`) could read sensitive server-side files (`/etc/shadow`, config files with secrets, other users' data) or write to unexpected locations.
 - When a new file-path setting or argument is introduced, check that it is restricted by one of:
   - `user_files_path` validation (like the `file()` table function),
@@ -175,7 +170,14 @@ When reading diffs, scan for these classes of bugs:
 - Watch for file paths that surface contents in error messages on parse failure — even a "read then validate" pattern can leak file contents through exceptions.
 - This applies to all code paths that use `ReadBufferFromFile`, `WriteBufferToFile`, `std::ifstream`, or similar with user-controlled paths.
 
-**9) Repository bloat — large & binary files**
+**8) Compilation time & build impact**
+- ClickHouse has ~10k translation units; compilation time is a key developer productivity concern.
+- Adding non-trivial code (function bodies, method implementations, template definitions) to widely-included headers instead of moving it to `.cpp` files. Large function bodies in headers force recompilation of every translation unit that includes them. Prefer keeping only declarations, forward declarations, and truly trivial inline functions in `.h` files.
+- Adding or pulling heavy transitive includes into high-fan-out headers. When a header is included by hundreds or thousands of translation units, every extra `#include` it carries multiplies across the entire build. Watch for foundational headers like `Exception.h`, `IColumn.h`, `IDataType.h`, `typeid_cast.h`, `assert_cast.h`, and `Context_fwd.h` gaining new includes. Prefer forward declarations, dedicated lightweight `_fwd.h` headers, or moving the dependency into `.cpp` files.
+- Unnecessary template instantiations: template code that unconditionally instantiates specializations for cases that are statically known to be unreachable. Use `if constexpr` to prune template variants that do not apply (e.g., instantiating a `division_by_nullable=true` variant for non-division operations). Each unnecessary instantiation multiplies compile time and binary size.
+- Large `constexpr` evaluation in headers: complex `constexpr` loops or recursive `constexpr` functions in headers that the compiler must evaluate in every translation unit. Extract them into `.cpp` files or break them into smaller units.
+
+**9) Repository bloat**
 - ClickHouse is a huge monorepo; every byte committed to git is cloned by every contributor forever and can never be fully removed without history rewriting.
 - **Binary blobs** (JARs, compiled executables, archives, images, dataset files, model weights) must **never** be committed directly. Flag any new binary file larger than ~100 KB as a blocker. Check `file` type and size for any non-text addition.
 - **Chunked / split binaries** are a red flag — they indicate someone tried to work around size limits while still committing the same blob.
@@ -184,31 +186,23 @@ When reading diffs, scan for these classes of bugs:
 - **Test data** (Parquet files, Avro files, small JSON fixtures) under ~1 MB total is usually fine, but anything larger should be generated at test time or downloaded.
 - When a PR adds new files under `tests/integration/`, `tests/queries/`, or any other directory, always scan for unexpectedly large or binary additions — contributors sometimes commit build artifacts or data files without realizing the permanent cost.
 
-**10) Semantic correctness & fix completeness**
-- **Partial / asymmetric fixes:** when a behavior is changed in one code path, check whether symmetric paths need the same change. Examples: fixing `SYSTEM STOP MERGES` for merge selection but not mutation selection; fixing `ReplicatedMergeTree` but not `SharedMergeTree`. Use `grep` to find all related call sites.
-- **Multi-instance resource selection:** when a PR adds support for multiple instances of a resource (e.g. auxiliary ZooKeeper clusters, secondary storage backends), grep for every place that accesses the resource and verify the correct instance is selected — not just in the newly added code paths.
+**10) Beyond-the-diff exploration: callers, symmetry, and trust boundaries**
 
-**11) Trust boundary expansion — looking beyond the diff**
-
-Trigger: a PR wraps existing internal code for a wider audience (library function → SQL function, CLI tool → server endpoint, internal reader → table function, background-only path → user-reachable query). The wrapper diff may look fine, but the callee was written with assumptions about its original callers that no longer hold.
+Apply this to every PR. Always look past the changed lines far enough to understand the affected callers, invariants, and neighboring code paths. Go deeper when a PR changes behavior in one path, exposes existing code to new callers, adds support for multiple instances of a resource, or wraps existing internal code for a wider audience (library function → SQL function, CLI tool → server endpoint, internal reader → table function, background-only path → user-reachable query). The diff may look fine, but the surrounding system may rely on assumptions that no longer hold.
 
 **The single most important rule: when you find something suspicious in callee code, you MUST pick a concrete minimal input and trace execution step by step, writing out every variable value at every iteration. Never dismiss a finding by reasoning about it abstractly — the whole point is that abstract reasoning ("this is technically safe because...") is how real bugs get missed. A 5-line trace with concrete values catches what paragraphs of analysis miss.**
 
 Workflow:
-
-1. **Read the core callee(s)** — full implementation, not just signatures.
-
-2. **Compare existing callers vs. the PR.** Grep for ALL call sites. For each parameter, compare what existing callers pass against what the PR passes. Flag any parameter where the PR passes a weaker, degenerate, or no-op value (callback, validator, filter, flag). These are "degraded integration" bugs.
-
-3. **Grep the callee for dangerous patterns.** Run actual Grep commands — do not scan visually. Look for: relative indexing (accessing neighbors of current position), assertions used as guards (`assert`/`chassert` compile out in release), pointer arithmetic without size checks, end-relative access on possibly-empty ranges, and unbounded allocation proportional to input.
-
-4. **For every match: trace with a concrete boundary input.** This step is mandatory and non-negotiable. Pick the shortest input that reaches the dangerous code. Write out the trace: for each iteration, state the line, the expression, the concrete value, and whether it is safe or not. Track every pointer/index/flag — a condition that *looks* protective may execute *after* the dangerous access within the same iteration. Choose inputs at extremes: empty, length 1, length 2, first element of each type the code branches on.
-
+1. **Read beyond the changed lines.** Read the core callee(s), related implementations, and full modified files when invariants may span background work, replication, storage, query execution, or coordination.
+2. **Check symmetric paths.** Grep for related implementations and call sites. If behavior changes in one path, verify equivalent paths need or do not need the same change. Examples: fixing `SYSTEM STOP MERGES` for merge selection but not mutation selection; fixing `ReplicatedMergeTree` but not `SharedMergeTree`.
+3. **Check resource-instance selection.** When a PR adds support for multiple instances of a resource (e.g. auxiliary ZooKeeper clusters, secondary storage backends), grep every place that accesses the resource and verify the correct instance is selected — not just in the newly added code paths.
+4. **Compare caller contracts.** Grep for ALL call sites. For each parameter, compare what existing callers pass against what the PR passes. Flag weaker validators, no-op callbacks, missing filters, broader input shapes, and changed lifetime/threading assumptions. These are "degraded integration" bugs.
+5. **Grep callees for dangerous patterns.** Run actual Grep commands — do not scan visually. Look for: relative indexing (accessing neighbors of current position), assertions used as guards (`assert`/`chassert` compile out in release), pointer arithmetic without size checks, end-relative access on possibly-empty ranges, and unbounded allocation proportional to input.
+6. **For every match: trace with a concrete boundary input.** This step is mandatory and non-negotiable. Pick the shortest input that reaches the dangerous code. Write out the trace: for each iteration, state the line, the expression, the concrete value, and whether it is safe or not. Track every pointer/index/flag — a condition that *looks* protective may execute *after* the dangerous access within the same iteration. Choose inputs at extremes: empty, length 1, length 2, first element of each type the code branches on.
    **Anti-pattern to avoid:** finding a suspicious access, writing "this is technically safe because [memory layout / padding / practical likelihood]", and moving on. If you cannot prove safety via a concrete trace, report it. Pre-existing bugs that were harmless in the old calling context become exploitable under user-controlled input — that is the whole point of this checklist.
+7. **Verify test coverage.** The PR's tests must include adversarial edge cases that the original caller would never produce: empty inputs, minimal-length inputs, malformed inputs, NULLs, maximum-length inputs.
 
-5. **Verify test coverage.** The PR's tests must include adversarial edge cases that the original caller would never produce: empty inputs, minimal-length inputs, malformed inputs, NULLs, maximum-length inputs.
-
-**12) Shell-command safety in Python / shell scripts**
+**11) Shell-command safety in Python / shell scripts**
 - Destructive or privileged commands (`rm -rf`, `mv`, `cp -r`, `find … -delete`, `chmod`, `chown`, `dd`, `kill`, `sudo …`) with substituted arguments passed to `shell=True` (`subprocess.run`/`Popen`, `os.system`) or to in-tree wrappers that use `shell=True` under the hood (ClickHouse's `Shell.check` / `Shell.run` / `Shell.get_output`).
 - Unquoted variables in destructive commands inside `.sh` scripts.
 - Prefer `shutil.rmtree` or argv-list `subprocess.run`; if a shell wrapper is unavoidable, use `shlex.quote` and `--`.
@@ -232,7 +226,7 @@ CLICKHOUSE RULES (MANDATORY)
 - **Safe rollout**
   Ensure incremental rollout is feasible in both OSS and Cloud (feature flags, safe defaults, non-disruptive changes).
 - **Compilation time**
-  Follow checklist **7) Compilation time & build impact**. Treat violations there as ClickHouse-rule issues.
+  Follow checklist **8) Compilation time & build impact**. Treat violations there as ClickHouse-rule issues.
 - **No large / binary files in git**
   Binary blobs (JARs, archives, compiled artifacts, datasets >1 MB, fat dependency bundles) must never be committed. They permanently bloat the repository for every clone and cannot be removed without history rewriting. Test dependencies should be downloaded at test time, built from source inside the test container, or pulled from Docker images. Follow checklist **9) Repository bloat**. Any violation is a blocker.
 - **PR metadata quality**
@@ -300,6 +294,7 @@ Focus on problems — do not describe what was checked and found to be fine. Use
 
 **ClickHouse Rules**
 Render as a Markdown table. Use ✅ (ok), ❌ (problem), ⚠️ (concern), or ➖ (not applicable) — never write "N/A" as text.
+Use exactly one row for each item from `CLICKHOUSE RULES (MANDATORY)`, in the same order. Do not add separate rows for sub-details such as `SettingsChangesHistory.cpp`; mention them in the parent row's Notes instead.
 For any ❌ or ⚠️ item, add a brief explanation in the Notes column. Leave Notes empty for ✅ and ➖.
 
 Example:
@@ -308,15 +303,14 @@ Example:
 | Deletion logging | ✅ | |
 | Serialization versioning | ➖ | |
 | Core-area scrutiny | ✅ | |
-| Test coverage | ✅ | |
+| Test coverage | ⚠️ | Missing focused test for the new failover path |
 | Experimental gate | ❌ | New feature `X` has no gate |
 | No magic constants | ✅ | |
 | Backward compatibility | ⚠️ | Default changed without `SettingsChangesHistory.cpp` update |
-| `SettingsChangesHistory.cpp` | ❌ | Not updated |
-| PR metadata quality | ⚠️ | `Changelog category` does not match change type; `Changelog entry` is too vague for users |
 | Safe rollout | ➖ | |
-| Compilation time | ✅ | |
-| No large/binary files | ✅ | |
+| Compilation time & build impact | ✅ | |
+| No large / binary files in git | ✅ | |
+| PR metadata quality | ⚠️ | `Changelog category` does not match change type; `Changelog entry` is too vague for users |
 
 **Performance & Safety** (omit if no concerns)
 - Only include this section if there are actual concerns about hot-path regressions, memory, concurrency, or failure modes.
@@ -333,5 +327,5 @@ STYLE & CONDUCT
 - Prefer small, surgical suggestions over broad rewrites.
 - Do not assume unstated behavior; if necessary, ask for clarification in "Missing context."
 - Avoid changing scope: review what's in the PR; suggest follow-ups separately.
-- If you are not reasonably confident a finding is a real issue or meaningful risk, **do not mention it**.
+- Avoid uncertain minor comments. For serious plausible risks, state the uncertainty and request the needed verification or tests.
 - When performing a code review, **ignore `/.github/workflows/*` files**.

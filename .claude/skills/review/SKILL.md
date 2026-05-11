@@ -125,6 +125,10 @@ Use these prompts to widen the search, not as a contract. A finding is valid bec
 - For core areas such as query execution, storage engines, replication, Keeper/coordination, system tables, and MergeTree internals, read enough of the modified file and neighboring subsystem to understand the invariant being changed.
 - When a PR adds a resource dimension or selector, follow all access paths to verify the selected instance is correct everywhere it matters.
 
+**After finding a serious issue**
+- Do not stop at the first blocker. Treat it as evidence that an invariant is fragile, then continue following that invariant through related entry points, lifecycle transitions, and mostly unchanged code.
+- Check whether the same broken assumption affects reads, writes, metadata, cleanup, recovery, retries, or ownership changes as applicable to the PR. Group related issues when they share a cause, but do not omit distinct user-impacting paths.
+
 **Probe boundaries and failure modes**
 - Consider lifetimes, cleanup on exceptions, partial initialization, cancellation, retries, concurrent/background work, and changed throwing behavior across `noexcept` or destructor boundaries.
 - For user-controlled paths, privileges, formats, protocols, cache keys, metadata, or on-disk state, check compatibility, versioning, isolation between semantically different cases, and upgrade/downgrade behavior.

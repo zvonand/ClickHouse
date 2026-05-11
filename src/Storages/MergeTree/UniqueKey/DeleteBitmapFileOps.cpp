@@ -28,8 +28,8 @@ std::vector<std::pair<UInt64, std::string>> enumerateFiles(const IDataPartStorag
     for (auto it = storage.iterate(); it->isValid(); it->next())
     {
         const auto & file_name = it->name();
-        if (auto block_number = DeleteBitmap::parseBlockNumberFromFileName(file_name))
-            result.emplace_back(*block_number, file_name);
+        if (DeleteBitmap::isDeleteBitmapFile(file_name))
+            result.emplace_back(DeleteBitmap::parseBlockNumberFromFileName(file_name), file_name);
     }
     return result;
 }

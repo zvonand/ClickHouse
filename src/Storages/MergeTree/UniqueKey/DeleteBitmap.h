@@ -3,14 +3,15 @@
 #include <base/types.h>
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace roaring
 {
 class Roaring;
+class Roaring64Map;
 }
 
 namespace DB
@@ -20,18 +21,20 @@ class ReadBuffer;
 class WriteBuffer;
 
 /** UNIQUE KEY per-part delete bitmap — row positions (within a part, 0-based)
-  * that are logically deleted. Wraps a 32-bit `roaring::Roaring` — this is the
-  * only bitmap type we need because MergeTree parts are addressed by `UInt32`
-  * row numbers (`_part_offset`), and a single part caps out well below 2^32
-  * rows in practice. Using the 32-bit variant halves serialized size vs.
-  * `Roaring64Map` and matches the existing `PostingList = roaring::Roaring`
-  * alias already used by `MergeTreeIndexText`.
+  * that are logically deleted.
+  *
+  * The bitmap picks its underlying roaring representation dynamically: a
+  * narrow `roaring::Roaring` while every set value fits in `UInt32`, then
+  * auto-upgrades to `roaring::Roaring64Map` on the first value above. The
+  * choice is internal — the public API is uniformly `UInt64`.
   *
   * Persistence: one file per bitmap version, named
   *   `delete_bitmap_{block_number}.rbm`
   * inside the part directory. Format (all little-endian):
-  *   magic(4) "RBM1" | version(4) | roaring_size(4) | roaring_data[roaring_size] | crc32(4)
-  * where crc32 covers magic..roaring_data inclusive.
+  *   magic(4) "RBM1" | version(4) | body[body_size] | body_size(4) | crc32(4)
+  * `version` (`VERSION_R32` / `VERSION_R64`) selects which roaring layout
+  * the body uses. CRC covers magic + version + body. `body_size` and `crc`
+  * trail as a footer so the writer never back-patches a header buffer.
   */
 class DeleteBitmap
 {
@@ -45,17 +48,16 @@ public:
     DeleteBitmap & operator=(DeleteBitmap &&) noexcept;
 
     /// True if `row` is set.
-    bool contains(UInt32 row) const;
+    bool contains(UInt64 row) const;
 
-    /// Bulk point-containment via roaring `BulkContext`; writes 1 to
-    /// `out_keep[i]` when `rows[i]` is *not* in the bitmap, 0 otherwise.
-    /// Caller sizes `out_keep >= n`. `n == 0` is a no-op.
-    void containsBulk(const UInt32 * rows, size_t n, uint8_t * out_keep) const;
+    /// Bulk point-containment; writes 1 to `out_keep[i]` when `rows[i]` is
+    /// *not* in the bitmap, 0 otherwise. `n == 0` is a no-op.
+    void containsBulk(const UInt64 * rows, size_t n, uint8_t * out_keep) const;
 
     /// Set `row`.
-    void add(UInt32 row);
+    void add(UInt64 row);
     /// Set every entry of `rows`. Empty input is a no-op.
-    void addMany(const std::vector<UInt32> & rows);
+    void addMany(const std::vector<UInt64> & rows);
     /// In-place union: `*this |= other`.
     void merge(const DeleteBitmap & other);
 
@@ -65,40 +67,48 @@ public:
     bool empty() const;
 
     /// |bitmap ∩ [begin, end)|, computed as `rank(end-1) - rank(begin-1)`.
-    /// O(log N) per `rank` on bitset containers, O(log K) on array
-    /// containers. UInt64 inputs are clamped against the UInt32 row
-    /// ceiling.
+    /// O(log N) per `rank` on bitset containers, O(log K) on array containers.
     size_t rangeCardinality(UInt64 begin, UInt64 end) const;
 
     /// All set row indices in ascending order. O(cardinality).
-    std::vector<UInt32> toVector() const;
+    std::vector<UInt64> toVector() const;
 
-    /// Portable serialized size + a small entry overhead. Returns a stable
-    /// size proxy: roaring's true in-memory footprint depends on container
-    /// internals and is not a stable public API, while the serialized size
-    /// is a faithful proxy for the on-disk `.rbm` cost. Empty bitmap returns
-    /// a small non-zero constant.
+    /// Portable-serialized size + a small entry overhead. Stable proxy for
+    /// the on-disk `.rbm` cost; empty bitmap returns a small non-zero constant
+    /// so cache weighting works.
     size_t memoryUsage() const;
 
-    /// Serialize to the on-disk format. Writes magic + version + payload + crc.
+    /// Serialize to the on-disk format.
     void serialize(WriteBuffer & out) const;
-
-    /// Deserialize; validates magic / version / crc and throws on mismatch.
-    /// Returned bitmap is independent — `in` can be destroyed afterwards.
+    /// Deserialize; validates magic / version / declared body size / crc and
+    /// throws on mismatch. Returned bitmap is independent of `in`.
     static std::unique_ptr<DeleteBitmap> deserialize(ReadBuffer & in);
 
     /// File name convention: `delete_bitmap_{block_number}.rbm`.
     static std::string fileNameForBlockNumber(UInt64 block_number);
 
-    /// Parse `delete_bitmap_{N}.rbm` → N. Returns std::nullopt on non-match.
-    static std::optional<UInt64> parseBlockNumberFromFileName(std::string_view file_name);
+    /// True if `file_name` matches the canonical `delete_bitmap_{N}.rbm` form.
+    static bool isDeleteBitmapFile(std::string_view file_name);
+
+    /// Extract N from `delete_bitmap_{N}.rbm`. Caller must have screened the
+    /// name via `isDeleteBitmapFile`; throws if `file_name` does not match.
+    static UInt64 parseBlockNumberFromFileName(std::string_view file_name);
 
     /// File-format constants. Exposed so tests can corrupt bytes deterministically.
     static constexpr UInt32 MAGIC = 0x314D4252; /// "RBM1" little-endian
-    static constexpr UInt32 VERSION = 1;
+    static constexpr UInt32 VERSION_R32 = 1;
+    static constexpr UInt32 VERSION_R64 = 2;
 
 private:
-    std::unique_ptr<roaring::Roaring> bitmap;
+    using R32Ptr = std::unique_ptr<roaring::Roaring>;
+    using R64Ptr = std::unique_ptr<roaring::Roaring64Map>;
+    /// `std::variant` makes the "exactly one representation active" invariant
+    /// type-system enforced. `unique_ptr` keeps the roaring headers out of
+    /// this file.
+    std::variant<R32Ptr, R64Ptr> bitmap;
+
+    bool is64Bit() const;
+    void upgradeTo64();
 };
 
 using DeleteBitmapPtr = std::shared_ptr<DeleteBitmap>;

@@ -751,25 +751,17 @@ public:
         if (operands.size() != 1 || !operators.empty() || !mergeElement())
             return false;
 
-        /// `mergeElement` just pushed the current operand to `elements`. Only that
-        /// last element belongs to the lambda's left-hand side — any earlier
-        /// elements come from previous comma-separated function arguments and
-        /// must be preserved as-is. Otherwise we would silently change the
-        /// function's arity (e.g. parse `f(x, y -> z)` as `f((x, y) -> z)`),
-        /// breaking the AST format/re-parse round-trip invariant.
-
-        /// 2. If the lhs is already a tuple, use it as-is.
+        /// 2. If there is already tuple do nothing
         if (tryGetFunctionName(elements.back()) == "tuple")
         {
             pushOperand(std::move(elements.back()));
             elements.pop_back();
         }
-        /// 3. Otherwise wrap just the lhs (the last element) in a one-element tuple.
+        /// 3. Put all elements in a single tuple
         else
         {
-            ASTPtr lhs = std::move(elements.back());
-            elements.pop_back();
-            auto function = makeASTOperator("tuple", ASTs{std::move(lhs)});
+            auto function = makeASTOperator("tuple", std::move(elements));
+            elements.clear();
             pushOperand(function);
         }
 
@@ -1705,7 +1697,7 @@ public:
     {
         /// Either SUBSTRING(expr FROM start [FOR length]) or SUBSTRING(expr, start, length)
         ///
-        /// 0: Parse first separator: FROM or comma (-> 1)
+        /// 0: Parse first separator: FROM or comma (-> 1), or closing bracket (1-arg form, finished)
         /// 1: Parse second separator: FOR or comma (-> 2)
         /// 1 or 2: Parse closing bracket (finished)
 
@@ -1720,6 +1712,21 @@ public:
                     return false;
 
                 state = 1;
+            }
+            /// Accept the 1-argument form `substring(expr)` at parse time so that
+            /// the formatter's output for queries like `SELECT substring(x, y -> z)`
+            /// (which the parser collapses into a 1-argument call carrying the
+            /// merged-tuple lambda) is re-parseable. The 1-argument call is then
+            /// rejected at the analyzer level with a meaningful error
+            /// (`NUMBER_OF_ARGUMENTS_DOESNT_MATCH` / `UNKNOWN_IDENTIFIER`) rather
+            /// than blowing up the round-trip check with an `Inconsistent AST
+            /// formatting` `LOGICAL_ERROR`. See issue #104605.
+            else if (ParserToken(TokenType::ClosingRoundBracket).ignore(pos, expected))
+            {
+                if (!mergeElement())
+                    return false;
+
+                finished = true;
             }
         }
 
@@ -1890,7 +1897,7 @@ public:
     {
         /// position(haystack, needle[, start_pos]) or position(needle IN haystack)
         ///
-        /// 0: Parse separator: comma (-> 1) or IN (-> 2)
+        /// 0: Parse separator: comma (-> 1) or IN (-> 2), or closing bracket (1-arg form, finished)
         /// 1: Parse second separator: comma
         /// 1 or 2: Parse closing bracket (finished)
 
@@ -1905,7 +1912,7 @@ public:
 
                 state = 1;
             }
-            if (ParserKeyword(Keyword::IN).ignore(pos, expected))
+            else if (ParserKeyword(Keyword::IN).ignore(pos, expected))
             {
                 action = Action::OPERAND;
 
@@ -1913,6 +1920,18 @@ public:
                     return false;
 
                 state = 2;
+            }
+            /// Accept the 1-argument form so that the formatter's output for
+            /// queries like `SELECT position(x, y -> z)` (which the parser
+            /// collapses into a 1-argument call carrying the merged-tuple
+            /// lambda) is re-parseable. The 1-argument call is then rejected at
+            /// the analyzer level. See issue #104605.
+            else if (ParserToken(TokenType::ClosingRoundBracket).ignore(pos, expected))
+            {
+                if (!mergeElement())
+                    return false;
+
+                finished = true;
             }
         }
 

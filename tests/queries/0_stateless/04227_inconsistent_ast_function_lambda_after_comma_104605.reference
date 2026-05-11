@@ -1,8 +1,12 @@
-SELECT substring(x, (x -> x))
-SELECT f(a, (x -> y))
-SELECT f(a, b, (c -> d))
+SELECT substring((x, x) -> x)
+SELECT position((h, x) -> x)
+bcd
+bcd
+3
+3
 [2,3,4]
 [11,22,33]
 [2,3]
-SELECT f(a, ((x, y) -> z))
-SELECT (x -> (x + 1))
+10
+{1:20,2:40}
+{1:20,2:40}

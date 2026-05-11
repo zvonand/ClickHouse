@@ -67,14 +67,13 @@ REVIEW PRIORITIES (IN ORDER)
 3) **Boundary behavior and system integration**
    - Check caller contracts, edge inputs, concurrent/background operations, upgrade/downgrade paths, retries, partial failures, and interactions with neighboring subsystems. Many real bugs live outside the changed lines.
 4) **Evidence and tests**
-   - Ask whether the PR has focused evidence for the behavior or invariant it changes. Missing proof for important behavior is a review concern even when the code looks plausible.
+   - Ask whether the PR has focused evidence for its material claims and changed invariants. Missing proof for important behavior is a review concern even when the code looks plausible.
 5) **Lower-priority quality**
    - Then review performance, build time, CI/script reliability, PR metadata, documentation, diagnostics, and maintainability. These matter, but should not crowd out feature-contract and correctness review.
 
 SIGNAL AND UNCERTAINTY
 - Avoid reporting minor issues when unsure: style preferences, naming opinions, speculative refactors, and micro-optimizations should be omitted unless they clearly affect correctness, maintainability, or user-facing quality.
 - Do not suppress potentially serious findings only because the proof is incomplete. If the evidence points to a plausible correctness, safety, data-loss, security, compatibility, or operational risk, report it as a concern and state exactly what would prove the code correct.
-- Prefer requesting focused tests when runtime behavior is the missing proof. Name the concrete scenario, edge case, concurrency interleaving, upgrade path, or failure mode the test must cover.
 - Use confidence-aware wording: definite bugs belong in `Findings`; plausible serious risks can be framed as "needs verification" or "missing/insufficient tests". Do not present speculation as fact.
 
 WHAT TO REVIEW VS WHAT TO IGNORE
@@ -102,12 +101,6 @@ WHAT TO REVIEW VS WHAT TO IGNORE
 **Documentation:**
 - Structured ClickHouse surfaces are documented from source registrations: SQL functions and aggregate functions (`FunctionDocumentation`), settings (`DECLARE` doc strings), table functions, table engines, formats, system tables, and similar components. Do not ask for a separate `docs/` page when this source-level documentation is present and adequate.
 - Flag documentation only when source-level structured docs are missing or weak, or when the change needs non-structured user guidance that belongs under `docs/` (guides, tutorials, architecture, operations/admin, integrations).
-
-**Tests for new behavior:**
-- Treat tests as evidence for the intended behavior and important invariants, not as a checklist of named cases.
-- For any material new behavior or important fix, identify what would prove the change works and what would fail if the implementation were removed or wired incorrectly.
-- Broad existing tests are insufficient when they do not make the new behavior observable. Ask for the smallest focused coverage that proves the relevant behavior, using the most appropriate observable for that change.
-- If focused coverage is missing, request it in `Tests` even if the code looks correct.
 
 **Explicitly ignore (do not comment on these unless they indicate a bug):**
 - Pure formatting (whitespace, brace style, minor naming preferences).
@@ -140,10 +133,6 @@ Use these prompts to widen the search, not as a contract. A finding is valid bec
 **Use concrete traces for suspicious code**
 - When you find suspicious callee logic, pick a minimal boundary input and trace execution step by step with concrete values. Do not dismiss it by abstract reasoning.
 - **Anti-pattern to avoid:** finding a suspicious access, writing "this is technically safe because [memory layout / padding / practical likelihood]", and moving on. If you cannot prove safety via a concrete trace, report it or request the test that would prove it.
-
-**Check evidence**
-- Tests should prove the changed behavior or invariant, not just existing behavior. Focus on what would fail if the feature were miswired, incomplete, or unsafe at a boundary.
-- For performance, build-time, repository-bloat, documentation, and PR-metadata issues, report them after correctness/safety unless they are severe enough to block the PR.
 
 CLICKHOUSE-SPECIFIC RULES (SUPPORTING CHECKS)
 Use these as supporting checks for ClickHouse-specific invariants. They are not the review goal and they are not exhaustive. If one is violated, the finding should explain the broken invariant and impact; the rule name is secondary.
@@ -232,8 +221,7 @@ Focus on problems — do not describe what was checked and found to be fine. Use
 
 
 **Tests** (omit if adequate)
-- Only include this section if tests are **missing or insufficient**. Prefix each missing test with ⚠️. Specify which additional tests to add and why.
-- For material behavior changes, state whether the tests prove the relevant new behavior or invariant, not just that old behavior still returns correct results.
+- Only include this section if evidence is **missing or insufficient**. Prefix each missing test/evidence item with ⚠️. Ask for the smallest focused test, benchmark, or measurement that would prove the relevant behavior, invariant, or claimed benefit.
 
 **ClickHouse-Specific Rule Notes** (omit if none)
 - Include only actual ClickHouse-specific rule concerns that are not already clear from `Findings` or `Tests`.

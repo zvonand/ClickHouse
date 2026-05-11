@@ -18,10 +18,41 @@ SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k LIMIT 5) 
 SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k HAVING k > 0 LIMIT 5) SETTINGS optimize_trivial_group_by_limit_query = 1;
 SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k ORDER BY k LIMIT 5) SETTINGS optimize_trivial_group_by_limit_query = 1;
 
--- Optimization is suppressed when the user already set `max_rows_to_group_by`
--- (it would otherwise overwrite the user setting).
+-- Optimization is suppressed when the user has explicitly set `group_by_overflow_mode = 'throw'`
+-- (with any `max_rows_to_group_by`), because applying the optimization would silently override the
+-- user's throw contract. The query has 1M distinct keys; with `max_rows_to_group_by = 1000000` and
+-- `'throw'` the aggregation succeeds; with the optimization forcing `max_rows_to_group_by = 5` and
+-- `'any'` it would silently truncate to 5 keys (or with `'throw'` retained it would throw).
 SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k LIMIT 5)
 SETTINGS optimize_trivial_group_by_limit_query = 1, max_rows_to_group_by = 1000000, group_by_overflow_mode = 'throw';
+
+-- Optimization is also suppressed when the user has explicitly set `group_by_overflow_mode = 'break'`.
+SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k LIMIT 5)
+SETTINGS optimize_trivial_group_by_limit_query = 1, group_by_overflow_mode = 'break';
+
+-- When the user has set `group_by_overflow_mode = 'any'` with a larger `max_rows_to_group_by`,
+-- the optimization can tighten `max_rows_to_group_by` to LIMIT+OFFSET (their contract already
+-- accepts truncation, so no behavior change for them, just earlier truncation).
+SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k LIMIT 5)
+SETTINGS optimize_trivial_group_by_limit_query = 1, max_rows_to_group_by = 1000000, group_by_overflow_mode = 'any';
+
+-- When the user has explicitly set `group_by_overflow_mode = 'throw'` with a tight
+-- `max_rows_to_group_by` (smaller than the LIMIT), applying the optimization would
+-- silently lower `max_rows_to_group_by` and switch mode to `'any'`, suppressing the
+-- expected throw. The pass must skip so the user's `'throw'` contract is preserved
+-- and the query throws as expected when the data exceeds the user's cap.
+SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k LIMIT 100)
+SETTINGS optimize_trivial_group_by_limit_query = 1, max_rows_to_group_by = 3, group_by_overflow_mode = 'throw'; -- { serverError TOO_MANY_ROWS }
+
+-- Optimization must not fire for `GROUP BY ... LIMIT n BY expr` queries: the outer `LIMIT n`
+-- selects rows after `LIMIT BY` has limited per-`expr` rows, so stopping aggregation at `n`
+-- distinct keys can starve `LIMIT BY` of groups and shrink the output.
+SELECT count() FROM (
+    SELECT k FROM (SELECT number AS k FROM numbers(100)) GROUP BY k LIMIT 10 BY (k % 2) LIMIT 5
+) SETTINGS optimize_trivial_group_by_limit_query = 1;
+SELECT count() FROM (
+    SELECT k FROM (SELECT number AS k FROM numbers(100)) GROUP BY k LIMIT 10 BY (k % 2) LIMIT 5
+) SETTINGS optimize_trivial_group_by_limit_query = 0;
 
 -- Overflow guard: `limit + offset` must not silently wrap to a smaller number.
 -- Without the guard, `LIMIT 18446744073709551615 OFFSET 100` would overflow `UInt64`

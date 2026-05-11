@@ -78,6 +78,7 @@ ColumnWithTypeAndName condtitionColumnToJoinable(const Block & block, const Stri
     return {res_col, res_col_type, res_name};
 }
 
+// Compare with (left NULL != right NULL) logic
 template <bool has_left_nulls, bool has_right_nulls>
 Int64 nullableCompareAt(const IColumn & left_column, const IColumn & right_column, size_t lhs_pos, size_t rhs_pos)
 {
@@ -91,9 +92,8 @@ Int64 nullableCompareAt(const IColumn & left_column, const IColumn & right_colum
         left_nullable = checkAndGetColumn<ColumnNullable>(&left_column);
         if (left_nullable)
         {
-            /// NULL != NULL case
             if (left_nullable->isNullAt(lhs_pos))
-                return -1;
+                return MergeJoin::nulls_direction;
 
             left_notnull = &left_nullable->getNestedColumn();
         }
@@ -105,13 +105,13 @@ Int64 nullableCompareAt(const IColumn & left_column, const IColumn & right_colum
         if (right_nullable)
         {
             if (right_nullable->isNullAt(rhs_pos))
-                return 1;
+                return -MergeJoin::nulls_direction;
 
             right_notnull = &right_nullable->getNestedColumn();
         }
     }
 
-    return left_notnull->compareAt(lhs_pos, rhs_pos, *right_notnull, -1);
+    return left_notnull->compareAt(lhs_pos, rhs_pos, *right_notnull, MergeJoin::nulls_direction);
 }
 
 template <bool has_left_nulls, bool has_right_nulls>
@@ -152,7 +152,7 @@ Int64 nullableCompareTrackAt(const IColumn & left_column, const IColumn & right_
         }
     }
 
-    Int64 res = left_notnull->compareTrackAt(lhs_pos, rhs_pos, *right_notnull, -1);
+    Int64 res = left_notnull->compareTrackAt(lhs_pos, rhs_pos, *right_notnull, MergeJoin::nulls_direction);
 
     if (left_nullable && res < 0)
     {
@@ -459,7 +459,7 @@ void makeSortAndMerge(const Names & keys, SortDescription & sort, SortDescriptio
         if (!unique_keys.contains(key_name))
         {
             unique_keys.insert(key_name);
-            sort.emplace_back(key_name, /*direction*/1, /*nulls_direction*/-1);
+            sort.emplace_back(key_name, /*direction*/1, MergeJoin::nulls_direction);
         }
     }
 }

@@ -1,3 +1,10 @@
+-- Tags: no-flaky-check
+-- ^^ The test is large (780 lines) and runs ~190-260s in the flaky check at
+-- 5x; the only change in this PR is pinning `date_time_input_format` and
+-- `cast_string_to_date_time_mode` to `basic` to preserve the existing
+-- reference output, which doesn't affect test stability and doesn't warrant
+-- 5x re-runs.
+
 -- Tests adapted from https://github.com/davidnx/baby-kusto-csharp
 -- Copyright (c) Microsoft Corporation. Licensed under the MIT License.
 -- Source: test/BabyKusto.Core.Tests/EndToEndTests.cs

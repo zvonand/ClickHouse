@@ -187,14 +187,10 @@ StoragePtr StorageFactory::get(
                     "PARTITION_BY, PRIMARY_KEY, ORDER_BY or SAMPLE_BY clauses",
                     [](StorageFeatures features) { return features.supports_sort_order; });
 
-            /// UNIQUE KEY clause is currently only supported on MergeTree family engines.
-            /// Restrict by engine name (ends with "MergeTree"). A proper storage-feature
-            /// flag (`supports_unique_key`) could be introduced later if more engines opt in.
-            if (storage_def->unique_key && !name.ends_with("MergeTree"))
-                throw Exception(
-                    ErrorCodes::BAD_ARGUMENTS,
-                    "Engine {} does not support UNIQUE KEY clause. UNIQUE KEY is only supported on MergeTree family engines",
-                    name);
+            if (storage_def->unique_key)
+                check_feature(
+                    "UNIQUE KEY clause",
+                    [](StorageFeatures features) { return features.supports_unique_key; });
 
             if (storage_def->ttl_table || !columns.getColumnTTLs().empty())
                 check_feature(

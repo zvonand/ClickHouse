@@ -1061,6 +1061,7 @@ void registerStorageMergeTree(StorageFactory & factory)
         .supports_sort_order = true,
         .supports_ttl = true,
         .supports_parallel_insert = true,
+        .supports_unique_key = true,
         .has_builtin_setting_fn = MergeTreeSettings::hasBuiltin,
     };
 
@@ -1076,6 +1077,7 @@ void registerStorageMergeTree(StorageFactory & factory)
     features.supports_replication = true;
     features.supports_deduplication = true;
     features.supports_schema_inference = true;
+    features.supports_unique_key = false;
 
     factory.registerStorage("ReplicatedMergeTree", create, features);
     factory.registerStorage("ReplicatedCollapsingMergeTree", create, features);

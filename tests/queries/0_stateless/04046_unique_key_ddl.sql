@@ -52,6 +52,15 @@ CREATE TABLE uk_t (id UInt64, v String)
 ENGINE = Log
 UNIQUE KEY (id); -- { serverError BAD_ARGUMENTS }
 
+-- 6a. UNIQUE KEY on Replicated*MergeTree -> error.
+-- ReplicatedMergeTreeTableMetadata does not yet serialize `unique_key`, so
+-- replicas could diverge silently. The supports_unique_key feature flag is
+-- set only on the non-replicated variants.
+CREATE TABLE uk_t (id UInt64, v String)
+ENGINE = ReplicatedMergeTree('/clickhouse/tables/{database}/04046_uk_repl', 'r1')
+UNIQUE KEY (id)
+ORDER BY (id); -- { serverError BAD_ARGUMENTS }
+
 -- 7. UNIQUE KEY referring to non-existent column -> error.
 CREATE TABLE uk_t (id UInt64, user_id UInt32)
 ENGINE = MergeTree

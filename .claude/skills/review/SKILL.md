@@ -106,6 +106,12 @@ WHAT TO REVIEW VS WHAT TO IGNORE
 - Structured ClickHouse surfaces are documented from source registrations: SQL functions and aggregate functions (`FunctionDocumentation`), settings (`DECLARE` doc strings), table functions, table engines, formats, system tables, and similar components. Do not ask for a separate `docs/` page when this source-level documentation is present and adequate.
 - Flag documentation only when source-level structured docs are missing or weak, or when the change needs non-structured user guidance that belongs under `docs/` (guides, tutorials, architecture, operations/admin, integrations).
 
+**Tests for new behavior:**
+- Treat tests as evidence for the intended behavior and important invariants, not as a checklist of named cases.
+- For any material new behavior or important fix, identify what would prove the change works and what would fail if the implementation were removed or wired incorrectly.
+- Broad existing tests are insufficient when they do not make the new behavior observable. Ask for the smallest focused coverage that proves the relevant behavior, using the most appropriate observable for that change.
+- If focused coverage is missing, request it in `Tests` and mark `Test coverage` as ⚠️ or ❌ in `ClickHouse Rules`, even if the code looks correct.
+
 **Explicitly ignore (do not comment on these unless they indicate a bug):**
 - Pure formatting (whitespace, brace style, minor naming preferences).
 - "Nice to have" refactors or micro-optimizations without clear benefit.
@@ -209,7 +215,7 @@ CLICKHOUSE RULES (MANDATORY)
 - **Core-area scrutiny**
   For changes in query execution, storage engines, replication, Keeper/coordination, system tables, and MergeTree internals: read the full modified file (not just the diff context); verify invariants hold under concurrent background operations (merges, mutations, replication); check all error paths including those not touched by the diff; and confirm the change is consistent with symmetric subsystems — e.g. if fixing `ReplicatedMergeTree`, check `SharedMergeTree` and partition-level variants for the same issue.
 - **Test coverage**
-  Do **not** delete or relax existing tests, except in revert PRs where removing tests added by the reverted change is expected. New behavior and important fixes require focused tests that cover the changed behavior and relevant edge cases.
+  Do **not** delete or relax existing tests, except in revert PRs where removing tests added by the reverted change is expected. Material new behavior and important fixes require focused tests that prove the changed behavior, relevant invariants, and important edge cases. Broad existing tests are insufficient unless they would fail if the new behavior were removed or wired incorrectly.
   Tests replace random database names with `default` in output normalization. Do **not** flag hardcoded `default.` or `default_` prefixes in expected test output as incorrect or suggest using `${CLICKHOUSE_DATABASE}` – this is by design.
 - **Experimental gate**
   Features that introduce genuinely new or risky behavior — new engines, new query execution strategies, new replication mechanisms, new on-disk formats, or features whose incorrect implementation could cause data loss or corruption — must be gated behind an **experimental** setting (e.g. `allow_experimental_simd_acceleration`) until proven safe. The gate can later be made ineffective at GA. Thin wrappers that expose already-stable internal code as SQL functions, simple utility functions, or low-risk additive features do **not** need a gate.
@@ -285,6 +291,7 @@ Focus on problems — do not describe what was checked and found to be fine. Use
 
 **Tests** (omit if adequate)
 - Only include this section if tests are **missing or insufficient**. Prefix each missing test with ⚠️. Specify which additional tests to add and why.
+- For material behavior changes, state whether the tests prove the relevant new behavior or invariant, not just that old behavior still returns correct results.
 
 **ClickHouse Rules**
 Render as a Markdown table. Use ✅ (ok), ❌ (problem), ⚠️ (concern), or ➖ (not applicable) — never write "N/A" as text.

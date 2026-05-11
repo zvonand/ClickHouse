@@ -143,6 +143,7 @@ DELETE FROM system.webassembly_modules WHERE code == '123'; -- { serverError BAD
 DELETE FROM system.webassembly_modules WHERE hash == 1; -- { serverError BAD_ARGUMENTS }
 DELETE FROM system.webassembly_modules WHERE name NOT LIKE 'module1'; -- { serverError BAD_ARGUMENTS }
 DELETE FROM system.webassembly_modules WHERE name = 'a' OR name = 'b'; -- { serverError BAD_ARGUMENTS }
+DELETE FROM system.webassembly_modules WHERE 1=1; -- { serverError BAD_ARGUMENTS }
 
 DELETE FROM system.webassembly_modules WHERE name = 'module1';
 

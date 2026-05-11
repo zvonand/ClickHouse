@@ -18,7 +18,7 @@ allowed-tools: Task, Bash, Read, Glob, Grep, WebFetch, AskUserQuestion
 - Fetch PR metadata (title, description, base/head refs, changed files).
 - Fetch the full PR diff.
 - Note the PR title, description, and linked issues
-- **Detect revert PRs** before validating template metadata. A PR is a revert when the title starts with `Revert "..."` (the GitHub default), or the body matches `Reverts ClickHouse/ClickHouse#<N>` / `This reverts commit <sha>`. Revert PRs are **exempt** from PR template validation: skip all `Changelog category`, `Changelog entry`, and documentation checkbox checks for them, and do not flag missing template fields. Only verify that the body identifies the reverted PR or commit.
+- **Detect revert PRs** before validating template metadata. A PR is a revert when the title starts with `Revert "..."` (the GitHub default), or the body matches `Reverts ClickHouse/ClickHouse#<N>` / `This reverts commit <sha>`. Revert PRs are **exempt** from PR template validation: skip `Changelog category` and `Changelog entry` checks for them, and do not flag missing template fields. Only verify that the body identifies the reverted PR or commit.
 - For non-revert PRs, validate PR template metadata against `.github/PULL_REQUEST_TEMPLATE.md`:
   - `Changelog category` is present, valid, and semantically correct for the actual code change.
   - `Changelog entry` is present and user-readable when required by the selected category.
@@ -55,7 +55,6 @@ INPUTS YOU WILL RECEIVE
 - Linked issues / discussions
 - CI status and logs (if available)
 - Tests added/modified and their results
-- Docs changes (user docs, release notes)
 
 If any of these are missing, note it under "Missing context" and proceed as far as possible.
 
@@ -98,19 +97,14 @@ WHAT TO REVIEW VS WHAT TO IGNORE
 - Scan all changed lines for typos in comments, variable names, string literals, log messages, error messages, and documentation.
 - Report all typos found with suggested corrections.
 - Check that error messages are clear, informative, and help the user understand what went wrong and how to fix it.
-- Review PR template changelog quality: `Changelog category` must match the change, and `Changelog entry` (when required by the PR template) must be present, specific, and user-readable. **Skip this entirely for revert PRs** (see "Obtaining the Diff" for detection).
+- Review PR template changelog quality: `Changelog category` must match the change, and `Changelog entry` (when required by the PR template) must be present, specific, and user-readable. **Skip this entirely for revert PRs**.
 - Read the changelog-entry standards from `clickhouse-pr-description` and apply them: avoid vague text (e.g. "fix bug"), describe the exact affected feature/behavior, and for backward-incompatible changes explain old behavior, new behavior, and how to preserve old behavior when possible.
 
-**Documentation is auto-generated from source for structured parts of the system — do NOT request separate `docs/` files for these:**
-- ClickHouse auto-generates user-facing documentation for the structured surface of the system directly from the source code. This includes (non-exhaustive): SQL functions and aggregate functions (via `FunctionDocumentation` registered at function factory time), settings (via the doc-string argument of the `DECLARE(...)` macro in `src/Core/Settings.cpp`, `MergeTreeSettings.cpp`, format settings, server settings, etc.), table functions, table engines, formats, system tables, and similar registered components.
-- When a PR adds or changes a function, setting, table function, table engine, format, or system table, the correct place for documentation is **the source code registration** (e.g. `FunctionDocumentation` fields like `description`, `syntax`, `arguments`, `returned_value`, `examples`, `introduced_in`, `category`; or the doc-string in `DECLARE(...)` for settings). A separate hand-written page under `docs/` is **not required** and asking for one is a false positive.
-- Only flag missing documentation when:
-  - The structured doc fields are themselves missing, empty, or clearly inadequate (e.g. no `description`, no `examples`, no `syntax` for a new function; empty doc-string in `DECLARE` for a new setting).
-  - The change is to a **non-structured** area that has no auto-generation (e.g. high-level guides, tutorials, architecture docs, operational/admin docs, integration guides) — those do live under `docs/` and may legitimately need updates.
-- Do **not** ask the contributor to add `docs/` files for new functions, settings, dialects, or other registered components when the source-level documentation is present. If the source-level docs are weak, comment on the source-level fields directly instead.
+**Documentation:**
+- Structured ClickHouse surfaces are documented from source registrations: SQL functions and aggregate functions (`FunctionDocumentation`), settings (`DECLARE` doc strings), table functions, table engines, formats, system tables, and similar components. Do not ask for a separate `docs/` page when this source-level documentation is present and adequate.
+- Flag documentation only when source-level structured docs are missing or weak, or when the change needs non-structured user guidance that belongs under `docs/` (guides, tutorials, architecture, operations/admin, integrations).
 
 **Explicitly ignore (do not comment on these unless they indicate a bug):**
-- Commented debugging code (completely ignore for draft PR, no more than one message in total)
 - Pure formatting (whitespace, brace style, minor naming preferences).
 - "Nice to have" refactors or micro-optimizations without clear benefit.
 - Python/Ruby/CI config nitpicks such as:
@@ -226,8 +220,8 @@ CLICKHOUSE RULES (MANDATORY)
   Any format (columns, aggregates, protocol, settings serialization, replication metadata) must be versioned. Check upgrade/downgrade resilience and the impact on existing clusters.
 - **Core-area scrutiny**
   For changes in query execution, storage engines, replication, Keeper/coordination, system tables, and MergeTree internals: read the full modified file (not just the diff context); verify invariants hold under concurrent background operations (merges, mutations, replication); check all error paths including those not touched by the diff; and confirm the change is consistent with symmetric subsystems — e.g. if fixing `ReplicatedMergeTree`, check `SharedMergeTree` and partition-level variants for the same issue.
-- **No test removal**
-  Do **not** delete or relax existing tests. New behavior requires **new tests**.
+- **Test coverage**
+  Do **not** delete or relax existing tests, except in revert PRs where removing tests added by the reverted change is expected. New behavior and important fixes require focused tests that cover the changed behavior and relevant edge cases.
   Tests replace random database names with `default` in output normalization. Do **not** flag hardcoded `default.` or `default_` prefixes in expected test output as incorrect or suggest using `${CLICKHOUSE_DATABASE}` – this is by design.
 - **Experimental gate**
   Features that introduce genuinely new or risky behavior — new engines, new query execution strategies, new replication mechanisms, new on-disk formats, or features whose incorrect implementation could cause data loss or corruption — must be gated behind an **experimental** setting (e.g. `allow_experimental_simd_acceleration`) until proven safe. The gate can later be made ineffective at GA. Thin wrappers that expose already-stable internal code as SQL functions, simple utility functions, or low-risk additive features do **not** need a gate.
@@ -314,7 +308,7 @@ Example:
 | Deletion logging | ✅ | |
 | Serialization versioning | ➖ | |
 | Core-area scrutiny | ✅ | |
-| No test removal | ✅ | |
+| Test coverage | ✅ | |
 | Experimental gate | ❌ | New feature `X` has no gate |
 | No magic constants | ✅ | |
 | Backward compatibility | ⚠️ | Default changed without `SettingsChangesHistory.cpp` update |

@@ -4,6 +4,10 @@
 -- underlying local table was non-empty, breaking the outer `SELECT`.
 -- The bug requires at least one row in the local table to surface; with
 -- an empty table the planner short-circuits and no rename happens.
+-- The originally reported scenario uses default settings and is fixed on
+-- master. Setting `optimize_read_in_order = 0` still hits a related rename
+-- in the analyzer, so the regression query pins it to `1` to keep this
+-- test stable under random-settings runs.
 
 DROP TABLE IF EXISTS dist_t;
 DROP TABLE IF EXISTS local_t;
@@ -23,7 +27,7 @@ SELECT timestamp, id
 FROM A
 ORDER BY timestamp AS `timestamp` DESC
 LIMIT 10
-SETTINGS distributed_product_mode = 'allow';
+SETTINGS distributed_product_mode = 'allow', optimize_read_in_order = 1;
 
 DROP TABLE dist_t;
 DROP TABLE local_t;

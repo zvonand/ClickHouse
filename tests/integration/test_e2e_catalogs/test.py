@@ -1197,15 +1197,26 @@ def test_list_tables_pagination(node, catalog_manager):
         db = catalog_manager.make_database_name()
         catalog_manager.create_catalog(node, db)
 
+        # Catalog backends render tables as ``<namespace>.<short_name>``
+        # (``dbo.<X>`` for OneLake, ``<session_ns>.<X>`` for BigLake,
+        # per-table ``ch_e2e_glue_<hex>.<X>`` for Glue). Take the part
+        # after the last dot and use exact set membership so prefix
+        # collisions like ``..._001`` vs ``..._0010`` cannot be silently
+        # masked by substring matching.
+        def _short_names(lines):
+            return {line.strip().rsplit(".", 1)[-1] for line in lines if line.strip()}
+
         # Cloud catalogs index new tables asynchronously; poll SHOW
         # TABLES until every created table is visible or the deadline
         # passes.
         deadline = time.monotonic() + 600
         listed = []
+        listed_set: set = set()
         missing = list(expected)
         while time.monotonic() < deadline:
             listed = node.query(f"SHOW TABLES FROM {db}").strip().splitlines()
-            missing = [t for t in expected if not any(t in line for line in listed)]
+            listed_set = _short_names(listed)
+            missing = [t for t in expected if t not in listed_set]
             if not missing:
                 break
             time.sleep(10)
@@ -1213,21 +1224,20 @@ def test_list_tables_pagination(node, catalog_manager):
         assert not missing, (
             f"SHOW TABLES from {db} is missing {len(missing)}/{n_tables} "
             f"tables (first missing: {missing[:5]}); listing returned "
-            f"{len(listed)} entries — list response was truncated at the "
-            f"catalog page boundary."
+            f"{len(listed_set)} unique short names from {len(listed)} entries "
+            f"— list response was truncated at the catalog page boundary."
         )
 
         sys_listed = node.query(
             f"SELECT name FROM system.tables WHERE database = '{db}' FORMAT TSV",
             settings={"show_data_lake_catalogs_in_system_tables": 1},
         ).strip().splitlines()
-        sys_missing = [
-            t for t in expected if not any(t in line for line in sys_listed)
-        ]
+        sys_listed_set = _short_names(sys_listed)
+        sys_missing = [t for t in expected if t not in sys_listed_set]
         assert not sys_missing, (
             f"system.tables for {db} is missing {len(sys_missing)}/{n_tables} "
             f"tables (first missing: {sys_missing[:5]}); listing returned "
-            f"{len(sys_listed)} entries."
+            f"{len(sys_listed_set)} unique short names from {len(sys_listed)} entries."
         )
 
         # Read a table whose name sorts last to confirm later-page entries

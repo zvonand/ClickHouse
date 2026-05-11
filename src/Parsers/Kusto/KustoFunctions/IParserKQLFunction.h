@@ -80,6 +80,7 @@ public:
     kqlCallToExpression(std::string_view function_name, std::initializer_list<const std::string_view> params, const IParser::Pos & parent_pos);
     static String kqlCallToExpression(std::string_view function_name, std::span<const std::string_view> params, const IParser::Pos & parent_pos);
     static String escapeSingleQuotes(const String & input);
+    static String formatTimespanSQL(const String & seconds_expr);
 
 protected:
     virtual bool convertImpl(String & out, IParser::Pos & pos) = 0;

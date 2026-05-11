@@ -7,6 +7,7 @@
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergWrites.h>
 #include <mutex>
 #include <chrono>
+#include <unordered_set>
 #include <Core/SettingsEnums.h>
 #include "config.h"
 
@@ -681,6 +682,11 @@ RestCatalog::Namespaces RestCatalog::getNamespaces(const std::string & base_name
 
     Namespaces all_namespaces;
     String page_token;
+    /// Cycle-detection guard: tracks every non-empty `next-page-token` we have seen on this
+    /// request so we can refuse to loop when a malformed catalog repeats a token. Covers both
+    /// the immediate-repeat case (`A -> A`) and longer cycles (`A -> B -> A -> ...`), since
+    /// any revisit triggers a duplicate `insert`.
+    std::unordered_set<String> seen_tokens;
 
     try
     {
@@ -709,15 +715,15 @@ RestCatalog::Namespaces RestCatalog::getNamespaces(const std::string & base_name
 
             if (next_page_token.empty())
                 break;
-            /// Monotonic-progress guard: if the server returns the same `next-page-token` we
-            /// just submitted as `pageToken`, iterating further would loop forever. Treat
-            /// it as a malformed catalog response rather than hanging `SHOW TABLES` /
-            /// `system.tables`.
-            if (next_page_token == page_token)
+            /// Cycle guard: if the catalog returns a `next-page-token` we have already seen
+            /// on this request, iterating further would loop forever. Treat it as a malformed
+            /// catalog response rather than hanging `SHOW TABLES` / `system.tables`. This
+            /// covers immediate repeats (`A -> A`) and longer cycles (`A -> B -> A`, etc.).
+            if (!seen_tokens.insert(next_page_token).second)
                 throw DB::Exception(
                     DB::ErrorCodes::DATALAKE_DATABASE_ERROR,
-                    "Iceberg REST catalog returned the same `next-page-token` (`{}`) twice in a row "
-                    "while listing namespaces under `{}` — refusing to loop.",
+                    "Iceberg REST catalog returned a `next-page-token` (`{}`) already seen on this "
+                    "request while listing namespaces under `{}` — refusing to loop.",
                     next_page_token, base_namespace);
             page_token = std::move(next_page_token);
         }
@@ -828,6 +834,11 @@ DB::Names RestCatalog::getTables(const std::string & base_namespace, size_t limi
 
     DB::Names tables;
     String page_token;
+    /// Cycle-detection guard: tracks every non-empty `next-page-token` we have seen on this
+    /// request so we can refuse to loop when a malformed catalog repeats a token. Covers both
+    /// the immediate-repeat case (`A -> A`) and longer cycles (`A -> B -> A -> ...`), since
+    /// any revisit triggers a duplicate `insert`.
+    std::unordered_set<String> seen_tokens;
 
     while (true)
     {
@@ -856,15 +867,15 @@ DB::Names RestCatalog::getTables(const std::string & base_namespace, size_t limi
             break;
         if (next_page_token.empty())
             break;
-        /// Monotonic-progress guard: if the server returns the same `next-page-token` we
-        /// just submitted as `pageToken`, iterating further would loop forever. Treat
-        /// it as a malformed catalog response rather than hanging `SHOW TABLES` /
-        /// `system.tables`.
-        if (next_page_token == page_token)
+        /// Cycle guard: if the catalog returns a `next-page-token` we have already seen
+        /// on this request, iterating further would loop forever. Treat it as a malformed
+        /// catalog response rather than hanging `SHOW TABLES` / `system.tables`. This
+        /// covers immediate repeats (`A -> A`) and longer cycles (`A -> B -> A`, etc.).
+        if (!seen_tokens.insert(next_page_token).second)
             throw DB::Exception(
                 DB::ErrorCodes::DATALAKE_DATABASE_ERROR,
-                "Iceberg REST catalog returned the same `next-page-token` (`{}`) twice in a row "
-                "while listing tables in namespace `{}` — refusing to loop.",
+                "Iceberg REST catalog returned a `next-page-token` (`{}`) already seen on this "
+                "request while listing tables in namespace `{}` — refusing to loop.",
                 next_page_token, base_namespace);
         page_token = std::move(next_page_token);
     }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tags: no-fasttest, no-parallel
+# Tags: no-fasttest
 
 # Regression test for https://github.com/ClickHouse/ClickHouse/issues/104295
 #

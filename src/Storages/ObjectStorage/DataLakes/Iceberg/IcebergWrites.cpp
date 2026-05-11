@@ -371,10 +371,14 @@ void generateManifestFile(
 
             auto lower_statistics = data_file_statistics->getLowerBounds();
             if (canWriteStatistics(lower_statistics, field_id_to_column_index, sample_block))
+            {
                 set_fields(lower_statistics, Iceberg::f_lower_bounds, dump_fields);
+            }
             auto upper_statistics = data_file_statistics->getUpperBounds();
             if (canWriteStatistics(upper_statistics, field_id_to_column_index, sample_block))
+            {
                 set_fields(upper_statistics, Iceberg::f_upper_bounds, dump_fields);
+            }
         }
         auto summary = new_snapshot->getObject(Iceberg::f_summary);
         if (summary->has(Iceberg::f_added_records))
@@ -698,11 +702,7 @@ IcebergStorageSink::IcebergStorageSink(
                 sortBlockByKeyDescription(extended_block_for_sorting, sort_description, context);
 
             if (current_partition_spec->getArray(Iceberg::f_fields)->size() > 0)
-                partitioner = ChunkPartitioner(
-                    current_partition_spec->getArray(Iceberg::f_fields),
-                    current_schema,
-                    context_,
-                    std::make_shared<const Block>(extended_block_for_sorting));
+                partitioner = ChunkPartitioner(current_partition_spec->getArray(Iceberg::f_fields), current_schema->getArray(Iceberg::f_fields), context_, std::make_shared<const Block>(extended_block_for_sorting));
             break;
         }
     }
@@ -970,7 +970,7 @@ bool IcebergStorageSink::initializeMetadata()
                 {
                     partititon_spec = current_partition_spec;
                     if (current_partition_spec->getArray(Iceberg::f_fields)->size() > 0)
-                        partitioner = ChunkPartitioner(current_partition_spec->getArray(Iceberg::f_fields), current_schema, context, sample_block);
+                        partitioner = ChunkPartitioner(current_partition_spec->getArray(Iceberg::f_fields), current_schema->getArray(Iceberg::f_fields), context, sample_block);
                     break;
                 }
             }

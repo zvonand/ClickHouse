@@ -20,7 +20,6 @@
 #include <Storages/MutationCommands.h>
 #include <Storages/StorageInMemoryMetadata.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Constant.h>
-#include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergTableStateSnapshot.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/IcebergWrites.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/MetadataGenerator.h>
 #include <Storages/ObjectStorage/DataLakes/Iceberg/Mutations.h>
@@ -595,6 +594,7 @@ void mutate(
         filename_generator.setCompressionMethod(compression_method);
 
         auto metadata = getMetadataJSONObject(metadata_path, object_storage, persistent_table_components.metadata_cache, context, log, compression_method, persistent_table_components.table_uuid);
+
         if (metadata->getValue<Int32>(f_format_version) < 2)
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Mutations are supported only for the second version of iceberg format");
         auto partition_spec_id = metadata->getValue<Int64>(Iceberg::f_default_spec_id);
@@ -637,7 +637,7 @@ void mutate(
         const auto sample_block = std::make_shared<const Block>(fresh_storage_metadata->getSampleBlock());
         std::optional<ChunkPartitioner> chunk_partitioner;
         if (partititon_spec->has(Iceberg::f_fields) && partititon_spec->getArray(Iceberg::f_fields)->size() > 0)
-            chunk_partitioner = ChunkPartitioner(partititon_spec->getArray(Iceberg::f_fields), current_schema, context, sample_block);
+            chunk_partitioner = ChunkPartitioner(partititon_spec->getArray(Iceberg::f_fields), current_schema->getArray(Iceberg::f_fields), context, sample_block);
 
         auto mutation_files = writeDataFiles(
             commands,

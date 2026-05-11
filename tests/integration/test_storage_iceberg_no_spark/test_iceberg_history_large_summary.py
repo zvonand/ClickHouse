@@ -9,9 +9,6 @@ from helpers.iceberg_utils import (
 )
 
 
-INSERT_SETTINGS = {"allow_insert_into_iceberg": 1}
-
-
 def _metadata_dir(table_name):
     return f"/var/lib/clickhouse/user_files/iceberg_data/default/{table_name}/metadata"
 
@@ -49,13 +46,14 @@ def test_iceberg_history_summary_overflow(started_cluster_iceberg_no_spark, form
         "(x Int)",
         format_version,
     )
-    instance.query(f"INSERT INTO {table_name} VALUES (1);", settings=INSERT_SETTINGS)
+    instance.query(f"INSERT INTO {table_name} VALUES (1);")
 
     meta, prev = _read_latest_metadata(instance, table_name)
     assert meta.get("snapshots"), "snapshot must be present after INSERT"
 
-    # The exact value from the bug report; > INT32_MAX (2147483647).
+    # The exact value from the bug report.
     huge = "6986350573"
+    assert int(huge) > 2147483647
     for snap in meta["snapshots"]:
         summary = snap.setdefault("summary", {})
         summary["added-data-files"] = huge

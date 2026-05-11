@@ -1011,46 +1011,47 @@ def test_postgres_date32_array(started_cluster):
     cursor.execute("DROP TABLE test_date32_array")
 
 
-def test_postgres_read_boolean_array(started_cluster):
-    """Test reading PostgreSQL boolean arrays with native 't'/'f' text values.
+def test_postgres_array_parser_dimension_underflow(started_cluster):
+    """Regression test for `size_t` underflow in the PostgreSQL array parser.
 
-    PostgreSQL boolean arrays contain 't'/'f' text values. The array parser
-    must handle these correctly (the scalar boolean path handled 't'/'f' but
-    the array path previously did not, causing a conversion error).
-    Also validates dimension tracking doesn't underflow on well-formed input.
+    When `pqxx::array_parser` emits `row_end` while the parser's `dimension`
+    counter is 0 (for example, an array text starting with `}`), the previous
+    code decremented `dimension` past 0 — a `size_t` underflow to `SIZE_MAX` —
+    and then indexed `dimensions[SIZE_MAX]`, which is out-of-bounds. The fix
+    throws a `BAD_ARGUMENTS` exception in this case instead.
+
+    PostgreSQL itself validates array literals at INSERT time, so the bug is
+    unreachable via a column declared as `boolean[]`/`integer[]` on the
+    PostgreSQL side. The reproducer below stores the malformed payload in a
+    PostgreSQL `text` column and declares the same column as `Array(Int32)` on
+    the ClickHouse side via the `PostgreSQL` table engine. ClickHouse then
+    dispatches the raw `'}'` value through the `vtArray` branch of
+    `insertPostgreSQLValue`, which calls `pqxx::array_parser` on it and
+    reproduces the bug.
     """
     cursor = started_cluster.postgres_conn.cursor()
-    cursor.execute("DROP TABLE IF EXISTS test_read_bool_array")
+    cursor.execute("DROP TABLE IF EXISTS test_array_underflow")
     cursor.execute(
-        """CREATE TABLE test_read_bool_array (
-            id integer,
-            flags boolean[] NOT NULL,
-            nullable_flags boolean[],
-            nested_flags boolean[][] NOT NULL
-        )"""
+        "CREATE TABLE test_array_underflow (id integer, payload text)"
     )
-
-    cursor.execute(
-        "INSERT INTO test_read_bool_array VALUES "
-        "(1, '{t,f,t,f}', '{t,NULL,f}', '{{t,f},{f,t}}'),"
-        "(2, '{t,t,t}', NULL, '{{t,t},{t,t}}'),"
-        "(3, '{f,f}', '{f,f,f,f}', '{{f,f},{f,f}}')"
-    )
+    cursor.execute("INSERT INTO test_array_underflow VALUES (1, '}')")
     started_cluster.postgres_conn.commit()
 
-    table = f"""postgresql('{started_cluster.postgres_ip}:{started_cluster.postgres_port}', 'postgres', 'test_read_bool_array', 'postgres', '{pg_pass}')"""
-
-    result = node1.query(
-        f"SELECT id, flags, nullable_flags, nested_flags FROM {table} ORDER BY id"
+    node1.query("DROP TABLE IF EXISTS pg_array_underflow")
+    node1.query(
+        f"CREATE TABLE pg_array_underflow (id Int32, payload Array(Int32)) "
+        f"ENGINE = PostgreSQL("
+        f"'{started_cluster.postgres_ip}:{started_cluster.postgres_port}', "
+        f"'postgres', 'test_array_underflow', 'postgres', '{pg_pass}')"
     )
-    expected = (
-        "1\t[1,0,1,0]\t[1,NULL,0]\t[[1,0],[0,1]]\n"
-        "2\t[1,1,1]\t[]\t[[1,1],[1,1]]\n"
-        "3\t[0,0]\t[0,0,0,0]\t[[0,0],[0,0]]\n"
-    )
-    assert result == expected
 
-    cursor.execute("DROP TABLE test_read_bool_array")
+    error = node1.query_and_get_error("SELECT id, payload FROM pg_array_underflow")
+    assert "Unexpected array closing bracket" in error, (
+        f"Expected BAD_ARGUMENTS('Unexpected array closing bracket'), got: {error}"
+    )
+
+    node1.query("DROP TABLE pg_array_underflow")
+    cursor.execute("DROP TABLE test_array_underflow")
 
 
 if __name__ == "__main__":

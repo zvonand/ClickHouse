@@ -45,9 +45,6 @@ namespace MergeTreeSetting
     extern const MergeTreeSettingsBool enable_max_bytes_limit_for_min_age_to_force_merge;
     extern const MergeTreeSettingsUInt64 number_of_free_entries_in_pool_to_execute_optimize_entire_partition;
     extern const MergeTreeSettingsBool apply_patches_on_merge;
-
-    /// Cloud only
-    extern const MergeTreeSettingsUInt64 number_of_partitions_to_consider_for_merge;
 }
 
 namespace
@@ -143,18 +140,6 @@ std::unordered_map<String, PartsRanges> combineByPartitions(PartsRanges && range
     }
 
     return ranges_by_partitions;
-}
-
-PartitionIdsHint pickWeightedRandomPartitions(PartitionIdsHint && partitions, const std::unordered_map<String, PartitionStatistics> & stats, size_t partition_to_pick)
-{
-    auto get_weight = [&](const std::string & partition) { return stats.at(partition).part_count; };
-    auto picked_values = pickWeightedRandom(partitions, get_weight, partition_to_pick);
-
-    PartitionIdsHint hint;
-    for (auto it : picked_values)
-        hint.insert(*it);
-
-    return hint;
 }
 
 CollectedPartsRanges collectAllPossibleRanges(
@@ -274,13 +259,6 @@ PartitionIdsHint MergeTreeDataMergerMutator::getPartitionsThatMayBeMerged(
 
     if (auto best = getBestPartitionToOptimizeEntire(selector.merge_constraints[0].max_size_bytes, context, settings, partitions_stats, log); !best.empty())
         partitions_hint.insert(std::move(best));
-
-    /// ### Beginning of private patch ###
-
-    if (auto partitions_to_pick = (*settings)[MergeTreeSetting::number_of_partitions_to_consider_for_merge])
-        partitions_hint = pickWeightedRandomPartitions(std::move(partitions_hint), partitions_stats, partitions_to_pick);
-
-    /// ### End of private patch ###
 
     LOG_TRACE(log,
             "Checked {} partitions, found {} partitions with parts that may be merged: [{}] "

@@ -16,9 +16,10 @@ from ci.praktika.runner import Runner
 
 def test_parse_workflow_inputs():
     # Exercises whitespace stripping, empty value, value containing `=`,
-    # and skipping of malformed entries (no `=`) in a single call.
+    # skipping of malformed entries (no `=`), and rejection of entries
+    # with an empty name (e.g. `=25.4`) in a single call.
     inputs = Runner._parse_workflow_inputs(
-        " ref = main , type=patch , dry-run= , expr=a=b=c , bogus "
+        " ref = main , type=patch , dry-run= , expr=a=b=c , bogus , =25.4 "
     )
     assert inputs == {
         "ref": "main",

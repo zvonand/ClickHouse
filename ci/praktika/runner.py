@@ -913,7 +913,13 @@ class Runner:
         for pair in workflow_input.split(","):
             if "=" in pair:
                 name, _, value = pair.partition("=")
-                inputs[name.strip()] = value.strip()
+                name = name.strip()
+                if not name:
+                    print(
+                        f"WARNING: Skipping --workflow-input entry [{pair}] with empty name"
+                    )
+                    continue
+                inputs[name] = value.strip()
             else:
                 print(
                     f"WARNING: Skipping malformed --workflow-input entry [{pair}] (expected name=value)"

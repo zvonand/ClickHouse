@@ -1608,9 +1608,16 @@ TEST_F(FileCacheTest, SLRUFreeSpaceKeepingProtectedOnly)
                                write_lock, &state_lock);
     }
 
-    /// Verify the precondition: 3 entries / 15 bytes in protected, probationary empty.
+    /// Verify the precondition: 3 entries / 15 bytes total, all in protected,
+    /// probationary empty. The total counters alone would still pass if entries
+    /// leaked into probationary, so we also assert per-queue contents explicitly --
+    /// the empty-probationary assertion is what proves the regression precondition.
     ASSERT_EQ(priority.getElementsCount(state_guard.lock()), 3);
     ASSERT_EQ(priority.getSize(state_guard.lock()), 15);
+    ASSERT_EQ(priority.getProtectedElementsCount(state_guard.lock()), 3);
+    ASSERT_EQ(priority.getProtectedSize(state_guard.lock()), 15);
+    ASSERT_EQ(priority.getProbationaryElementsCount(state_guard.lock()), 0);
+    ASSERT_EQ(priority.getProbationarySize(state_guard.lock()), 0);
 
     /// Call `collectEvictionInfo` with `is_total_space_cleanup=true` and a request
     /// covering everything currently in the cache. This is what the background thread

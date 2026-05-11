@@ -32,6 +32,15 @@ public:
     size_t getElementsCount(const CacheStateGuard::Lock &) const override;
     size_t getElementsCountApprox() const override;
 
+    /// Per-sub-queue accessors. Used by `getStateInfoForLog` and by unit tests that
+    /// need to verify that an entry landed in the expected SLRU sub-queue without
+    /// going through `dump`/`iterate` (which require full `KeyMetadata` setup that
+    /// the `addForRestore` test path does not perform).
+    size_t getProtectedSize(const CacheStateGuard::Lock & lock) const { return protected_queue.getSize(lock); }
+    size_t getProtectedElementsCount(const CacheStateGuard::Lock & lock) const { return protected_queue.getElementsCount(lock); }
+    size_t getProbationarySize(const CacheStateGuard::Lock & lock) const { return probationary_queue.getSize(lock); }
+    size_t getProbationaryElementsCount(const CacheStateGuard::Lock & lock) const { return probationary_queue.getElementsCount(lock); }
+
     std::string getStateInfoForLog(const CacheStateGuard::Lock & lock) const override;
     void check(const CacheStateGuard::Lock &) const override;
 

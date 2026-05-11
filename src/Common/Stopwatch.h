@@ -191,9 +191,10 @@ private:
     {
         if (seconds <= 0.0)
             return 0;
+        constexpr UInt64 max_ns = std::numeric_limits<UInt64>::max() / 2;
         const double ns = seconds * 1000000000.0;
-        if (ns >= 0x1p63)  /// 2^63
-            return std::numeric_limits<UInt64>::max() / 2;
+        if (ns >= static_cast<double>(max_ns))
+            return max_ns;
         return static_cast<UInt64>(ns);
     }
 };

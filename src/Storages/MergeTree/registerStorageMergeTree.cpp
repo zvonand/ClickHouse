@@ -727,9 +727,9 @@ static StoragePtr create(const StorageFactory::Arguments & args)
                     "Set the session setting `allow_experimental_unique_key = 1` to enable it.");
             }
 
-            /// Reject expression-shaped elements at parse time: runtime consumers
+            /// Reject expression-style elements at parse time: runtime consumers
             /// look up keys via `block.getByName(<column name>)`, so an
-            /// expression-shaped UK passes DDL but crashes the first INSERT.
+            /// expression-style UK passes DDL but crashes the first INSERT.
             {
                 const ASTPtr & uk_ast = args.storage_def->unique_key->ptr();
                 auto is_plain_identifier = [](const ASTPtr & node) -> bool
@@ -748,7 +748,7 @@ static StoragePtr create(const StorageFactory::Arguments & args)
                             {
                                 throw Exception(ErrorCodes::BAD_ARGUMENTS,
                                     "UNIQUE KEY must be a list of column identifiers. "
-                                    "Expression-shaped elements such as `{}` are not yet supported; "
+                                    "Expression-style elements such as `{}` are not yet supported; "
                                     "only bare column names are allowed.",
                                     child ? child->formatForErrorMessage() : String("<null>"));
                             }
@@ -759,7 +759,7 @@ static StoragePtr create(const StorageFactory::Arguments & args)
                 {
                     throw Exception(ErrorCodes::BAD_ARGUMENTS,
                         "UNIQUE KEY must be a list of column identifiers. "
-                        "Expression-shaped keys such as `{}` are not yet supported; "
+                        "Expression-style keys such as `{}` are not yet supported; "
                         "only bare column names are allowed.",
                         uk_ast->formatForErrorMessage());
                 }
@@ -772,6 +772,15 @@ static StoragePtr create(const StorageFactory::Arguments & args)
             {
                 throw Exception(ErrorCodes::BAD_ARGUMENTS,
                     "UNIQUE KEY must contain at least one column");
+            }
+
+            NameSet seen_uk_columns;
+            for (const auto & uk_column : metadata.unique_key.column_names)
+            {
+                if (!seen_uk_columns.insert(uk_column).second)
+                    throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                        "UNIQUE KEY contains duplicate column `{}`",
+                        uk_column);
             }
         }
 

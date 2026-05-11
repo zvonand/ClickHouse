@@ -58,7 +58,7 @@ ENGINE = MergeTree
 UNIQUE KEY (does_not_exist)
 ORDER BY (id, user_id); -- { serverError UNKNOWN_IDENTIFIER }
 
--- 7a. Expression-shaped UNIQUE KEY elements are rejected at DDL time.
+-- 7a. Expression-style UNIQUE KEY elements are rejected at DDL time.
 -- Function call as a single-element key.
 CREATE TABLE uk_t (ts DateTime, v String)
 ENGINE = MergeTree
@@ -76,6 +76,12 @@ CREATE TABLE uk_t (id UInt64, v String)
 ENGINE = MergeTree
 UNIQUE KEY (1)
 ORDER BY (id); -- { serverError BAD_ARGUMENTS }
+
+-- 7d. Duplicate columns in a UNIQUE KEY are rejected.
+CREATE TABLE uk_t (a Int, b Int)
+ENGINE = MergeTree
+UNIQUE KEY (a, a)
+ORDER BY (b); -- { serverError BAD_ARGUMENTS }
 
 -- 8. ALTER DROP COLUMN on a unique-key column -> error (via ORDER BY key guard).
 CREATE TABLE uk_t (id UInt64, user_id UInt32, v String)

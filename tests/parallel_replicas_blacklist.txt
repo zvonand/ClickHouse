@@ -179,6 +179,7 @@
 03252_merge_tree_min_bytes_to_seek
 03262_filter_push_down_view
 01283_max_threads_simple_query_optimization
+00443_preferred_block_size_bytes
 
     # NOT BUGS
     Not a bug
@@ -224,6 +225,9 @@
 01583_const_column_in_set_index
     max rows: 2.00, current rows: 11.00
 01585_use_index_for_global_in_with_null
+    max rows: 5.00, current rows: 20.00
+00489_pk_subexpression
+00926_adaptive_index_granularity_pk
 
 01624_soft_constraints
 

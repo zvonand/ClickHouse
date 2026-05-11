@@ -18,10 +18,4 @@ bool InvalidateQueryResponse::updateAndCheckModified(const std::string & new_res
     return true;
 }
 
-std::string InvalidateQueryResponse::get() const
-{
-    std::lock_guard lock(mutex);
-    return response;
-}
-
 }

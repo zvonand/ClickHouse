@@ -143,7 +143,8 @@ SortingProperty applyOrder(QueryPlan::Node * parent, SortingProperty * propertie
 
     if (auto * negative_limit_by_step = typeid_cast<NegativeLimitByStep *>(parent->step.get()))
     {
-        negative_limit_by_step->applyOrder(properties->sort_description);
+        if (properties->sort_scope == SortingProperty::SortScope::Global)
+            negative_limit_by_step->applyOrder(properties->sort_description);
     }
 
     if (auto * transforming = dynamic_cast<ITransformingStep *>(parent->step.get()))

@@ -794,8 +794,23 @@ RestCatalog::Namespaces RestCatalog::parseNamespaces(DB::ReadBuffer & buf, const
 
         /// Iceberg REST OpenAPI spec: response carries `next-page-token` (kebab-case).
         /// Empty / null / missing token all mean "no more pages".
-        if (object->has("next-page-token") && !object->isNull("next-page-token"))
+        ///
+        /// BigLake-non-empty-base-namespace short-circuit: when the BigLake quirk
+        /// above drops every returned entry (because BigLake ignores `parent`
+        /// and returns unrelated top-level namespaces), continuing pagination
+        /// just burns O(pages) REST calls per parent namespace without ever
+        /// contributing to the result. Treat the first page as terminal by
+        /// leaving `next_page_token` empty (already cleared at function entry)
+        /// so the outer `getNamespaces` loop returns immediately.
+        const bool biglake_drops_all_entries
+            = getCatalogType() == DB::DatabaseDataLakeCatalogType::ICEBERG_BIGLAKE
+            && !base_namespace.empty();
+        if (!biglake_drops_all_entries
+            && object->has("next-page-token")
+            && !object->isNull("next-page-token"))
+        {
             next_page_token = object->get("next-page-token").extract<String>();
+        }
 
         return namespaces;
     }

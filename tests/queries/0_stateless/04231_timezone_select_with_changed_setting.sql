@@ -1,3 +1,5 @@
+SET session_timezone = 'UTC';
+
 CREATE TABLE test_tz (d DateTime) ENGINE=Memory AS
 SELECT toDateTime('2000-01-01 00:00:00', 'UTC');
 

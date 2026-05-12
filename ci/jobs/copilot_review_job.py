@@ -257,17 +257,26 @@ def _run_codex_once(prompt):
 
         return Result.from_commands_run(
             name="codex review",
-            # exec: non-interactive.
-            # --dangerously-bypass-approvals-and-sandbox: fully
-            #   unattended; skip approval prompts and don't sandbox the
-            #   agent's shell commands. The agent posts inline comments
-            #   via `gh`, which needs network and writes outside the
-            #   workspace (into GH_CONFIG_DIR). The CI runner is already
-            #   externally isolated, which is the stated supported use
-            #   case for this flag.
+            # -m gpt-5.3-codex: same model the Copilot CLI used, so
+            #   review quality stays comparable across backends.
+            # -s workspace-write: writable workspace + /tmp + CODEX_HOME,
+            #   read-only elsewhere; sufficient for review output and
+            #   the gh CLI's /tmp config dir.
+            # sandbox_workspace_write.network_access=true: the agent
+            #   shells out to `gh` to post inline comments, which needs
+            #   network.
+            # approval_policy=never: codex `exec` is non-interactive,
+            #   but the approval policy still applies; "never" lets the
+            #   agent execute without blocking on an approval request.
+            # --color never: no ANSI codes in the job log.
             command=f"CODEX_HOME={shlex.quote(codex_home)} "
                     f"GH_CONFIG_DIR={shlex.quote(gh_config_dir)} "
-                    f"codex exec --dangerously-bypass-approvals-and-sandbox "
+                    f"codex exec "
+                    f"-m gpt-5.3-codex "
+                    f"-s workspace-write "
+                    f"-c sandbox_workspace_write.network_access=true "
+                    f"-c approval_policy=never "
+                    f"--color never "
                     f"{shlex.quote(prompt)}",
             with_info=True,
         )

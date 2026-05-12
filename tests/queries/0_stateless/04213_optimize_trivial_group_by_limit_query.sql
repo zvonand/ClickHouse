@@ -100,4 +100,13 @@ SETTINGS optimize_trivial_group_by_limit_query = 1;
 SELECT count() FROM (SELECT k FROM (SELECT number AS k FROM numbers(5)) GROUP BY k WITH TOTALS LIMIT 100)
 SETTINGS optimize_trivial_group_by_limit_query = 0;
 
+-- The pass mutates the subquery's own context (`getMutableContext`), not the outer
+-- query's context, so `max_rows_to_group_by` should still observe its default in the
+-- enclosing query after the optimized subquery has been resolved.
+SELECT
+    (SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k LIMIT 5)) AS inner_count,
+    getSetting('max_rows_to_group_by') AS outer_max_rows_to_group_by,
+    getSetting('group_by_overflow_mode') AS outer_group_by_overflow_mode
+SETTINGS optimize_trivial_group_by_limit_query = 1;
+
 DROP TABLE t_trivial_group_by_limit;

@@ -322,6 +322,7 @@ add_object_library(clickhouse_storages Storages)
 if (ARCH_AMD64 AND X86_ARCH_LEVEL VERSION_GREATER_EQUAL 3)
     set_source_files_properties(Storages/StorageGenerateRandom.cpp PROPERTIES COMPILE_FLAGS "-march=x86-64-v2")
 endif()
+
 add_object_library(clickhouse_storages_mysql Storages/MySQL)
 add_object_library(clickhouse_storages_distributed Storages/Distributed)
 add_object_library(clickhouse_storages_mergetree Storages/MergeTree)

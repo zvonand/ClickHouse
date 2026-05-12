@@ -480,12 +480,22 @@ public:
         }
         catch (const Exception & e)
         {
+            /// Once the response header has been sent we can no longer produce
+            /// a well-formed Prometheus error response. So we let the outer handler
+            /// abort the chunked stream via cancelWithException() instead.
+            if (response.sent())
+                throw;
+
+            /// Drop any partial success body still sitting in the output buffer
+            /// before writing the error response.
+            getOutputStream(response).rejectBufferedDataSave();
+
             response.setStatusAndReason(Poco::Net::HTTPResponse::HTTP_BAD_REQUEST);
             String error_str;
             WriteBufferFromString error_buf(error_str);
-            writeString(R"({"status":"error","errorType":"bad_data","error":")", error_buf);
-            writeString(e.message(), error_buf);
-            writeString(R"("})", error_buf);
+            writeString(R"({"status":"error","errorType":"bad_data","error":)", error_buf);
+            writeJSONString(e.message(), error_buf, FormatSettings{});
+            writeString("}", error_buf);
             error_buf.finalize();
             writeString(error_str, getOutputStream(response));
 

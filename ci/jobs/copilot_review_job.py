@@ -41,6 +41,11 @@ GH_PREFIX = "env -u GH_CONFIG_DIR"
 # only reliable way to recover.
 COPILOT_MAX_ATTEMPTS = 3
 
+ROBOT_NAMES = [
+    "/ci/robot-ch-test-poll-copilot",
+    "/ci/robot-ch-test-poll-1-copilot",
+]
+
 
 def _join_prompt(*sections):
     return "\n\n".join(section.rstrip() for section in sections if section).rstrip() + "\n"
@@ -215,8 +220,8 @@ def _post_review():
     )
 
 
-def _run_copilot_once(prompt):
-    """Run a single attempt of `gh auth login` + `copilot`.
+def _run_copilot_once(prompt, robot_name):
+    """Run a single attempt of `gh auth login` + `copilot` for one robot.
 
     Removes any stale REVIEW_FILE first so a successful prior attempt's
     artifact cannot be mistaken for the result of a later failed attempt.
@@ -229,7 +234,6 @@ def _run_copilot_once(prompt):
             print(f"WARNING: Failed to remove stale {REVIEW_FILE}: {e}")
 
     with tempfile.TemporaryDirectory() as gh_config_dir:
-        robot_name = random.choice(["/ci/robot-ch-test-poll-copilot", "/ci/robot-ch-test-poll-1-copilot"])
         print(f"Using robot: {robot_name}")
         token = Secret.Config(
             name=robot_name,
@@ -268,9 +272,12 @@ def _run(prompt):
     code and a missing review file — so both have to be checked here.
     """
     last_error = None
+    robots = ROBOT_NAMES.copy()
+    random.shuffle(robots)
     for attempt in range(1, COPILOT_MAX_ATTEMPTS + 1):
+        robot_name = robots[(attempt - 1) % len(robots)]
         try:
-            result = _run_copilot_once(prompt)
+            result = _run_copilot_once(prompt, robot_name)
             if not result.is_ok():
                 last_error = (
                     f"copilot subprocess exited with non-OK status [{result.status}]"

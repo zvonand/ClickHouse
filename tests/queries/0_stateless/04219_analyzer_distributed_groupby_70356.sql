@@ -3,6 +3,7 @@
 
 DROP TABLE IF EXISTS shard_table_70356;
 DROP TABLE IF EXISTS dist_table_70356;
+DROP TABLE IF EXISTS dist_two_shards_table_70356;
 
 CREATE TABLE shard_table_70356
 (

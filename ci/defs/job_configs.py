@@ -183,15 +183,8 @@ class JobConfigs:
     code_review = Job.Config(
         name=JobNames.CODE_REVIEW,
         runs_on=RunnerLabels.STYLE_CHECK_ARM,
-        command="python3 ./ci/jobs/copilot_review_job.py --pre",
+        command="python3 ./ci/jobs/copilot_review_job.py --codex",
         allow_failure=True,
-    )
-    ci_results_review = Job.Config(
-        name=JobNames.CI_RESULTS_REVIEW,
-        runs_on=RunnerLabels.STYLE_CHECK_ARM,
-        command="python3 ./ci/jobs/copilot_review_job.py --post",
-        allow_failure=True,
-        enable_gh_auth=True,
     )
     ci_tests = Job.Config(
         name=JobNames.CI_TESTS,

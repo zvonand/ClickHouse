@@ -19,13 +19,19 @@ struct ManualMergeSelectorTableInfo
     std::vector<MergeTreePartInfo> scheduled_part_infos;
 };
 
+std::mutex registry_mutex;
+std::unordered_map<StorageID, ManualMergeSelectorTableInfo, StorageID::DatabaseAndTableNameAndUUIDHash, StorageID::DatabaseAndTableNameAndUUIDEqual> registry;
+
 std::pair<ManualMergeSelectorTableInfo *, std::unique_lock<std::mutex>> getTableInfo(const StorageID & id)
 {
-    static std::mutex registry_mutex;
-    static std::unordered_map<StorageID, ManualMergeSelectorTableInfo, StorageID::DatabaseAndTableNameHash, StorageID::DatabaseAndTableNameEqual> registry;
-
     std::unique_lock<std::mutex> lock(registry_mutex);
     return std::make_pair(&registry[id], std::move(lock));
+}
+
+void eraseTableInfo(const StorageID & id)
+{
+    std::unique_lock<std::mutex> lock(registry_mutex);
+    registry.erase(id);
 }
 
 std::optional<PartsRange> lookupRange(const PartsRanges & parts_ranges, const Names & scheduled_merge)
@@ -127,9 +133,7 @@ bool ManualMergeSelector::isAllScheduledPartsCovered(const StorageID & id, const
 
 void ManualMergeSelector::erase(const StorageID & id)
 {
-    auto [info, lock] = getTableInfo(id);
-    info->queue.clear();
-    info->scheduled_part_infos.clear();
+    eraseTableInfo(id);
 }
 
 }

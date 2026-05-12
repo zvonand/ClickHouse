@@ -1429,6 +1429,8 @@ private:
 protected:
     void loadPartAndFixMetadataImpl(MergeTreeData::MutableDataPartPtr part, ContextPtr local_context) const;
 
+    void unregisterFromMergeSelection(const MergeTreeSettingsPtr & settings);
+
     void resetColumnSizes()
     {
         column_sizes.clear();

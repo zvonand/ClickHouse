@@ -3,6 +3,8 @@
 #include <Common/ErrnoException.h>
 
 #include <base/openpty.h>
+#include <sys/ioctl.h>
+#include <termios.h>
 #include <unistd.h>
 
 namespace DB

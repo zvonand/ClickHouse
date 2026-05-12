@@ -45,9 +45,29 @@ def test_print_stacktraces_against_live_server():
     )
 
     # Sanity-check the precondition: the CI tests job started a server.
-    assert ct["pgrep"](command="clickhouse-server"), (
-        "no clickhouse-server process found — this test expects ClickHouseService "
-        "(see ci/jobs/ci_tests_job.py) to be running on localhost:9000"
+    # If this fails, the assertion message includes a process snapshot to
+    # make debugging easy — ClickHouse's watchdog argv0 rewriting, the
+    # container PID namespace, and the pgrep substring search all interact
+    # in non-obvious ways across platforms.  Diagnostics go into the
+    # assertion message (not print) because pytest captures stdout.
+    matches = ct["pgrep"](command="clickhouse-server")
+    if not matches:
+        import subprocess
+        ps_out = subprocess.run(
+            ["ps", "-eo", "pid,ppid,pgid,command"],
+            capture_output=True, text=True, check=False,
+        ).stdout
+        ch_lines = [ln for ln in ps_out.splitlines() if "clickhouse" in ln.lower()]
+        diagnostics = (
+            "ps lines matching 'clickhouse':\n" + "\n".join(ch_lines)
+            if ch_lines
+            else "no 'clickhouse' substring in ps output; head of ps:\n"
+            + "\n".join(ps_out.splitlines()[:30])
+        )
+    assert matches, (
+        "no clickhouse-server process found — this test expects "
+        "ClickHouseService (see ci/jobs/ci_tests_job.py) to be running.\n"
+        f"{diagnostics}"
     )
 
     # Minimal args namespace: only the fields print_stacktraces and its

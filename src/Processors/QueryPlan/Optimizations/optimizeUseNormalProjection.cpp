@@ -267,7 +267,7 @@ std::optional<String> optimizeUseNormalProjections(
     auto projection_query_info = query_info;
     projection_query_info.prewhere_info = nullptr;
     projection_query_info.row_level_filter = nullptr;
-    if (query.dag)
+    if (query.dag && query.filter_node)
         projection_query_info.filter_actions_dag = std::make_unique<ActionsDAG>(query.dag->clone());
     auto empty_mutations_snapshot = reading->getMutationsSnapshot()->cloneEmpty();
     for (const auto * projection : normal_projections)

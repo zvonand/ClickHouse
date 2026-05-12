@@ -6,6 +6,7 @@
 #include <Storages/MergeTree/IMergeTreeDataPart.h>
 #include <Storages/MergeTree/MergeTreeData.h>
 #include <Common/Exception.h>
+#include <Common/FailPoint.h>
 #include <Common/TransactionID.h>
 #include <Common/ZooKeeper/IKeeper.h>
 #include <Common/noexcept_scope.h>
@@ -21,6 +22,11 @@ namespace ErrorCodes
     extern const int INVALID_TRANSACTION;
     extern const int LOGICAL_ERROR;
     extern const int NOT_IMPLEMENTED;
+}
+
+namespace FailPoints
+{
+    extern const char transaction_after_commit_pause[];
 }
 
 static void checkNotOrdinaryDatabase(const StoragePtr & storage)
@@ -270,6 +276,19 @@ void MergeTreeTransaction::afterCommit(CSN assigned_csn) noexcept
         created_parts = creating_parts;
         removed_parts = removing_parts;
         committed_mutations = mutations;
+    }
+
+    /// Test-only pause point inserted between the CSN wake-up (above) and the per-part
+    /// metadata writes (below). With this failpoint enabled, a regression test can observe
+    /// the race window where `waitStateChange` has already returned to the client but
+    /// `removal_csn` / `creation_csn` are not yet visible through `system.parts`.
+    /// Wrapped in try/catch because the enclosing function is `noexcept`.
+    try
+    {
+        FailPointInjection::pauseFailPoint(FailPoints::transaction_after_commit_pause);
+    }
+    catch (...) // NOLINT(bugprone-empty-catch)
+    {
     }
 
     for (const auto & part : created_parts)

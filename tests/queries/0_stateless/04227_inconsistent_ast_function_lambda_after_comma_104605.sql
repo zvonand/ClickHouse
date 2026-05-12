@@ -32,6 +32,19 @@ SELECT position(h, x -> x); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 SELECT formatQuerySingleLine('SELECT substring(x, `x` -> `x`)');
 SELECT formatQuerySingleLine('SELECT position(h, `x` -> `x`)');
 
+-- Non-trivial lambda bodies must also round-trip cleanly. The body leaves
+-- higher-priority binary operators above the `lambda` operator on the
+-- parser's operators stack (e.g. `[..., Lambda, Plus]` for `x -> x + 1`),
+-- so the state-0 closing-bracket handler must scan the entire stack for a
+-- pending lambda — not just inspect the top via `previousType`.
+SELECT formatQuerySingleLine('SELECT substring(s, x -> x + 1)');
+SELECT formatQuerySingleLine('SELECT position(h, x -> x + 1)');
+SELECT formatQuerySingleLine('SELECT substring(a, b, x -> x AND y)');
+-- Direct merged-tuple form (the AST shape the formatter actually emits)
+-- must parse for both trivial and non-trivial bodies.
+SELECT substring((s, x) -> x + 1); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+SELECT position((h, x) -> x + 1); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
+
 -- Note: bare one-argument forms `substring(x)` / `position(x)` continue to
 -- fail at parse time with `SYNTAX_ERROR`. That is exercised by
 -- `02154_parser_backtracking` (deeply-nested `position(x)`,

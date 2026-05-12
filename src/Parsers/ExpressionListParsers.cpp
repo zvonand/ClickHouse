@@ -628,6 +628,20 @@ public:
         return operators.back().type;
     }
 
+    /// True when any operator of the given type is pending anywhere on the
+    /// operators stack of the current element. Used to detect a pending lambda
+    /// in `SubstringLayer` / `PositionLayer` state-0 closing-bracket handling:
+    /// a lambda body can leave higher-priority binary operators on top of the
+    /// lambda operator (e.g. `[..., Lambda, Plus]` for `x -> x + 1`), so
+    /// inspecting only the stack top via `previousType` would miss the lambda.
+    bool hasPendingOperator(OperatorType type) const
+    {
+        for (const auto & op : operators)
+            if (op.type == type)
+                return true;
+        return false;
+    }
+
     int isCurrentElementEmpty() const
     {
         return operators.empty() && operands.empty();
@@ -1716,15 +1730,21 @@ public:
                 state = 1;
             }
             /// Accept the one-argument form ONLY when a lambda operator is
-            /// pending. This is the AST shape produced by the documented
-            /// lambda-merging sugar (`mapApply`, `arrayFold`, …): the formatter
-            /// emits `substring((x, y) -> z)` for `substring(lambda(tuple(x, y), z))`
-            /// and the re-parser must accept that exact form to keep the AST
-            /// format/re-parse round-trip invariant in `executeQueryImpl`. Bare
-            /// `substring(x)` continues to fail with `SYNTAX_ERROR` at parse
-            /// time — `02154_parser_backtracking` depends on this for
+            /// pending anywhere on the operators stack. This is the AST shape
+            /// produced by the documented lambda-merging sugar (`mapApply`,
+            /// `arrayFold`, …): the formatter emits `substring((x, y) -> z)`
+            /// for `substring(lambda(tuple(x, y), z))` and the re-parser must
+            /// accept that exact form to keep the AST format/re-parse
+            /// round-trip invariant in `executeQueryImpl`. We must scan the
+            /// whole stack — and not just the top via `previousType` — because
+            /// a lambda body can leave higher-priority binary operators above
+            /// the `lambda` operator (e.g. `[..., Lambda, Plus]` for
+            /// `(x) -> x + 1`); `mergeElement` below drains them in priority
+            /// order before combining the lambda. Bare `substring(x)`
+            /// continues to fail with `SYNTAX_ERROR` at parse time —
+            /// `02154_parser_backtracking` depends on this for
             /// exponential-backtracking protection. See issue #104605.
-            else if (previousType() == OperatorType::Lambda
+            else if (hasPendingOperator(OperatorType::Lambda)
                 && ParserToken(TokenType::ClosingRoundBracket).ignore(pos, expected))
             {
                 if (!mergeElement())
@@ -1928,13 +1948,19 @@ public:
                 state = 2;
             }
             /// Accept the one-argument form ONLY when a lambda operator is
-            /// pending. This is the AST shape produced by the documented
-            /// lambda-merging sugar: the formatter emits `position((x, y) -> z)`
-            /// for `position(lambda(tuple(x, y), z))` and the re-parser must
-            /// accept that exact form to keep the round-trip invariant. Bare
-            /// `position(x)` continues to fail with `SYNTAX_ERROR` —
-            /// `02154_parser_backtracking` depends on this. See issue #104605.
-            else if (previousType() == OperatorType::Lambda
+            /// pending anywhere on the operators stack. This is the AST shape
+            /// produced by the documented lambda-merging sugar: the formatter
+            /// emits `position((x, y) -> z)` for `position(lambda(tuple(x, y), z))`
+            /// and the re-parser must accept that exact form to keep the
+            /// round-trip invariant. We must scan the whole stack — and not
+            /// just the top via `previousType` — because a lambda body can
+            /// leave higher-priority binary operators above the `lambda`
+            /// operator (e.g. `[..., Lambda, Plus]` for `(x) -> x + 1`);
+            /// `mergeElement` drains them in priority order before combining
+            /// the lambda. Bare `position(x)` continues to fail with
+            /// `SYNTAX_ERROR` — `02154_parser_backtracking` depends on this.
+            /// See issue #104605.
+            else if (hasPendingOperator(OperatorType::Lambda)
                 && ParserToken(TokenType::ClosingRoundBracket).ignore(pos, expected))
             {
                 if (!mergeElement())

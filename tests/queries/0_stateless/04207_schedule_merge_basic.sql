@@ -1,3 +1,5 @@
+-- Tags: no-random-settings, no-random-merge-tree-settings, no-shared-merge-tree
+
 DROP TABLE IF EXISTS t_manual;
 
 CREATE TABLE t_manual (x UInt64) ENGINE = MergeTree ORDER BY x

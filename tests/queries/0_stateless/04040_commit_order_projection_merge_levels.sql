@@ -1,4 +1,4 @@
--- Tags: no-parallel-replicas
+-- Tags: no-random-settings, no-random-merge-tree-settings, no-shared-merge-tree, no-parallel-replicas
 
 set enable_analyzer = 1;
 

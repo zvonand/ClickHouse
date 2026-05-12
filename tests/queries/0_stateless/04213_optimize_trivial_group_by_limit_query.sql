@@ -101,11 +101,13 @@ SELECT count() FROM (SELECT k FROM (SELECT number AS k FROM numbers(5)) GROUP BY
 SETTINGS optimize_trivial_group_by_limit_query = 0;
 
 -- The pass mutates the subquery's own context (`getMutableContext`), not the outer
--- query's context, so `max_rows_to_group_by` should still observe its default in the
--- enclosing query after the optimized subquery has been resolved.
+-- query's context, so the outer query's `group_by_overflow_mode` should still observe
+-- its default (`throw`) after the optimized subquery has switched it to `any` internally.
+-- (`max_rows_to_group_by` is mutated together with the mode and would make for an
+-- equivalent assertion, but the CI test profile overrides its default value, so this
+-- test asserts on `group_by_overflow_mode` only — both leak together if leakage occurs.)
 SELECT
     (SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k LIMIT 5)) AS inner_count,
-    getSetting('max_rows_to_group_by') AS outer_max_rows_to_group_by,
     getSetting('group_by_overflow_mode') AS outer_group_by_overflow_mode
 SETTINGS optimize_trivial_group_by_limit_query = 1;
 

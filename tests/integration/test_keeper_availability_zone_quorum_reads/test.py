@@ -10,7 +10,9 @@ re-triggered the termination on every restart.
 The companion test under `quorum_reads=false` exercises the local read path
 (`processLocalRequests` -> `processImpl<true>`), which already returned
 `ZNONODE` gracefully before the fix. Running both ensures the two read modes
-return the same response for an unconfigured AZ.
+return the same response for an unconfigured AZ. A third case pins the
+configured branch: with `<placement>` set, a `quorum_reads=true` `Get` should
+return the AZ value normally.
 """
 
 import pytest
@@ -30,6 +32,12 @@ node = cluster.add_instance(
 node_local = cluster.add_instance(
     "node_local",
     main_configs=["configs/keeper_config_local_reads.xml"],
+    stay_alive=True,
+)
+
+node_configured = cluster.add_instance(
+    "node_configured",
+    main_configs=["configs/keeper_config_configured.xml"],
     stay_alive=True,
 )
 
@@ -75,3 +83,16 @@ def test_get_availability_zone_returns_znonode_under_local_reads():
     `processLocalRequests` and `processImpl<true>` and should also return
     `ZNONODE`, matching the response of the quorum-read path after the fix."""
     _assert_znonode(node_local, "node_local")
+
+
+def test_get_availability_zone_returns_value_when_configured():
+    """When `<placement>` is configured, a `quorum_reads=true` `Get` must
+    return the configured AZ value. This pins the configured branch of the
+    fix: the container lookup still succeeds under the raft commit path."""
+    keeper_utils.wait_until_connected(cluster, node_configured)
+    assert _keeper_alive(node_configured)
+
+    with KeeperClient.from_cluster(cluster, "node_configured", port=9181) as client:
+        assert client.get("/keeper/availability_zone") == "az-configured"
+
+    assert _keeper_alive(node_configured)

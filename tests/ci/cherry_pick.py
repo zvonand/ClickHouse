@@ -187,6 +187,10 @@ close it.
                 )
                 return
             self.create_cherrypick()
+
+        if self.backported:
+            # The `backported` can be set to True if the changes are already applied
+            return
         assert self.cherrypick_pr, "Unable to create cherry-pick PR"
 
         if self.cherrypick_pr.mergeable and self.cherrypick_pr.state != "closed":

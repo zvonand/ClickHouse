@@ -44,10 +44,10 @@ tx_async 1 "SET throw_on_unsupported_query_inside_transaction = 0"
 tx_async 1 "ALTER TABLE t_after_commit DROP PARTITION ID 'all'"
 tx_async 1 "COMMIT"
 
-# Give the background thread time to reach the pause point. We can't easily detect
-# arrival at the pause from SQL (system.processes does not expose pause state), so a
-# fixed delay is the simplest signal here. 2 seconds is plenty on local storage.
-sleep 2
+# Deterministically wait until the background thread is paused inside `afterCommit`.
+# `SYSTEM WAIT FAILPOINT ... PAUSE` returns immediately once a thread is paused at the
+# failpoint, so the subsequent checks see a stable state regardless of host load.
+$CLICKHOUSE_CLIENT -q "SYSTEM WAIT FAILPOINT transaction_after_commit_pause PAUSE"
 
 # Check 1: the foreground COMMIT must still be running (paused inside afterCommit).
 $CLICKHOUSE_CLIENT -q "

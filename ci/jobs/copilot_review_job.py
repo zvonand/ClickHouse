@@ -24,6 +24,7 @@ non-zero exit code and a missing/empty review file — so both are checked here.
 """
 
 import os
+import random
 import shlex
 import subprocess
 import sys
@@ -46,13 +47,18 @@ GH_PREFIX = "env -u GH_CONFIG_DIR"
 # sequence is the only reliable way to recover.
 MAX_ATTEMPTS = 3
 
-# Robot gh token. Used by both backends — Copilot authenticates against
-# GitHub with it directly; Codex needs it so the agent's shelled-out
-# `gh` calls (for posting inline comments) succeed.
-GH_TOKEN_SECRET = "/ci/robot-ch-test-poll-copilot"
+# Robot gh tokens. Used by both backends — Copilot authenticates against
+# GitHub with one of these directly; Codex needs gh authed so the agent's
+# shelled-out `gh` calls (for posting inline comments) succeed. Each
+# attempt picks one in a randomised rotation so a single robot's rate
+# limit or token issue does not fail every attempt.
+ROBOT_NAMES = [
+    "/ci/robot-ch-test-poll-copilot",
+    "/ci/robot-ch-test-poll-1-copilot",
+]
 
-# OpenAI API key for the Codex CLI, consumed via the `OPENAI_API_KEY`
-# env var inherited from this process.
+# OpenAI API key for the Codex CLI, written into `$CODEX_HOME/auth.json`
+# via `codex login --with-api-key`.
 OPENAI_KEY_SECRET = "/ci/llm/openai_api_key"
 
 
@@ -202,10 +208,11 @@ def _drop_stale_review_file():
             print(f"WARNING: Failed to remove stale {REVIEW_FILE}: {e}")
 
 
-def _gh_auth_with_robot_token(gh_config_dir):
-    """Authenticate gh CLI in a scoped GH_CONFIG_DIR using the robot token."""
+def _gh_auth_with_robot_token(gh_config_dir, robot_name):
+    """Authenticate gh CLI in a scoped GH_CONFIG_DIR using the given robot token."""
+    print(f"Using robot: {robot_name}")
     token = Secret.Config(
-        name=GH_TOKEN_SECRET, type=Secret.Type.AWS_SSM_PARAMETER
+        name=robot_name, type=Secret.Type.AWS_SSM_PARAMETER
     ).get_value()
     subprocess.run(
         ["gh", "auth", "login", "--with-token"],
@@ -214,23 +221,28 @@ def _gh_auth_with_robot_token(gh_config_dir):
     )
 
 
-def _run_copilot_once(prompt):
-    """Run a single attempt of `gh auth login` + `copilot`."""
+def _run_copilot_once(prompt, robot_name):
+    """Run a single attempt of `gh auth login` + `copilot` for one robot."""
     _drop_stale_review_file()
     with tempfile.TemporaryDirectory() as gh_config_dir:
-        _gh_auth_with_robot_token(gh_config_dir)
+        _gh_auth_with_robot_token(gh_config_dir, robot_name)
         return Result.from_commands_run(
             name="copilot review",
-            # --allow-all-tools: run non-interactively.
-            # --add-dir .: restrict file access to repo root (default,
-            #   but explicit; do NOT add --allow-all-paths).
+            # --allow-all: enable all permissions; --allow-all-tools alone hits
+            #   a CLI bug where compound shell commands are denied and the gate
+            #   then tries to escalate to a human (github/copilot-cli#176, #2971)
+            # --no-ask-user: disable ask_user so the agent cannot try to prompt
+            #   for permission in a non-interactive session
+            # --add-dir .: restrict file access to repo root (default, but explicit)
+            # </dev/null: ensure stdin is definitively non-interactive
             command=f"GH_CONFIG_DIR={shlex.quote(gh_config_dir)} "
-                    f"copilot -p {shlex.quote(prompt)} --allow-all-tools --add-dir . --model gpt-5.3-codex --effort xhigh",
+                    f"copilot -p {shlex.quote(prompt)} --allow-all --no-ask-user "
+                    f"--add-dir . --model gpt-5.3-codex --effort xhigh < /dev/null",
             with_info=True,
         )
 
 
-def _run_codex_once(prompt):
+def _run_codex_once(prompt, robot_name):
     """Run a single attempt of `gh auth login` + `codex login` + `codex exec`.
 
     Codex stores credentials in `$CODEX_HOME/auth.json` and does NOT consult
@@ -244,7 +256,7 @@ def _run_codex_once(prompt):
     _drop_stale_review_file()
     with tempfile.TemporaryDirectory() as gh_config_dir, \
          tempfile.TemporaryDirectory(dir="./ci/tmp") as codex_home:
-        _gh_auth_with_robot_token(gh_config_dir)
+        _gh_auth_with_robot_token(gh_config_dir, robot_name)
 
         openai_key = Secret.Config(
             name=OPENAI_KEY_SECRET, type=Secret.Type.AWS_SSM_PARAMETER
@@ -290,9 +302,12 @@ def _run(prompt, run_once, agent_name):
     subprocess exits 0 AND `REVIEW_FILE` was written with non-empty content.
     """
     last_error = None
+    robots = ROBOT_NAMES.copy()
+    random.shuffle(robots)
     for attempt in range(1, MAX_ATTEMPTS + 1):
+        robot_name = robots[(attempt - 1) % len(robots)]
         try:
-            result = run_once(prompt)
+            result = run_once(prompt, robot_name)
             if not result.is_ok():
                 last_error = (
                     f"{agent_name} subprocess exited with non-OK status [{result.status}]"

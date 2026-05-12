@@ -241,6 +241,20 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
             return 0;
     }
 
+    /// Do not push `Sort + Limit` below the join when the preserved input is read with
+    /// parallel replicas. Each replica reads a coordinated subset of rows; per-replica
+    /// `Limit n` after a per-replica sort would emit each replica's local top-n instead
+    /// of the global top-n. Furthermore, the inserted `Sort` would let `optimizeReadInOrder`
+    /// (which has no through-join guard once the join is no longer between sort and read)
+    /// turn the preserved-side scan into `WithOrder` mode, conflicting with the existing
+    /// `read_in_order_through_join` skip for parallel replicas and causing coordination
+    /// mode mismatch ("Replica decided to read in Default mode, not in WithOrder").
+    if (const auto * reading = findMergeTreeRead(preserved_input_node))
+    {
+        if (reading->isParallelReadingFromReplicas())
+            return 0;
+    }
+
     /// Defer to `optimizeReadInOrder` (second-pass) when the preserved input can stream
     /// rows in the requested sort order from MergeTree's primary key. That path scans
     /// only the rows the LIMIT will keep, without materializing a sort - strictly better

@@ -21,6 +21,9 @@ INSERT INTO t_r SELECT number, repeat('b', 8) FROM numbers(1000);
 
 -- `query_plan_join_swap_table = false`: deferral fires, the outer `Sort + Limit`
 -- is satisfied by reading in order through the join. Expect one of each.
+-- `max_bytes_*_before_external_join = 0` pins automatic spilling off so the
+-- deferral's "can the second pass actually apply" check is not gated by
+-- `SpillingHashJoin::hasDelayedBlocks()`.
 SELECT 'swap_false' AS label, countIf(explain LIKE '%Sorting%') AS sort_count, countIf(explain LIKE '%Limit%') AS limit_count
 FROM ( EXPLAIN actions = 0
     SELECT l.k, r.value FROM t_l AS l LEFT JOIN t_r AS r ON r.k = l.k
@@ -31,7 +34,8 @@ FROM ( EXPLAIN actions = 0
              query_plan_max_limit_for_top_k_optimization = 0,
              enable_join_runtime_filters = 0, enable_lazy_columns_replication = 0,
              query_plan_optimize_lazy_materialization = 0,
-             enable_parallel_replicas = 0
+             enable_parallel_replicas = 0,
+             max_bytes_before_external_join = 0, max_bytes_ratio_before_external_join = 0
 );
 
 -- `query_plan_join_swap_table = true`: the join may be swapped from `LEFT` to
@@ -49,7 +53,8 @@ FROM ( EXPLAIN actions = 0
              query_plan_max_limit_for_top_k_optimization = 0,
              enable_join_runtime_filters = 0, enable_lazy_columns_replication = 0,
              query_plan_optimize_lazy_materialization = 0,
-             enable_parallel_replicas = 0
+             enable_parallel_replicas = 0,
+             max_bytes_before_external_join = 0, max_bytes_ratio_before_external_join = 0
 );
 
 -- Result equivalence across the gate settings, with `enable_parallel_replicas = 0`

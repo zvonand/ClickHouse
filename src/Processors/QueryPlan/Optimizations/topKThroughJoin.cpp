@@ -16,6 +16,8 @@
 #include <Storages/StorageInMemoryMetadata.h>
 #include <Common/typeid_cast.h>
 
+#include <algorithm>
+
 namespace DB::QueryPlanOptimizations
 {
 
@@ -46,6 +48,39 @@ std::optional<JoinSemantics> getJoinSemanticsFromStep(IQueryPlanStep * step)
         return JoinSemantics{op.kind, op.strictness};
     }
     return {};
+}
+
+/// Return `true` when the eventual physical join could have `hasDelayedBlocks()`,
+/// in which case `optimizeReadInOrder`'s second-pass traversal will not propagate
+/// read-in-order through the join (see `findReadingStep` in `optimizeReadInOrder.cpp`).
+/// Used to gate the deferral: if delayed blocks are possible the deferral would
+/// silently disable both `topKThroughJoin` and the second-pass through-join pass.
+///
+/// For a physical `JoinStep` we read `hasDelayedBlocks()` directly. For
+/// `JoinStepLogical` the algorithm is picked later from `JoinSettings::join_algorithms`,
+/// so we conservatively assume delayed blocks are possible when the configured settings
+/// allow `JoinAlgorithm::GRACE_HASH` / `JoinAlgorithm::AUTO` (`JoinSwitcher`), or when
+/// automatic spilling is configured via `max_bytes_*_before_external_join` (which can
+/// wrap the chosen hash join in `SpillingHashJoin`).
+bool joinMayHaveDelayedBlocks(const IQueryPlanStep & step)
+{
+    if (const auto * physical = typeid_cast<const JoinStep *>(&step))
+    {
+        const auto & join_ptr = physical->getJoin();
+        return !join_ptr || join_ptr->hasDelayedBlocks();
+    }
+    if (const auto * logical = typeid_cast<const JoinStepLogical *>(&step))
+    {
+        const auto & js = logical->getJoinSettings();
+        if (js.max_bytes_before_external_join > 0 || js.max_bytes_ratio_before_external_join > 0.0)
+            return true;
+        return std::ranges::any_of(js.join_algorithms, [](JoinAlgorithm a)
+        {
+            return a == JoinAlgorithm::GRACE_HASH || a == JoinAlgorithm::AUTO;
+        });
+    }
+    /// Unknown step kind - be conservative.
+    return true;
 }
 
 /// Walk down a single-child chain looking for a `ReadFromMergeTree` step. We use this
@@ -274,12 +309,21 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
     /// rejects the join (`isInnerOrLeft(JoinKind::Right)` is false), so deferring would silently
     /// disable both optimizations. Only when the user (or test harness) has pinned the setting
     /// off is the join side stable enough to commit to the deferral.
+    ///
+    /// We additionally require that the eventual physical join cannot have delayed blocks
+    /// (`Grace`/`SpillingHashJoin`, legacy `JoinSwitcher`). `optimizeReadInOrder`'s join
+    /// traversal also rejects those (`!join->hasDelayedBlocks()` in `findReadingStep`), so
+    /// deferring when a delayed-block algorithm is possible would silently disable both
+    /// optimizations whenever the planner picks one - which is the steady state today,
+    /// because `max_bytes_ratio_before_external_join` defaults to `0.5` and wraps every
+    /// hash join in `SpillingHashJoin`.
     const bool second_pass_can_apply
         = settings.read_in_order
         && settings.read_in_order_through_join
         && settings.join_swap_table.has_value() && !settings.join_swap_table.value()
         && join_kind == JoinKind::Left
-        && (join_strictness == JoinStrictness::All || join_strictness == JoinStrictness::Any);
+        && (join_strictness == JoinStrictness::All || join_strictness == JoinStrictness::Any)
+        && !joinMayHaveDelayedBlocks(*join_node->step);
     if (second_pass_can_apply)
     {
         if (const auto * reading = findMergeTreeRead(preserved_input_node))

@@ -30,11 +30,29 @@ class WriteBuffer;
   *
   * Persistence: one file per bitmap version, named
   *   `delete_bitmap_{block_number}.rbm`
-  * inside the part directory. Format (all little-endian):
-  *   magic(4) "RBM1" | version(4) | body[body_size] | body_size(4) | crc32(4)
+  * inside the part directory. Format (all little-endian on the wire):
+  *   magic(4) "RBM1" | version(4) | body_size(4) | body[body_size] | crc32(4)
   * `version` (`VERSION_R32` / `VERSION_R64`) selects which roaring layout
-  * the body uses. CRC covers magic + version + body. `body_size` and `crc`
-  * trail as a footer so the writer never back-patches a header buffer.
+  * the body uses. CRC covers the LE-encoded magic + version + body_size +
+  * body bytes — its bytes-on-disk, so the check is host-independent.
+  *
+  * Endian portability: this matches the conventional MergeTree sidecar
+  * pattern (`MergeTreeDataPartChecksum`, `MarkRange`, `MergeTreeIndexText`
+  * posting list, compressed-block checksums) — LE-explicit on the wire.
+  *   - Header fields (magic, version, body_size, crc) and `VERSION_R32`
+  *     bodies (roaring `portable=true`) are fully cross-endian portable.
+  *   - `VERSION_R64` bodies are the one known exception: the croaring C++
+  *     `Roaring64Map::write(portable=true)` writes its outer `map_size`
+  *     (`uint64_t`) and per-bucket high-32 keys (`uint32_t`) host-native.
+  *     Cross-endian reads of an R64 body fail loudly at
+  *     `Roaring64Map::readSafe` (the byteswapped `map_size` won't parse)
+  *     rather than silently mis-decode.
+  *
+  * TODO(UNIQUE KEY, endian): switch the R64 path from the croaring C++
+  * `Roaring64Map` to the C-API `roaring64_bitmap_t` so we can use
+  * `roaring64_bitmap_portable_serialize` /
+  * `roaring64_bitmap_portable_deserialize_safe` (RoaringFormatSpec 64-bit
+  * extension) and drop the cross-endian limitation above.
   */
 class DeleteBitmap
 {

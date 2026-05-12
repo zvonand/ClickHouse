@@ -1,11 +1,11 @@
 #include <Storages/MergeTree/UniqueKey/DeleteBitmap.h>
 
-#include <IO/LimitReadBuffer.h>
 #include <IO/ReadBuffer.h>
 #include <IO/ReadHelpers.h>
 #include <IO/WriteBuffer.h>
 #include <IO/WriteHelpers.h>
 #include <Common/Exception.h>
+#include <Common/transformEndianness.h>
 
 #include <roaring/roaring.hh>
 #include <roaring/roaring64map.hh>
@@ -34,15 +34,31 @@ namespace
     /// Reject implausibly large declared payloads before allocating.
     constexpr UInt32 MAX_SERIALIZED_BODY_SIZE = 256U * 1024U * 1024U;
 
-    /// CRC covers (magic, version, body); the footer (body_size, crc) is not CRC'd.
-    UInt32 computeCRC32(UInt32 magic, UInt32 version, const char * body, size_t body_size)
+    /// CRC over (magic, version, body_size, body); the trailing crc itself is not covered.
+    UInt32 computeCRC32(const char * header, size_t header_size, const char * body, size_t body_size)
     {
         uLong crc = crc32(0L, Z_NULL, 0);
-        crc = crc32(crc, reinterpret_cast<const Bytef *>(&magic), sizeof(magic));
-        crc = crc32(crc, reinterpret_cast<const Bytef *>(&version), sizeof(version));
+        crc = crc32(crc, reinterpret_cast<const Bytef *>(header), static_cast<uInt>(header_size));
         if (body_size)
             crc = crc32(crc, reinterpret_cast<const Bytef *>(body), static_cast<uInt>(body_size));
         return static_cast<UInt32>(crc);
+    }
+
+    /// Pack/unpack a UInt32 to/from a little-endian byte sequence. The
+    /// conventional ClickHouse on-disk pattern (see `MarkRange.cpp` /
+    /// `MergeTreeDataPartChecksum.cpp` / `CompressedReadBufferBase.cpp`)
+    /// is LE-explicit so files survive a host-endian crossing.
+    void packUInt32LE(char * dst, UInt32 value)
+    {
+        transformEndianness<std::endian::little>(value);
+        std::memcpy(dst, &value, sizeof(UInt32));
+    }
+    UInt32 unpackUInt32LE(const char * src)
+    {
+        UInt32 value = 0;
+        std::memcpy(&value, src, sizeof(UInt32));
+        transformEndianness<std::endian::native, std::endian::little>(value);
+        return value;
     }
 
     /// `{N}` slice of `delete_bitmap_{N}.rbm`, or empty view if `file_name`
@@ -323,72 +339,70 @@ void DeleteBitmap::serialize(WriteBuffer & out) const
                 "DeleteBitmap roaring::write returned {} bytes, expected {}", written, body_size);
     }
 
-    const UInt32 crc = computeCRC32(MAGIC, version, body.get(), body_size);
+    /// Pack the 12-byte header in little-endian byte order so we can both
+    /// CRC it and write it as one contiguous blob.
+    char header[sizeof(UInt32) * 3];
+    packUInt32LE(header + 0,                  MAGIC);
+    packUInt32LE(header + sizeof(UInt32),     version);
+    packUInt32LE(header + sizeof(UInt32) * 2, body_size_u32);
 
-    writePODBinary(MAGIC, out);
-    writePODBinary(version, out);
+    const UInt32 crc = computeCRC32(header, sizeof(header), body.get(), body_size);
+
+    out.write(header, sizeof(header));
     if (body_size)
         out.write(body.get(), body_size);
-    writePODBinary(body_size_u32, out);
-    writePODBinary(crc, out);
+
+    char crc_buf[sizeof(UInt32)];
+    packUInt32LE(crc_buf, crc);
+    out.write(crc_buf, sizeof(crc_buf));
 }
 
 std::unique_ptr<DeleteBitmap> DeleteBitmap::deserialize(ReadBuffer & in)
 {
-    UInt32 magic = 0;
-    readPODBinary(magic, in);
+    char header[sizeof(UInt32) * 3];
+    in.readStrict(header, sizeof(header));
+
+    const UInt32 magic         = unpackUInt32LE(header + 0);
+    const UInt32 version       = unpackUInt32LE(header + sizeof(UInt32));
+    const UInt32 body_size_u32 = unpackUInt32LE(header + sizeof(UInt32) * 2);
+
     if (magic != MAGIC)
         throw Exception(ErrorCodes::CORRUPTED_DATA,
             "DeleteBitmap magic mismatch: expected {:#x}, got {:#x}", MAGIC, magic);
 
-    UInt32 version = 0;
-    readPODBinary(version, in);
     if (version != VERSION_R32 && version != VERSION_R64)
         throw Exception(ErrorCodes::UNKNOWN_FORMAT_VERSION,
             "DeleteBitmap version {} is not supported (expected {} or {})",
             version, VERSION_R32, VERSION_R64);
 
-    constexpr size_t footer_size = sizeof(UInt32) * 2; /// body_size + crc
-
-    /// Cap the slurp so a corrupt header with a huge declared body can't
-    /// trick us into a multi-GB allocation before the size check fires.
-    /// The `+1` byte distinguishes "fits within bound" from "source was bigger".
-    LimitReadBuffer::Settings limit_settings;
-    limit_settings.read_no_more = MAX_SERIALIZED_BODY_SIZE + footer_size + 1;
-    LimitReadBuffer limited(in, limit_settings);
-    String rest;
-    readStringUntilEOF(rest, limited);
-
-    if (rest.size() > MAX_SERIALIZED_BODY_SIZE + footer_size)
-        throw Exception(ErrorCodes::CORRUPTED_DATA,
-            "DeleteBitmap payload exceeds maximum body size {} bytes", MAX_SERIALIZED_BODY_SIZE);
-
-    if (rest.size() < footer_size)
-        throw Exception(ErrorCodes::CORRUPTED_DATA,
-            "DeleteBitmap truncated: missing footer ({} bytes after header)", rest.size());
-
-    const size_t body_end = rest.size() - footer_size;
-    UInt32 body_size_u32 = 0;
-    UInt32 stored_crc = 0;
-    std::memcpy(&body_size_u32, rest.data() + body_end,                       sizeof(UInt32));
-    std::memcpy(&stored_crc,    rest.data() + body_end + sizeof(UInt32),      sizeof(UInt32));
-
+    /// Bound the body size before allocating so a corrupt header can't force
+    /// a multi-GB allocation.
     if (body_size_u32 > MAX_SERIALIZED_BODY_SIZE)
         throw Exception(ErrorCodes::CORRUPTED_DATA,
             "DeleteBitmap serialized body too large: {} bytes (max {})",
             body_size_u32, MAX_SERIALIZED_BODY_SIZE);
 
-    /// Declared body size must match what we actually read — catches torn
-    /// copies and accidental appends.
-    if (body_size_u32 != body_end)
-        throw Exception(ErrorCodes::CORRUPTED_DATA,
-            "DeleteBitmap body size mismatch: declared {}, actual {}",
-            body_size_u32, body_end);
+    std::unique_ptr<char[]> body;
+    if (body_size_u32)
+    {
+        body = std::make_unique_for_overwrite<char[]>(body_size_u32);
+        in.readStrict(body.get(), body_size_u32);
+    }
 
-    const UInt32 computed_crc = computeCRC32(magic, version, rest.data(), body_size_u32);
+    char crc_buf[sizeof(UInt32)];
+    in.readStrict(crc_buf, sizeof(crc_buf));
+    const UInt32 stored_crc = unpackUInt32LE(crc_buf);
+
+    const UInt32 computed_crc = computeCRC32(header, sizeof(header), body.get(), body_size_u32);
     if (stored_crc != computed_crc)
         throw Exception(ErrorCodes::CORRUPTED_DATA,
             "DeleteBitmap CRC mismatch: stored {:#x}, computed {:#x}", stored_crc, computed_crc);
+
+    /// Reject trailing bytes after the CRC so torn copies / accidental
+    /// appends surface as corruption.
+    if (!in.eof())
+        throw Exception(ErrorCodes::CORRUPTED_DATA,
+            "DeleteBitmap deserialize: unexpected trailing bytes after CRC");
 
     auto result = std::make_unique<DeleteBitmap>();
     if (version == VERSION_R64)
@@ -398,13 +412,13 @@ std::unique_ptr<DeleteBitmap> DeleteBitmap::deserialize(ReadBuffer & in)
         {
             /// `readSafe` validates container counts against `maxbytes`, so a
             /// malformed payload that survived CRC still can't over-read.
-            *r64 = roaring::Roaring64Map::readSafe(rest.data(), body_size_u32);
+            *r64 = roaring::Roaring64Map::readSafe(body.get(), body_size_u32);
         }
         result->bitmap = std::move(r64);
     }
     else if (body_size_u32)
     {
-        *std::get<R32Ptr>(result->bitmap) = roaring::Roaring::readSafe(rest.data(), body_size_u32);
+        *std::get<R32Ptr>(result->bitmap) = roaring::Roaring::readSafe(body.get(), body_size_u32);
     }
     return result;
 }

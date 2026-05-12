@@ -366,9 +366,13 @@ TEST(DeleteBitmapTest, VersionMismatchRejected)
         WriteBufferFromString out(buf);
         in.serialize(out);
     }
-    /// Bump the version field (bytes [4..8]) to a value outside {VERSION_R32, VERSION_R64}.
-    UInt32 bogus_version = 99;
-    std::memcpy(buf.data() + sizeof(UInt32), &bogus_version, sizeof(UInt32));
+    /// Bump the LE-encoded version field (bytes [4..8]) to a value outside
+    /// {VERSION_R32, VERSION_R64}. Use explicit LE byte writes — host-native
+    /// memcpy would poke the wrong byte on big-endian builds (e.g. s390x).
+    buf[sizeof(UInt32) + 0] = 99;
+    buf[sizeof(UInt32) + 1] = 0;
+    buf[sizeof(UInt32) + 2] = 0;
+    buf[sizeof(UInt32) + 3] = 0;
     /// CRC will also mismatch now, but the version check fires first — either
     /// exception is acceptable; we just require that deserialization doesn't
     /// silently succeed with a bitmap we never wrote.
@@ -398,10 +402,12 @@ TEST(DeleteBitmapTest, OversizedDeclaredBodyRejectedBeforeAllocation)
         in.serialize(out);
     }
 
-    /// `body_size` lives in the footer: the trailing 8 bytes are `body_size(4) | crc(4)`.
-    constexpr UInt32 oversized_body = std::numeric_limits<UInt32>::max();
-    ASSERT_GE(buf.size(), sizeof(UInt32) * 2);
-    std::memcpy(buf.data() + buf.size() - sizeof(UInt32) * 2, &oversized_body, sizeof(UInt32));
+    /// `body_size` is the third LE-encoded field. All-0xFF is endian-symmetric
+    /// (every byte 0xFF) so an explicit byte poke is portable.
+    buf[sizeof(UInt32) * 2 + 0] = static_cast<char>(0xFF);
+    buf[sizeof(UInt32) * 2 + 1] = static_cast<char>(0xFF);
+    buf[sizeof(UInt32) * 2 + 2] = static_cast<char>(0xFF);
+    buf[sizeof(UInt32) * 2 + 3] = static_cast<char>(0xFF);
 
     ReadBufferFromString rb(buf);
     try
@@ -424,10 +430,8 @@ TEST(DeleteBitmapTest, TrailingBytesAfterCRCRejected)
         WriteBufferFromString out(buf);
         in.serialize(out);
     }
-    /// Append junk bytes after the CRC. Deserialize re-derives the body
-    /// extent from the file size, so the declared `body_size` no longer
-    /// matches the actual body span — must reject so torn copies or
-    /// accidental appends do not silently look valid.
+    /// Appending junk bytes after the CRC must be rejected via the
+    /// `!in.eof()` check; otherwise torn copies / accidental appends look valid.
     buf.append("\xDE\xAD\xBE\xEF", 4);
     ReadBufferFromString rb(buf);
     try

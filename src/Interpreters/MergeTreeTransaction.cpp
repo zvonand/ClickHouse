@@ -300,16 +300,10 @@ void MergeTreeTransaction::afterCommit(CSN assigned_csn) noexcept
 
     /// Test-only pause point. With this failpoint enabled, a regression test can verify that
     /// `waitStateChange` does not return until every part has its new CSN persisted (above).
-    /// Wrapped in try/catch because the enclosing function is `noexcept`.
-    try
-    {
-        FailPointInjection::pauseFailPoint(FailPoints::transaction_after_commit_pause);
-    }
-    catch (...) // NOLINT(bugprone-empty-catch)
-    {
-        /// Ok: the enclosing function is `noexcept` and this is a test-only failpoint;
-        /// any exception from `pauseFailPoint` (e.g. on shutdown) must not escape.
-    }
+    /// Not wrapped in try/catch: `pauseFailPoint` only takes a mutex and a condvar, and the
+    /// surrounding `setAndStore...CSN` calls already trust their callees not to throw under
+    /// the same `noexcept` contract.
+    FailPointInjection::pauseFailPoint(FailPoints::transaction_after_commit_pause);
 
     /// Flip the atomic last so that `waitStateChange` only wakes up after all metadata is durable.
     [[maybe_unused]] CSN prev_value = csn.exchange(assigned_csn);

@@ -18,6 +18,7 @@ single transient API failure does not fail the Code Review job.
 """
 
 import os
+import random
 import shlex
 import subprocess
 import sys
@@ -75,8 +76,11 @@ def _run_copilot_once(prompt):
             print(f"WARNING: Failed to remove stale {REVIEW_FILE}: {e}")
 
     with tempfile.TemporaryDirectory() as gh_config_dir:
+        robot_name = random.choice(["/ci/robot-ch-test-poll-copilot", "/ci/robot-ch-test-poll-1-copilot"])
+        print(f"Using robot: {robot_name}")
         token = Secret.Config(
-            name="/ci/robot-ch-test-poll-copilot", type=Secret.Type.AWS_SSM_PARAMETER
+            name=robot_name,
+            type=Secret.Type.AWS_SSM_PARAMETER,
         ).get_value()
         subprocess.run(
             ["gh", "auth", "login", "--with-token"],

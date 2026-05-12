@@ -1,15 +1,19 @@
 -- Issue #104605: queries like SELECT substring(x, `x` -> `x`) aborted the
 -- server with an "Inconsistent AST formatting" LOGICAL_ERROR. The parser
--- merged the comma-separated arguments into a single lambda-with-tuple
--- argument (substring((x, x) -> x)), which the formatter emitted faithfully,
--- but the SubstringLayer parser rejected the formatted output because it did
--- not accept the one-argument form -- so the format/re-parse round-trip check
--- aborted the server.
+-- merges the comma-separated arguments into a single lambda-with-tuple
+-- argument (substring((x, x) -> x)) -- this is the documented
+-- f(a, b -> body) == f((a, b) -> body) sugar used by `mapApply`, `arrayFold`,
+-- etc. -- which the formatter emitted faithfully, but the `SubstringLayer`
+-- parser rejected the formatted output at state 0 because it did not accept
+-- a closing bracket there, so the format/re-parse round-trip check aborted
+-- the server.
 --
--- The fix accepts the one-argument form at the parser level for substring
--- and position (the two special-cased layers that previously rejected it).
--- The query then fails at the analyzer level with a sensible error instead of
--- a LOGICAL_ERROR, and the round-trip check no longer fires.
+-- The fix accepts a closing bracket at state 0 in `SubstringLayer` and
+-- `PositionLayer` ONLY when a lambda operator is pending. This lets the
+-- formatter's one-argument-with-merged-tuple-lambda output round-trip while
+-- continuing to reject bare one-argument forms (`substring(x)`, `position(x)`)
+-- at parse time -- `02154_parser_backtracking` depends on the latter for
+-- exponential-backtracking protection.
 
 -- Original reproducer from the issue. We don't care which error fires, only
 -- that the server does not abort with LOGICAL_ERROR. The lambda has duplicate
@@ -28,10 +32,11 @@ SELECT position(h, x -> x); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
 SELECT formatQuerySingleLine('SELECT substring(x, `x` -> `x`)');
 SELECT formatQuerySingleLine('SELECT position(h, `x` -> `x`)');
 
--- The one-argument forms that the round-trip check produces internally must
--- now parse and reach the analyzer (which rejects them).
-SELECT substring('abc'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
-SELECT position('abc'); -- { serverError NUMBER_OF_ARGUMENTS_DOESNT_MATCH }
+-- Note: bare one-argument forms `substring(x)` / `position(x)` continue to
+-- fail at parse time with `SYNTAX_ERROR`. That is exercised by
+-- `02154_parser_backtracking` (deeply-nested `position(x)`,
+-- `position(x y)`, `position(x IN y)`); not re-asserted here because the
+-- test runner aborts a multi-query batch on the first `SYNTAX_ERROR`.
 
 -- Legitimate substring / position calls must keep working.
 SELECT substring('abcdef', 2, 3);

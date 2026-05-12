@@ -1697,7 +1697,9 @@ public:
     {
         /// Either SUBSTRING(expr FROM start [FOR length]) or SUBSTRING(expr, start, length)
         ///
-        /// 0: Parse first separator: FROM or comma (-> 1), or closing bracket (1-arg form, finished)
+        /// 0: Parse first separator: FROM or comma (-> 1), or closing bracket
+        ///    when a lambda is pending (round-trip for the merged-tuple lambda
+        ///    sugar, see issue #104605)
         /// 1: Parse second separator: FOR or comma (-> 2)
         /// 1 or 2: Parse closing bracket (finished)
 
@@ -1713,15 +1715,17 @@ public:
 
                 state = 1;
             }
-            /// Accept the 1-argument form `substring(expr)` at parse time so that
-            /// the formatter's output for queries like `SELECT substring(x, y -> z)`
-            /// (which the parser collapses into a 1-argument call carrying the
-            /// merged-tuple lambda) is re-parseable. The 1-argument call is then
-            /// rejected at the analyzer level with a meaningful error
-            /// (`NUMBER_OF_ARGUMENTS_DOESNT_MATCH` / `UNKNOWN_IDENTIFIER`) rather
-            /// than blowing up the round-trip check with an `Inconsistent AST
-            /// formatting` `LOGICAL_ERROR`. See issue #104605.
-            else if (ParserToken(TokenType::ClosingRoundBracket).ignore(pos, expected))
+            /// Accept the one-argument form ONLY when a lambda operator is
+            /// pending. This is the AST shape produced by the documented
+            /// lambda-merging sugar (`mapApply`, `arrayFold`, …): the formatter
+            /// emits `substring((x, y) -> z)` for `substring(lambda(tuple(x, y), z))`
+            /// and the re-parser must accept that exact form to keep the AST
+            /// format/re-parse round-trip invariant in `executeQueryImpl`. Bare
+            /// `substring(x)` continues to fail with `SYNTAX_ERROR` at parse
+            /// time — `02154_parser_backtracking` depends on this for
+            /// exponential-backtracking protection. See issue #104605.
+            else if (previousType() == OperatorType::Lambda
+                && ParserToken(TokenType::ClosingRoundBracket).ignore(pos, expected))
             {
                 if (!mergeElement())
                     return false;
@@ -1897,7 +1901,9 @@ public:
     {
         /// position(haystack, needle[, start_pos]) or position(needle IN haystack)
         ///
-        /// 0: Parse separator: comma (-> 1) or IN (-> 2), or closing bracket (1-arg form, finished)
+        /// 0: Parse separator: comma (-> 1) or IN (-> 2), or closing bracket
+        ///    when a lambda is pending (round-trip for the merged-tuple lambda
+        ///    sugar, see issue #104605)
         /// 1: Parse second separator: comma
         /// 1 or 2: Parse closing bracket (finished)
 
@@ -1921,12 +1927,15 @@ public:
 
                 state = 2;
             }
-            /// Accept the 1-argument form so that the formatter's output for
-            /// queries like `SELECT position(x, y -> z)` (which the parser
-            /// collapses into a 1-argument call carrying the merged-tuple
-            /// lambda) is re-parseable. The 1-argument call is then rejected at
-            /// the analyzer level. See issue #104605.
-            else if (ParserToken(TokenType::ClosingRoundBracket).ignore(pos, expected))
+            /// Accept the one-argument form ONLY when a lambda operator is
+            /// pending. This is the AST shape produced by the documented
+            /// lambda-merging sugar: the formatter emits `position((x, y) -> z)`
+            /// for `position(lambda(tuple(x, y), z))` and the re-parser must
+            /// accept that exact form to keep the round-trip invariant. Bare
+            /// `position(x)` continues to fail with `SYNTAX_ERROR` —
+            /// `02154_parser_backtracking` depends on this. See issue #104605.
+            else if (previousType() == OperatorType::Lambda
+                && ParserToken(TokenType::ClosingRoundBracket).ignore(pos, expected))
             {
                 if (!mergeElement())
                     return false;

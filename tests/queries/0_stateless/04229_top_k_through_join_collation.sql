@@ -1,3 +1,6 @@
+-- Tags: no-fasttest
+-- Reason: COLLATE requires ICU, which is disabled in the Fast Test build.
+--
 -- Regression test for the deferral check in `topKThroughJoin`: when the sort
 -- column matches the storage's primary key by name but `optimizeReadInOrder`
 -- cannot actually satisfy the `SortingStep` (here: `ORDER BY ... COLLATE`),

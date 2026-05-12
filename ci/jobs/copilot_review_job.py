@@ -231,41 +231,46 @@ def _run_copilot_once(prompt):
 
 
 def _run_codex_once(prompt):
-    """Run a single attempt of `gh auth login` + `codex`.
+    """Run a single attempt of `gh auth login` + `codex login` + `codex exec`.
 
-    `OPENAI_API_KEY` is set on the parent process env (not embedded in the
-    shell command) so the verbose `Shell.run` command logger does not echo
-    it into the job log.
+    Codex stores credentials in `$CODEX_HOME/auth.json` and does NOT consult
+    `OPENAI_API_KEY` directly when invoked — you have to run
+    `codex login --with-api-key` first, which reads the key from stdin and
+    writes it into `auth.json`. `CODEX_HOME` is scoped to a per-attempt
+    temporary directory under `./ci/tmp` (not `/tmp`, which codex refuses
+    to use for helper binaries) so the API key never lands on global runner
+    state.
     """
     _drop_stale_review_file()
-    with tempfile.TemporaryDirectory() as gh_config_dir:
+    with tempfile.TemporaryDirectory() as gh_config_dir, \
+         tempfile.TemporaryDirectory(dir="./ci/tmp") as codex_home:
         _gh_auth_with_robot_token(gh_config_dir)
+
         openai_key = Secret.Config(
             name=OPENAI_KEY_SECRET, type=Secret.Type.AWS_SSM_PARAMETER
         ).get_value()
-        prev_key = os.environ.get("OPENAI_API_KEY")
-        os.environ["OPENAI_API_KEY"] = openai_key
-        try:
-            return Result.from_commands_run(
-                name="codex review",
-                # exec: non-interactive.
-                # --dangerously-bypass-approvals-and-sandbox: fully
-                #   unattended; skip approval prompts and don't sandbox
-                #   the agent's shell commands. The agent posts inline
-                #   comments via `gh`, which needs network and writes
-                #   outside the workspace (into GH_CONFIG_DIR). The CI
-                #   runner is already externally isolated, which is the
-                #   stated supported use case for this flag.
-                command=f"GH_CONFIG_DIR={shlex.quote(gh_config_dir)} "
-                        f"codex exec --dangerously-bypass-approvals-and-sandbox "
-                        f"{shlex.quote(prompt)}",
-                with_info=True,
-            )
-        finally:
-            if prev_key is None:
-                os.environ.pop("OPENAI_API_KEY", None)
-            else:
-                os.environ["OPENAI_API_KEY"] = prev_key
+        subprocess.run(
+            ["codex", "login", "--with-api-key"],
+            input=openai_key, text=True, check=True,
+            env={**os.environ, "CODEX_HOME": codex_home},
+        )
+
+        return Result.from_commands_run(
+            name="codex review",
+            # exec: non-interactive.
+            # --dangerously-bypass-approvals-and-sandbox: fully
+            #   unattended; skip approval prompts and don't sandbox the
+            #   agent's shell commands. The agent posts inline comments
+            #   via `gh`, which needs network and writes outside the
+            #   workspace (into GH_CONFIG_DIR). The CI runner is already
+            #   externally isolated, which is the stated supported use
+            #   case for this flag.
+            command=f"CODEX_HOME={shlex.quote(codex_home)} "
+                    f"GH_CONFIG_DIR={shlex.quote(gh_config_dir)} "
+                    f"codex exec --dangerously-bypass-approvals-and-sandbox "
+                    f"{shlex.quote(prompt)}",
+            with_info=True,
+        )
 
 
 def _run(prompt, run_once, agent_name):

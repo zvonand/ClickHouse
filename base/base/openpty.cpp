@@ -5,6 +5,7 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstdlib>
 
 
@@ -27,8 +28,13 @@ int openPty(int & master_fd, int & slave_fd, const winsize & ws)
     char slave_name[64];
 
 #if defined(OS_LINUX) || defined(OS_FREEBSD)
-    if (ptsname_r(m, slave_name, sizeof(slave_name)) != 0)
+    /// On Linux, `ptsname_r` returns 0 on success or a positive `errno` value on failure
+    /// (it does not set `errno`). Normalize so callers (`ErrnoException`) see the real reason.
+    int rc = ptsname_r(m, slave_name, sizeof(slave_name));
+    if (rc != 0)
     {
+        if (rc > 0)
+            errno = rc;
         close(m);
         return -1;
     }

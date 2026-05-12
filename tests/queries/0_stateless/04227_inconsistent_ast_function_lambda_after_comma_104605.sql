@@ -16,9 +16,12 @@
 -- exponential-backtracking protection.
 
 -- Original reproducer from the issue. We don't care which error fires, only
--- that the server does not abort with LOGICAL_ERROR. The lambda has duplicate
--- parameter names (x and x), which is rejected early as BAD_ARGUMENTS.
-SELECT substring(x, `x` -> `x`); -- { serverError BAD_ARGUMENTS }
+-- that the server does not abort with LOGICAL_ERROR. The error code depends
+-- on the analyzer: the new analyzer resolves the lambda first and rejects
+-- the duplicate parameter names (x and x) as BAD_ARGUMENTS; the old analyzer
+-- rejects lambda-as-substring-argument before resolving the lambda, so the
+-- duplicate-name check never fires and ILLEGAL_TYPE_OF_ARGUMENT is reported.
+SELECT substring(x, `x` -> `x`); -- { serverError BAD_ARGUMENTS, ILLEGAL_TYPE_OF_ARGUMENT }
 
 -- Variants that exercise the same SubstringLayer / PositionLayer path. With
 -- distinct lambda parameter names the call reaches function resolution and

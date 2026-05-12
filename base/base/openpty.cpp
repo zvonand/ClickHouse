@@ -20,12 +20,13 @@ int openPty(int & master_fd, int & slave_fd, const winsize & ws)
         return -1;
     }
 
-    /// On Linux, `ptsname` is not thread-safe, so we use `ptsname_r`.
-    /// On macOS and FreeBSD, `ptsname` uses thread-local storage and is thread-safe;
-    /// the `ptsname_r` variant is not available there.
+    /// `ptsname` is not thread-safe on Linux, and `openPty` may be called concurrently
+    /// for multiple sessions, so prefer the thread-safe `ptsname_r` where it is available.
+    /// FreeBSD provides `ptsname_r` as well; macOS does not, but its `ptsname` uses
+    /// thread-local storage and is therefore safe to call concurrently.
     char slave_name[64];
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_FREEBSD)
     if (ptsname_r(m, slave_name, sizeof(slave_name)) != 0)
     {
         close(m);

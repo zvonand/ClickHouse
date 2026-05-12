@@ -631,10 +631,6 @@ def test_merge_tree_custom_encrypted_disk_include(start_cluster, use_node):
 def test_dynamic_disk_security_settings(start_cluster):
     """Test that settings profiles control access to from_env, include, and from_zk in dynamic disks.
 
-    The dynamic_disk_allow_* settings default to false and are self-locking: a user whose
-    current session value is false cannot raise it via SET or query-level overrides
-    (QUERY_IS_PROHIBITED). Only an admin can grant access via a settings profile.
-
     One profile is created:
       - allow_dynamic_disk_access: all three settings enabled
 

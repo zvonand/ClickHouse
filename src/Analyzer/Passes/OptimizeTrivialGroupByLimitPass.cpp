@@ -55,7 +55,7 @@ void OptimizeTrivialGroupByLimitPass::run(QueryTreeNodePtr & query_tree_node, Co
     /// Don't change the mode if the user has set it explicitly to something non-`ANY` —
     /// they have an explicit contract that the optimization would silently break.
     const bool mode_is_any = settings[Setting::group_by_overflow_mode] == OverflowMode::ANY;
-    const bool mode_is_changed = settings.isChanged("group_by_overflow_mode");
+    const bool mode_is_changed = settings[Setting::group_by_overflow_mode].changed;
     if (!mode_is_any && mode_is_changed)
         return;
 

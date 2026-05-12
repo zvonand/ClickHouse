@@ -37,19 +37,23 @@ GROUP BY 1
 ORDER BY id
 SETTINGS enable_analyzer = 1;
 
+-- Both shards of `test_cluster_two_shards_localhost` resolve to the same
+-- backing table, so each shard returns the same row. Pin
+-- `optimize_distributed_group_by_sharding_key` to keep the coordinator-side
+-- merge stable regardless of randomized session settings.
 SELECT tt.adid AS id
 FROM dist_two_shards_table_70356 AS tt
 WHERE tt.created_at_dt = '2024-01-01'
 GROUP BY 1
 ORDER BY id
-SETTINGS enable_analyzer = 1, distributed_product_mode = 'global';
+SETTINGS enable_analyzer = 1, distributed_product_mode = 'global', optimize_distributed_group_by_sharding_key = 0;
 
 SELECT tt.adid AS id
 FROM dist_two_shards_table_70356 AS tt
 WHERE tt.created_at_dt = '2024-01-01'
 GROUP BY 1
 ORDER BY id
-SETTINGS enable_analyzer = 1;
+SETTINGS enable_analyzer = 1, optimize_distributed_group_by_sharding_key = 0;
 
 DROP TABLE dist_two_shards_table_70356;
 DROP TABLE dist_table_70356;

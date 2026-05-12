@@ -252,9 +252,18 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
     /// it would not pick the read-in-order through the join, so deferring would silently
     /// disable both optimizations. Likewise, both `read_in_order` and
     /// `read_in_order_through_join` must be enabled for the second pass to apply at all.
+    ///
+    /// We also require `join_swap_table` to be explicitly `false`. The kind and strictness
+    /// we see now are from the logical (or not-yet-optimized physical) join; `optimizeJoinLegacy`
+    /// runs later and can swap `LEFT` to `RIGHT` (via `TableJoin::swapSides`) when the swap is
+    /// allowed by setting and the left side is smaller. After the swap, `optimizeReadInOrder`
+    /// rejects the join (`isInnerOrLeft(JoinKind::Right)` is false), so deferring would silently
+    /// disable both optimizations. Only when the user (or test harness) has pinned the setting
+    /// off is the join side stable enough to commit to the deferral.
     const bool second_pass_can_apply
         = settings.read_in_order
         && settings.read_in_order_through_join
+        && settings.join_swap_table.has_value() && !settings.join_swap_table.value()
         && join_kind == JoinKind::Left
         && (join_strictness == JoinStrictness::All || join_strictness == JoinStrictness::Any);
     if (second_pass_can_apply)

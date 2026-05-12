@@ -53,6 +53,13 @@ struct Optimization
         bool read_in_order;
         bool read_in_order_through_join;
 
+        /// Mirrors `QueryPlanOptimizationSettings::join_swap_table`. `std::nullopt` means
+        /// "auto" (swap decided by `optimizeJoinLegacy` from per-side row estimations);
+        /// `true`/`false` are explicit. `topKThroughJoin` consults it because deferring to
+        /// the second-pass read-in-order would silently disable both optimizations if the
+        /// join is swapped from `LEFT` to `RIGHT` after we returned.
+        std::optional<bool> join_swap_table;
+
         // parallel replicas
         bool parallel_replicas_filter_pushdown = false;
     };

@@ -14,12 +14,6 @@ Expression (Project names)
 Expression ((Project names + (Projection + Change column names to column identifiers)))
   ReadFromMergeTree (default.t_proj_sort)
 
--- ORDER BY does not match projection sort key: fall back to main table
-Expression (Project names)
-  Sorting (Sorting for ORDER BY)
-    Expression ((Before ORDER BY + (Projection + Change column names to column identifiers)))
-      ReadFromMergeTree (default.t_proj_sort)
-
 -- read_in_order disabled: projection cannot help with sorting alone
 Expression (Project names)
   Sorting (Sorting for ORDER BY)

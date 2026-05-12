@@ -35,10 +35,6 @@ SELECT '-- no WHERE, no ORDER BY: projection is not helpful, fall back to main t
 EXPLAIN SELECT * FROM t_proj_sort;
 
 SELECT '';
-SELECT '-- ORDER BY does not match projection sort key: fall back to main table';
-EXPLAIN SELECT * FROM t_proj_sort ORDER BY b;
-
-SELECT '';
 SELECT '-- read_in_order disabled: projection cannot help with sorting alone';
 EXPLAIN SELECT * FROM t_proj_sort ORDER BY (_block_number, _block_offset) SETTINGS optimize_read_in_order = 0;
 

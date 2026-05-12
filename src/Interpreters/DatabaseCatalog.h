@@ -191,6 +191,9 @@ public:
     void addPlainViewDependencies(const QualifiedTableName & table_name, const TableNamesSet & new_plain_view_dependencies);
     std::vector<StorageID> getAllDependentViews(const StorageID & source_table_id) const;
 
+    std::vector<StorageID> takeSourceViewDependencies(const StorageID & source_table_id);
+    void addSourceViewDependencies(const StorageID & source_table_id, const std::vector<StorageID> & view_ids);
+
     /// Check that all dependent views of a streaming source table are ready.
     /// Returns the list of ready views, or empty if not all are ready yet.
     /// During server startup, returns empty to prevent streaming engines from
@@ -227,6 +230,8 @@ public:
     void undropTable(StorageID table_id);
 
     void waitTableFinallyDropped(const UUID & uuid, std::function<void()> throw_if_cancelled = {});
+
+    bool isShuttingDown() const { return is_shutting_down.load(); }
 
     /// Referential dependencies between tables: table "A" depends on table "B"
     /// if "B" is referenced in the definition of "A".

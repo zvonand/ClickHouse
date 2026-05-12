@@ -1,6 +1,4 @@
--- A normal projection of type `commit_order` is sorted by
--- `(_block_number, _block_offset)`. A query that asks for the same order
--- should be served from it even when there is no `WHERE` clause.
+-- Tags: no-parallel-replicas
 
 SET enable_analyzer = 1;
 SET optimize_use_projections = 1;

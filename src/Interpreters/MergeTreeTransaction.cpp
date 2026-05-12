@@ -307,6 +307,8 @@ void MergeTreeTransaction::afterCommit(CSN assigned_csn) noexcept
     }
     catch (...) // NOLINT(bugprone-empty-catch)
     {
+        /// Ok: the enclosing function is `noexcept` and this is a test-only failpoint;
+        /// any exception from `pauseFailPoint` (e.g. on shutdown) must not escape.
     }
 
     /// Flip the atomic last so that `waitStateChange` only wakes up after all metadata is durable.

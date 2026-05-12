@@ -618,15 +618,7 @@ bool StorageObjectStorage::optimize(
     bool /*cleanup*/,
     [[maybe_unused]] ContextPtr context)
 {
-    /// Initialize the data lake metadata before delegating. Without this, calling `OPTIMIZE`
-    /// on a freshly attached data lake table (e.g. after server restart) raises a
-    /// `LOGICAL_ERROR` exception from `DataLakeConfiguration::optimize` because
-    /// `current_metadata` is only loaded lazily on the read/write paths. By calling
-    /// `update` here we either populate the metadata or surface the underlying load
-    /// failure as a user-facing exception. See https://github.com/ClickHouse/ClickHouse/issues/104711.
-    if (configuration->isDataLakeConfiguration())
-        configuration->update(object_storage, context);
-    return configuration->optimize(metadata_snapshot, context, format_settings);
+    return configuration->optimize(object_storage, metadata_snapshot, context, format_settings);
 }
 
 void StorageObjectStorage::truncate(
@@ -806,17 +798,7 @@ void StorageObjectStorage::mutate([[maybe_unused]] const MutationCommands & comm
 
 void StorageObjectStorage::checkMutationIsPossible(const MutationCommands & commands, const Settings & /* settings */) const
 {
-    /// Initialize the data lake metadata before delegating. The check otherwise raises a
-    /// `LOGICAL_ERROR` exception from `DataLakeConfiguration::checkMutationIsPossible` when
-    /// the table was attached lazily and the metadata has not been loaded yet. We do not
-    /// receive a query `Context` here, so fall back to the thread-local one — same pattern
-    /// as `supportedPrewhereColumns` above. See https://github.com/ClickHouse/ClickHouse/issues/104711.
-    if (configuration->isDataLakeConfiguration())
-    {
-        if (auto context = CurrentThread::tryGetQueryContext())
-            configuration->update(object_storage, context);
-    }
-    configuration->checkMutationIsPossible(commands);
+    configuration->checkMutationIsPossible(object_storage, CurrentThread::tryGetQueryContext(), commands);
 }
 
 Pipe StorageObjectStorage::executeCommand(const String & command_name, const ASTPtr & args, ContextPtr context)
@@ -832,13 +814,7 @@ void StorageObjectStorage::alter(const AlterCommands & params, ContextPtr contex
     StorageInMemoryMetadata new_metadata = *getInMemoryMetadataPtr(context, false);
     params.apply(new_metadata, context);
 
-    /// Initialize the data lake metadata before delegating, to avoid a `LOGICAL_ERROR`
-    /// exception from `DataLakeConfiguration::alter` when the table was attached lazily.
-    /// See https://github.com/ClickHouse/ClickHouse/issues/104711.
-    if (configuration->isDataLakeConfiguration())
-        configuration->update(object_storage, context);
-
-    configuration->alter(params, context);
+    configuration->alter(object_storage, params, context);
 
     DatabaseCatalog::instance()
         .getDatabase(storage_id.database_name)
@@ -848,12 +824,7 @@ void StorageObjectStorage::alter(const AlterCommands & params, ContextPtr contex
 
 void StorageObjectStorage::checkAlterIsPossible(const AlterCommands & commands, ContextPtr context) const
 {
-    /// Initialize the data lake metadata before delegating, to avoid a `LOGICAL_ERROR`
-    /// exception from `DataLakeConfiguration::checkAlterIsPossible` when the table was
-    /// attached lazily. See https://github.com/ClickHouse/ClickHouse/issues/104711.
-    if (configuration->isDataLakeConfiguration())
-        configuration->update(object_storage, context);
-    configuration->checkAlterIsPossible(commands);
+    configuration->checkAlterIsPossible(object_storage, context, commands);
 }
 
 void StorageObjectStorage::startup()

@@ -9,6 +9,7 @@
 #include <Processors/QueryPlan/JoinStepLogical.h>
 #include <Processors/QueryPlan/LimitStep.h>
 #include <Processors/QueryPlan/Optimizations/Optimizations.h>
+#include <Processors/QueryPlan/Optimizations/optimizeReadInOrder.h>
 #include <Processors/QueryPlan/QueryPlan.h>
 #include <Processors/QueryPlan/ReadFromMergeTree.h>
 #include <Processors/QueryPlan/SortingStep.h>
@@ -64,31 +65,6 @@ const ReadFromMergeTree * findMergeTreeRead(const QueryPlan::Node * node)
     return nullptr;
 }
 
-/// True iff the sort columns name a prefix of the storage's primary-key columns. The
-/// analyzer often presents sort columns with a table-qualifier prefix (e.g.
-/// `__table1.Time`); we compare on the unqualified suffix so the deferral check still
-/// fires for plans like `ORDER BY t.col DESC LIMIT n` over a MergeTree sorted by
-/// `(col, ...)`. Conservative: any mismatch lets the optimization apply, never the
-/// other way around.
-bool sortMatchesStoragePrimaryKeyPrefix(const SortDescription & description, const KeyDescription & sorting_key)
-{
-    if (description.empty() || sorting_key.column_names.size() < description.size())
-        return false;
-
-    auto unqualified = [](std::string_view name)
-    {
-        if (auto pos = name.find_last_of('.'); pos != std::string_view::npos)
-            return name.substr(pos + 1);
-        return name;
-    };
-
-    for (size_t i = 0; i < description.size(); ++i)
-    {
-        if (unqualified(description[i].column_name) != sorting_key.column_names[i])
-            return false;
-    }
-    return true;
-}
 }
 
 /// Push `Limit + Sort` down through a Join when the sort key only references
@@ -285,8 +261,20 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
     {
         if (const auto * reading = findMergeTreeRead(preserved_input_node))
         {
-            if (sortMatchesStoragePrimaryKeyPrefix(description,
-                                                    reading->getStorageMetadata()->getSortingKey()))
+            /// Probe full read-in-order applicability (direction, nulls direction,
+            /// collator, key-expression mapping) rather than just matching column names.
+            /// A name-only match defers even when `optimizeReadInOrder` cannot actually
+            /// satisfy the `SortingStep` (e.g. `ORDER BY ... COLLATE`), which would
+            /// silently disable both optimizations.
+            SortingStep probe_sort_step(
+                preserved_input_node->step->getOutputHeader(),
+                description,
+                n,
+                sort_step->getSettings());
+            if (wouldReadInOrderBeUseful(
+                    probe_sort_step,
+                    reading->getStorageMetadata()->getSortingKey(),
+                    *preserved_input_node))
                 return 0;
         }
     }

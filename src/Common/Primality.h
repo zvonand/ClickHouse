@@ -287,6 +287,9 @@ UInt8 isProbablePrime(const T & num, unsigned rounds, CheckCancelled check_cance
     auto boost_num = detail::toBoostInteger(num);
 
     /// Seed deterministically so the same (num, rounds) pair always produces the same result.
+    /// This trades the textbook `4^(-rounds)` per-call probability bound for reproducibility:
+    /// a composite that fools this particular witness sequence will keep doing so on every call.
+    /// The bound still describes typical accuracy across inputs.
     pcg64 rng(DefaultHash<T>{}(num));
 
     return detail::millerRabinTestBig(boost_num, rounds, rng, check_cancelled);

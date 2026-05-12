@@ -136,12 +136,16 @@ For `UInt8`, `UInt16`, `UInt32`, and `UInt64`, the result is exact and matches
 
 For `UInt128` and `UInt256`, a return value of `1` is probabilistic. The optional `rounds` argument controls
 how many [Miller-Rabin](https://en.wikipedia.org/wiki/Miller-Rabin_primality_test) rounds are used:
-more rounds reduce the chance of a false positive and increase the running time. For any composite,
-the false-positive rate is bounded by `4^(-rounds)`; the default of `25` keeps it below `10^-15`. Values above
-`256` are rejected as `BAD_ARGUMENTS`, since the false-positive rate at `256` is already below `10^-150` and
-larger values only waste time.
+more rounds reduce the chance of a false positive and increase the running time. With uniformly random
+witnesses, the false-positive rate for a fixed composite is bounded by `4^(-rounds)`; the default of `25`
+makes this bound smaller than `10^-15`. Values above `256` are rejected as `BAD_ARGUMENTS`, since they
+offer no meaningful improvement and only waste time.
 
-The function is deterministic: the same input and `rounds` value always produce the same result.
+The function is deterministic: witnesses are derived from a fixed seed computed from `n`, so the same
+`(n, rounds)` pair always produces the same result. As a consequence, a composite that happens to pass
+this particular witness sequence will reproducibly return `1`, rather than failing the test independently
+on each call. The `4^(-rounds)` bound should therefore be read as a guide to typical accuracy across
+inputs, not as a per-call probability for a fixed input.
     )";
     FunctionDocumentation::Syntax syntax = "isProbablePrime(n[, rounds])";
     FunctionDocumentation::Arguments arguments

@@ -249,14 +249,15 @@ def _run_codex_once(prompt):
             return Result.from_commands_run(
                 name="codex review",
                 # exec: non-interactive.
-                # --sandbox danger-full-access: the agent shells out to
-                #   `gh` to post inline comments, which needs network and
-                #   writes outside the workspace (into GH_CONFIG_DIR).
-                #   The runner itself is already isolated.
-                # --ask-for-approval never: fully unattended.
+                # --dangerously-bypass-approvals-and-sandbox: fully
+                #   unattended; skip approval prompts and don't sandbox
+                #   the agent's shell commands. The agent posts inline
+                #   comments via `gh`, which needs network and writes
+                #   outside the workspace (into GH_CONFIG_DIR). The CI
+                #   runner is already externally isolated, which is the
+                #   stated supported use case for this flag.
                 command=f"GH_CONFIG_DIR={shlex.quote(gh_config_dir)} "
-                        f"codex exec --sandbox danger-full-access "
-                        f"--ask-for-approval never "
+                        f"codex exec --dangerously-bypass-approvals-and-sandbox "
                         f"{shlex.quote(prompt)}",
                 with_info=True,
             )

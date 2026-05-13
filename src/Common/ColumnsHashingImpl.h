@@ -22,6 +22,14 @@ struct HashMethodContextSettings
 {
     size_t max_threads;
     bool serialize_string_with_zero_byte = false;
+
+    /// Whether software prefetching of hash-table buckets is enabled for this run.
+    /// Controls the precomputed-hash prefetch path in `HashMethodSerialized<prealloc=true>`
+    /// (mirrors `enable_software_prefetch_in_aggregation`).
+    bool enable_prefetch = true;
+    /// Threshold on the hash table's buffer size below which prefetching is skipped
+    /// because the table fits into caches. Zero disables the threshold.
+    size_t min_bytes_for_prefetch = 0;
 };
 
 /// Generic context for HashMethod. Context is shared between multiple threads, all methods must be thread-safe.
@@ -222,14 +230,30 @@ public:
             if (derived.can_precompute_hashes)
             {
                 if (!derived.precomputed_hashes_initialized)
-                    derived.initPrecomputedHashes(data);
+                {
+                    /// Apply the `min_bytes_for_prefetch` size-threshold contract: skip the
+                    /// precomputed-hash + prefetch path when the hash table is small enough
+                    /// to fit in caches. Matches `Aggregator::executeImpl`'s `prefetch` gate.
+                    if (derived.min_bytes_for_prefetch != 0
+                        && data.getBufferSizeInBytes() <= derived.min_bytes_for_prefetch)
+                    {
+                        derived.can_precompute_hashes = false;
+                    }
+                    else
+                    {
+                        derived.initPrecomputedHashes(data);
+                    }
+                }
 
-                if (row == PrefetchingHelper::iterationsToMeasure())
-                    derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
-                const auto & hashes = derived.precomputed_hashes;
-                if (row + derived.prefetch_look_ahead < hashes.size())
-                    data.prefetchByHash(hashes[row + derived.prefetch_look_ahead]);
-                return emplaceImpl<false>(key_holder, data, hashes[row]);
+                if (derived.can_precompute_hashes)
+                {
+                    if (row == PrefetchingHelper::iterationsToMeasure())
+                        derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
+                    const auto & hashes = derived.precomputed_hashes;
+                    if (row + derived.prefetch_look_ahead < hashes.size())
+                        data.prefetchByHash(hashes[row + derived.prefetch_look_ahead]);
+                    return emplaceImpl<false>(key_holder, data, hashes[row]);
+                }
             }
         }
         return emplaceImpl<true>(key_holder, data, 0);
@@ -266,20 +290,36 @@ public:
             if (derived.can_precompute_hashes)
             {
                 if (!derived.precomputed_hashes_initialized)
-                    derived.initPrecomputedHashes(data);
-
-                if (row == PrefetchingHelper::iterationsToMeasure())
-                    derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
-                const auto & hashes = derived.precomputed_hashes;
-                if (row + derived.prefetch_look_ahead < hashes.size())
-                    data.prefetchByHash(hashes[row + derived.prefetch_look_ahead]);
-
-                if (data.isEmptyCell(hashes[row]))
                 {
-                    if constexpr (has_mapped)
-                        return FindResult(nullptr, false, 0);
+                    /// Apply the `min_bytes_for_prefetch` size-threshold contract: skip the
+                    /// precomputed-hash + prefetch path when the hash table is small enough
+                    /// to fit in caches. Matches `Aggregator::executeImpl`'s `prefetch` gate.
+                    if (derived.min_bytes_for_prefetch != 0
+                        && data.getBufferSizeInBytes() <= derived.min_bytes_for_prefetch)
+                    {
+                        derived.can_precompute_hashes = false;
+                    }
                     else
-                        return FindResult(false, 0);
+                    {
+                        derived.initPrecomputedHashes(data);
+                    }
+                }
+
+                if (derived.can_precompute_hashes)
+                {
+                    if (row == PrefetchingHelper::iterationsToMeasure())
+                        derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
+                    const auto & hashes = derived.precomputed_hashes;
+                    if (row + derived.prefetch_look_ahead < hashes.size())
+                        data.prefetchByHash(hashes[row + derived.prefetch_look_ahead]);
+
+                    if (data.isEmptyCell(hashes[row]))
+                    {
+                        if constexpr (has_mapped)
+                            return FindResult(nullptr, false, 0);
+                        else
+                            return FindResult(false, 0);
+                    }
                 }
             }
         }

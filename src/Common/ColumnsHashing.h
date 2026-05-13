@@ -381,6 +381,11 @@ struct HashMethodSerialized
     bool precomputed_hashes_initialized = false;
     bool can_precompute_hashes = false;
 
+    /// Skip the precomputed-hash prefetch path when the hash table's buffer is below this size,
+    /// matching the existing `min_bytes_for_prefetch` contract used by `Aggregator::executeImpl`.
+    /// Checked lazily on the first emplace/find call.
+    size_t min_bytes_for_prefetch = 0;
+
     std::unique_ptr<PrefetchingHelper> prefetching;
     size_t prefetch_look_ahead = PrefetchingHelper::getInitialLookAheadValue();
 
@@ -449,13 +454,17 @@ struct HashMethodSerialized
 
         /// We can only precompute canonical per-row hashes when:
         ///   1. We have the serialized keys upfront (batch serialization is in use), and
-        ///   2. We use the hash table's actual hash function (deferred to first emplace/find).
+        ///   2. We use the hash table's actual hash function (deferred to first emplace/find), and
+        ///   3. Software prefetch is enabled by the caller (mirrors `enable_software_prefetch_in_aggregation`).
         /// Without batch serialization, fall back to the regular `data.prefetch(key_holder)` path.
+        /// The hash-table size threshold (`min_bytes_for_prefetch`) is enforced lazily on the first
+        /// emplace/find call, once `Data` is known.
         if constexpr (has_pre_computed_hashes)
         {
-            if (use_batch_serialize)
+            if (use_batch_serialize && hash_serialized_context->settings.enable_prefetch)
             {
                 can_precompute_hashes = true;
+                min_bytes_for_prefetch = hash_serialized_context->settings.min_bytes_for_prefetch;
                 prefetching = std::make_unique<PrefetchingHelper>();
             }
         }

@@ -8,3 +8,9 @@ FROM test_tz
 WHERE d = toDateTime('2000-01-01 00:00:00', 'UTC')
 SETTINGS session_timezone = 'Asia/Novosibirsk'
 FORMAT TSV;
+
+SELECT *, timezone()
+FROM test_tz
+WHERE d = '2000-01-01 00:00:00'
+SETTINGS session_timezone = 'Asia/Novosibirsk'
+FORMAT TSV;

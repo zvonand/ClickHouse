@@ -7,8 +7,6 @@ title: 'EXECUTE AS Statement'
 doc_type: 'reference'
 ---
 
-# EXECUTE AS Statement
-
 Allows to execute queries on behalf of a different user.
 
 ## Syntax {#syntax}

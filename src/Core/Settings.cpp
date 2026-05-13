@@ -7029,7 +7029,7 @@ Allows using Dynamic type in JOIN keys. Added for compatibility. It's not recomm
     DECLARE(Bool, cast_string_to_variant_use_inference, true, R"(
 Use types inference during String to Variant conversion.
 )", 0) \
-    DECLARE(DateTimeInputFormat, cast_string_to_date_time_mode, "basic", R"(
+    DECLARE(DateTimeInputFormat, cast_string_to_date_time_mode, "best_effort", R"(
 Allows choosing a parser of the text representation of date and time during cast from String.
 
 Possible values:
@@ -7741,6 +7741,9 @@ Enable experimental hash functions
 Allows creation of tables with the [TimeSeries](../../engines/table-engines/integrations/time-series.md) table engine. Possible values:
 - 0 — the [TimeSeries](../../engines/table-engines/integrations/time-series.md) table engine is disabled.
 - 1 — the [TimeSeries](../../engines/table-engines/integrations/time-series.md) table engine is enabled.
+)", EXPERIMENTAL) \
+    DECLARE(Bool, allow_experimental_unique_key, false, R"(
+Allows creation of tables with the `UNIQUE KEY` clause on MergeTree-family engines.
 )", EXPERIMENTAL) \
     DECLARE(Bool, allow_experimental_codecs, false, R"(
 If it is set to true, allow to specify experimental compression codecs (but we don't have those yet and this option does nothing).

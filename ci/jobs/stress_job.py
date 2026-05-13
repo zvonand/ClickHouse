@@ -1,7 +1,6 @@
 import csv
 import logging
 import os
-import re
 import sys
 from pathlib import Path
 from typing import List, Tuple
@@ -14,10 +13,17 @@ from ci.praktika.result import Result
 from ci.praktika.utils import Shell, Utils
 
 
+def sanitize_test_result_line(line: str) -> str:
+    return line.replace("\0", "\\0")
+
+
 def read_test_results(results_path: Path, with_raw_logs: bool = True):
     results = []
     with open(results_path, "r", encoding="utf-8") as descriptor:
-        reader = csv.reader(descriptor, delimiter="\t")
+        reader = csv.reader(
+            (sanitize_test_result_line(line) for line in descriptor),
+            delimiter="\t",
+        )
         for line in reader:
             name = line[0]
             status = line[1]
@@ -92,6 +98,8 @@ def get_run_command(
         "docker run --cap-add=SYS_PTRACE "
         # For dmesg and sysctl
         "--privileged "
+        # azurite-rs (in-process Azure Blob Storage emulator) needs many fds under parallel load
+        "--ulimit nofile=1048576:1048576 "
         # a static link, don't use S3_URL or S3_DOWNLOAD
         "-e S3_URL='https://s3.amazonaws.com/clickhouse-datasets' "
         "--tmpfs /tmp/clickhouse:mode=1777 "

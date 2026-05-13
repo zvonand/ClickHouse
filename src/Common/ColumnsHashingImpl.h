@@ -227,33 +227,20 @@ public:
         auto key_holder = derived.getKeyHolder(row, pool);
         if constexpr (Derived::has_pre_computed_hashes)
         {
+            /// Single gate in the hot path: `precomputed_hashes_initialized` is set to `true`
+            /// after the first call (regardless of whether hashes were actually computed), so
+            /// subsequent rows only do the one `can_precompute_hashes` check below.
+            if (!derived.precomputed_hashes_initialized) [[unlikely]]
+                derived.initPrecomputedHashes(data);
+
             if (derived.can_precompute_hashes)
             {
-                if (!derived.precomputed_hashes_initialized)
-                {
-                    /// Apply the `min_bytes_for_prefetch` size-threshold contract: skip the
-                    /// precomputed-hash + prefetch path when the hash table is small enough
-                    /// to fit in caches. Matches `Aggregator::executeImpl`'s `prefetch` gate.
-                    if (derived.min_bytes_for_prefetch != 0
-                        && data.getBufferSizeInBytes() <= derived.min_bytes_for_prefetch)
-                    {
-                        derived.can_precompute_hashes = false;
-                    }
-                    else
-                    {
-                        derived.initPrecomputedHashes(data);
-                    }
-                }
-
-                if (derived.can_precompute_hashes)
-                {
-                    if (row == PrefetchingHelper::iterationsToMeasure())
-                        derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
-                    const auto & hashes = derived.precomputed_hashes;
-                    if (row + derived.prefetch_look_ahead < hashes.size())
-                        data.prefetchByHash(hashes[row + derived.prefetch_look_ahead]);
-                    return emplaceImpl<false>(key_holder, data, hashes[row]);
-                }
+                if (row == PrefetchingHelper::iterationsToMeasure())
+                    derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
+                const auto & hashes = derived.precomputed_hashes;
+                if (row + derived.prefetch_look_ahead < hashes.size())
+                    data.prefetchByHash(hashes[row + derived.prefetch_look_ahead]);
+                return emplaceImpl<false>(key_holder, data, hashes[row]);
             }
         }
         return emplaceImpl<true>(key_holder, data, 0);
@@ -287,39 +274,24 @@ public:
         auto & derived = static_cast<Derived &>(*this);
         if constexpr (Derived::has_pre_computed_hashes)
         {
+            /// See note in `emplaceKey`: single gate via `precomputed_hashes_initialized`.
+            if (!derived.precomputed_hashes_initialized) [[unlikely]]
+                derived.initPrecomputedHashes(data);
+
             if (derived.can_precompute_hashes)
             {
-                if (!derived.precomputed_hashes_initialized)
+                if (row == PrefetchingHelper::iterationsToMeasure())
+                    derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
+                const auto & hashes = derived.precomputed_hashes;
+                if (row + derived.prefetch_look_ahead < hashes.size())
+                    data.prefetchByHash(hashes[row + derived.prefetch_look_ahead]);
+
+                if (data.isEmptyCell(hashes[row]))
                 {
-                    /// Apply the `min_bytes_for_prefetch` size-threshold contract: skip the
-                    /// precomputed-hash + prefetch path when the hash table is small enough
-                    /// to fit in caches. Matches `Aggregator::executeImpl`'s `prefetch` gate.
-                    if (derived.min_bytes_for_prefetch != 0
-                        && data.getBufferSizeInBytes() <= derived.min_bytes_for_prefetch)
-                    {
-                        derived.can_precompute_hashes = false;
-                    }
+                    if constexpr (has_mapped)
+                        return FindResult(nullptr, false, 0);
                     else
-                    {
-                        derived.initPrecomputedHashes(data);
-                    }
-                }
-
-                if (derived.can_precompute_hashes)
-                {
-                    if (row == PrefetchingHelper::iterationsToMeasure())
-                        derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
-                    const auto & hashes = derived.precomputed_hashes;
-                    if (row + derived.prefetch_look_ahead < hashes.size())
-                        data.prefetchByHash(hashes[row + derived.prefetch_look_ahead]);
-
-                    if (data.isEmptyCell(hashes[row]))
-                    {
-                        if constexpr (has_mapped)
-                            return FindResult(nullptr, false, 0);
-                        else
-                            return FindResult(false, 0);
-                    }
+                        return FindResult(false, 0);
                 }
             }
         }

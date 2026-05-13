@@ -378,7 +378,10 @@ struct HashMethodSerialized
     /// Filled lazily on the first emplace/find call (because we need access to `Data::hash`).
     /// Only used when `can_precompute_hashes` is true.
     PaddedPODArray<size_t> precomputed_hashes;
-    bool precomputed_hashes_initialized = false;
+    /// `precomputed_hashes_initialized` starts `true` by default so the hot path skips the lazy-init
+    /// gate when precomputation is statically disabled. It is set to `false` in the constructor only
+    /// when we actually plan to precompute hashes (and is flipped back to `true` after the first call).
+    bool precomputed_hashes_initialized = true;
     bool can_precompute_hashes = false;
 
     /// Skip the precomputed-hash prefetch path when the hash table's buffer is below this size,
@@ -464,6 +467,7 @@ struct HashMethodSerialized
             if (use_batch_serialize && hash_serialized_context->settings.enable_prefetch)
             {
                 can_precompute_hashes = true;
+                precomputed_hashes_initialized = false;
                 min_bytes_for_prefetch = hash_serialized_context->settings.min_bytes_for_prefetch;
                 prefetching = std::make_unique<PrefetchingHelper>();
             }
@@ -472,15 +476,25 @@ struct HashMethodSerialized
 
     /// Compute per-row canonical hashes from `serialized_keys` using `Data::hash`.
     /// Called once on the first `emplaceKey`/`findKey`, when `Data` becomes known.
+    /// Also applies the `min_bytes_for_prefetch` size-threshold contract: skip the precomputed-hash
+    /// + prefetch path when the hash table is small enough to fit in caches. Matches
+    /// `Aggregator::executeImpl`'s `prefetch` gate.
     template <typename Data>
     NO_INLINE void initPrecomputedHashes(const Data & data)
         requires(prealloc)
     {
+        precomputed_hashes_initialized = true;
+
+        if (min_bytes_for_prefetch != 0 && data.getBufferSizeInBytes() <= min_bytes_for_prefetch)
+        {
+            can_precompute_hashes = false;
+            return;
+        }
+
         const size_t rows = serialized_keys.size();
         precomputed_hashes.resize(rows);
         for (size_t i = 0; i < rows; ++i)
             precomputed_hashes[i] = data.hash(serialized_keys[i]);
-        precomputed_hashes_initialized = true;
     }
 
     bool shouldUseBatchSerialize() const

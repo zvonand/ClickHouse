@@ -66,7 +66,7 @@ namespace
 bool isWrongSigningRegionMuted(const std::string_view message)
 {
     static constexpr std::string_view  prefix = "HTTP response code: 400";
-    if (!boost::starts_with(message, prefix))
+    if (!message.starts_with(prefix))
         return false;
 
     return boost::icontains(message, "x-amz-bucket-region");
@@ -80,7 +80,7 @@ bool is404Muted(std::string_view message)
         return false;
 
     static constexpr std::string_view prefix = "HTTP response code: ";
-    if (!boost::starts_with(message, prefix))
+    if (!message.starts_with(prefix))
         return false;
 
     if (message.size() < prefix.size() + 3)
@@ -109,7 +109,7 @@ void AWSLogger::Log(Aws::Utils::Logging::LogLevel log_level, const char * tag, c
 void AWSLogger::LogStream(Aws::Utils::Logging::LogLevel log_level, const char * tag, const Aws::OStringStream & message_stream)
 {
     const auto str = message_stream.str();
-    if (isExpectedAwsHttpResponseMuted(str.c_str()))
+    if (isExpectedAwsHttpResponseMuted(str))
         return;
     callLogImpl(log_level, tag, str.c_str());
 }

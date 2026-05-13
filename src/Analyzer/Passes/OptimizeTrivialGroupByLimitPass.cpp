@@ -74,6 +74,12 @@ void OptimizeTrivialGroupByLimitPass::run(QueryTreeNodePtr & query_tree_node, Co
     if (common::addOverflow(*limit, offset, max_rows))
         return;
 
+    /// `max_rows_to_group_by = 0` means "no cap" in ClickHouse, so applying the optimization
+    /// for `LIMIT 0` (or `LIMIT + OFFSET = 0`) would silently remove the user's explicit cap.
+    /// The query also returns no rows regardless, so the optimization buys nothing.
+    if (max_rows == 0)
+        return;
+
     /// If the user has already set `max_rows_to_group_by`, we only apply the optimization
     /// when our derived value is strictly smaller — otherwise the user's setting is tighter
     /// and ours would be a no-op. When the user has a tighter throw/break contract, we'd

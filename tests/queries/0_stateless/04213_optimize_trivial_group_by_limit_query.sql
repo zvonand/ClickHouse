@@ -44,6 +44,15 @@ SETTINGS optimize_trivial_group_by_limit_query = 1, max_rows_to_group_by = 10000
 SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k LIMIT 100)
 SETTINGS optimize_trivial_group_by_limit_query = 1, max_rows_to_group_by = 3, group_by_overflow_mode = 'throw'; -- { serverError TOO_MANY_ROWS }
 
+-- `LIMIT 0` (or any `LIMIT + OFFSET == 0`): the pass must skip because
+-- `max_rows_to_group_by = 0` means "no cap" in ClickHouse, so applying the
+-- optimization would silently remove the user's explicit cap. The query also
+-- returns no rows regardless of the optimization, so it buys nothing.
+SELECT count() FROM (SELECT k FROM (SELECT number AS k FROM numbers(10)) GROUP BY k LIMIT 0)
+SETTINGS optimize_trivial_group_by_limit_query = 1;
+SELECT count() FROM (SELECT k FROM (SELECT number AS k FROM numbers(10)) GROUP BY k LIMIT 0 OFFSET 0)
+SETTINGS optimize_trivial_group_by_limit_query = 1;
+
 -- Optimization must not fire for `GROUP BY ... LIMIT n BY expr` queries: the outer `LIMIT n`
 -- selects rows after `LIMIT BY` has limited per-`expr` rows, so stopping aggregation at `n`
 -- distinct keys can starve `LIMIT BY` of groups and shrink the output.

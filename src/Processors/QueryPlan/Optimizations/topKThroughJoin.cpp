@@ -338,10 +338,26 @@ size_t tryTopKThroughJoin(QueryPlan::Node * parent_node, QueryPlan::Nodes & node
                 description,
                 n,
                 sort_step->getSettings());
-            if (wouldReadInOrderBeUseful(
-                    probe_sort_step,
-                    reading->getStorageMetadata()->getSortingKey(),
-                    *preserved_input_node))
+            const bool read_in_order_useful = wouldReadInOrderBeUseful(
+                probe_sort_step,
+                reading->getStorageMetadata()->getSortingKey(),
+                *preserved_input_node);
+
+            /// `wouldReadInOrderBeUseful` is unaware of `FINAL`-time gating: even when
+            /// the sort description matches the storage's sorting key, pass 2's
+            /// `ReadFromMergeTree::requestReadingInOrder` returns `false` for
+            /// `direction != 1 && query_info.isFinal()`. If we deferred here on the
+            /// strength of the column match, both optimizations would silently disable.
+            /// Guard conservatively: when reading `FINAL`, only defer if all sort columns
+            /// are ascending, since a single descending column is enough for the eventual
+            /// read direction to be -1 in the common case (storage key without reverse
+            /// flags). This may miss the rare reverse-storage-key case where pass 2 would
+            /// have succeeded, but never silently disables both passes.
+            const bool any_desc = std::ranges::any_of(
+                description, [](const SortColumnDescription & c) { return c.direction != 1; });
+            const bool final_blocks_pass2 = reading->isQueryWithFinal() && any_desc;
+
+            if (read_in_order_useful && !final_blocks_pass2)
                 return 0;
         }
     }

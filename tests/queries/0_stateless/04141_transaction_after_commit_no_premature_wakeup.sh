@@ -34,6 +34,16 @@ $CLICKHOUSE_CLIENT -q "SYSTEM STOP MERGES t_after_commit"
 $CLICKHOUSE_CLIENT -q "INSERT INTO t_after_commit VALUES (1)"
 $CLICKHOUSE_CLIENT -q "INSERT INTO t_after_commit VALUES (2)"
 
+# Defense-in-depth: always disable both failpoints on exit so that an early test
+# failure (e.g. a `SYSTEM WAIT FAILPOINT ... PAUSE` timeout) cannot leave the
+# server-wide failpoints active and disrupt later tests in the same run.
+# `SYSTEM DISABLE FAILPOINT` on an already-disabled failpoint is a no-op, so this
+# is safe even when the normal cleanup at the end of the script already ran.
+trap '
+    $CLICKHOUSE_CLIENT -q "SYSTEM DISABLE FAILPOINT transaction_after_commit_pause" 2>/dev/null || true
+    $CLICKHOUSE_CLIENT -q "SYSTEM DISABLE FAILPOINT transaction_force_unknown_state_after_commit" 2>/dev/null || true
+' EXIT
+
 $CLICKHOUSE_CLIENT -q "SYSTEM ENABLE FAILPOINT transaction_force_unknown_state_after_commit"
 $CLICKHOUSE_CLIENT -q "SYSTEM ENABLE FAILPOINT transaction_after_commit_pause"
 

@@ -84,6 +84,96 @@ def started_cluster():
         cluster.shutdown()
 
 
+def _capture_spark_hang_diagnostics(node):
+    """
+    Capture diagnostic data when a Spark query times out or otherwise fails
+    unexpectedly. Each capture is wrapped in its own ``try``/``except`` so a
+    failure in one diagnostic does not prevent collection of the others.
+
+    None of these are intended to recover the test. They only produce data
+    for post-mortem analysis of the chronic Spark hang on
+    ``Integration tests (arm_binary, distributed plan, 4/4)`` and similar
+    shards, where on ``subprocess.TimeoutExpired`` the Spark JVM is killed
+    by SIGKILL and ``stdout``/``stderr`` are typically truncated to whatever
+    Spark logged before the hang point — leaving CIDB without enough
+    information to localize the stuck thread.
+
+    Captured:
+      * ``jstack`` thread dumps of every running ``org.apache.spark`` JVM
+        (shows where the JVM is stuck)
+      * Unity Catalog HTTP liveness probe on ``http://localhost:8080``
+        (shows whether UC is responsive while Spark is hung)
+      * ``ss -tnp`` snapshot of sockets to UC port ``8080`` and ``java``
+        connections (shows whether Spark holds open sockets to UC)
+    """
+    # 1. Thread dumps of running Spark JVMs.
+    try:
+        pids_out = node.exec_in_container(
+            ["bash", "-c", "pgrep -f 'org.apache.spark' || true"],
+            nothrow=True,
+            timeout=30,
+        )
+        pids = [p.strip() for p in (pids_out or "").splitlines() if p.strip()]
+        if not pids:
+            print(
+                "Spark hang diag: no running 'org.apache.spark' processes"
+                " (already exited)"
+            )
+        for pid in pids:
+            try:
+                # Prefer non-force jstack; fall back to ``-F`` if the JVM is
+                # unresponsive to the attach mechanism.
+                dump = node.exec_in_container(
+                    [
+                        "bash",
+                        "-c",
+                        f"jstack {pid} 2>&1 | head -500"
+                        f" || jstack -F {pid} 2>&1 | head -500",
+                    ],
+                    nothrow=True,
+                    timeout=30,
+                )
+                print(f"Spark hang diag: jstack of PID {pid}:\n{dump}")
+            except Exception as je:
+                print(f"Spark hang diag: jstack PID {pid} failed: {str(je)}")
+    except Exception as e:
+        print(f"Spark hang diag: failed to enumerate Spark PIDs: {str(e)}")
+
+    # 2. Unity Catalog HTTP liveness probe.
+    try:
+        uc = node.exec_in_container(
+            [
+                "bash",
+                "-c",
+                "curl --silent --show-error --max-time 5 -o /dev/null"
+                " -w 'http_code=%{http_code} time_total=%{time_total}s'"
+                " http://localhost:8080/api/2.1/unity-catalog/schemas"
+                " || echo ' curl_failed'",
+            ],
+            nothrow=True,
+            timeout=15,
+        )
+        print(f"Spark hang diag: Unity Catalog liveness: {uc}")
+    except Exception as e:
+        print(f"Spark hang diag: UC liveness probe failed: {str(e)}")
+
+    # 3. Socket state snapshot for UC port and Java connections.
+    try:
+        sockets = node.exec_in_container(
+            [
+                "bash",
+                "-c",
+                "ss -tnp 2>&1 | grep -E ':8080|java' | head -50"
+                " || echo ' no_matching_sockets'",
+            ],
+            nothrow=True,
+            timeout=15,
+        )
+        print(f"Spark hang diag: socket state for UC port:\n{sockets}")
+    except Exception as e:
+        print(f"Spark hang diag: ss snapshot failed: {str(e)}")
+
+
 def execute_spark_query(node, query_text):
     # Kill any lingering Spark processes and remove the Derby metastore
     # before starting a new Spark session. The metastore_db is created inside
@@ -148,6 +238,12 @@ def execute_spark_query(node, query_text):
             print("Last 50 lines of UC log:\n", logs)
         except Exception as log_e:
             print(f"Cannot read log file: {str(log_e)}")
+
+        # Capture extra diagnostics that are only useful when the Spark JVM
+        # hangs (timeout case) — thread dumps, UC liveness, socket state.
+        # These run after the existing log capture so the legacy diagnostics
+        # remain at the same position in CI output.
+        _capture_spark_hang_diagnostics(node)
 
         raise
 

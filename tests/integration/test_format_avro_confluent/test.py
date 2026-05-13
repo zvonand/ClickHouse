@@ -90,27 +90,18 @@ def test_select_skip_symbolic(started_cluster):
 
     schema = avro.schema.make_avsc_object(
         {
-            "name": "Outer",
+            "name": "Node",
             "type": "record",
             "fields": [
                 {"name": "value", "type": "long"},
-                {
-                    "name": "a",
-                    "type": {
-                        "type": "record",
-                        "name": "Inner",
-                        "fields": [{"name": "x", "type": "int"}],
-                    },
-                },
-                {"name": "b", "type": "Inner"},
+                {"name": "next", "type": ["null", "Node"]},
             ],
         }
     )
 
+    record = {"value": 0, "next": {"value": 1, "next": {"value": 2, "next": None}}}
     data = serializer.encode_record_with_schema(
-        "test_subject_skip_symbolic",
-        schema,
-        {"value": 0, "a": {"x": 0}, "b": {"x": 0}},
+        "test_subject_skip_symbolic", schema, record
     )
 
     instance = started_cluster.instances["dummy"]  # type: ClickHouseInstance

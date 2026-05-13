@@ -1215,8 +1215,13 @@ class FunctionBinaryArithmetic : public IFunction
         /// destination reallocates, the source iterators (pointing to the freed
         /// buffer) are dereferenced, producing a heap-use-after-free. We avoid
         /// the alias by copying `vec_from` into an independent column first.
-        auto column_temp = ColumnAggregateFunction::create(function);
-        column_temp->reserve(size);
+        ///
+        /// The temporary column is constructed inside the squaring branch so
+        /// that its arena is released at the end of each iteration. Re-using a
+        /// single column across iterations would leak per-iteration state
+        /// memory into the column's monotonic arena (`popBack` decrements the
+        /// row count but does not free arena allocations), causing the
+        /// temporary footprint to grow with the multiplier.
         while (m)
         {
             if (m % 2)
@@ -1227,7 +1232,8 @@ class FunctionBinaryArithmetic : public IFunction
             }
             else
             {
-                column_temp->popBack(column_temp->size());
+                auto column_temp = ColumnAggregateFunction::create(function);
+                column_temp->reserve(size);
                 for (size_t i = 0; i < size; ++i)
                     column_temp->insertFrom(vec_from[i]);
                 auto & vec_temp = column_temp->getData();

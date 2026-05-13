@@ -81,6 +81,56 @@ def test_select(started_cluster):
     ]
 
 
+def test_select_skip_symbolic(started_cluster):
+    # type: (ClickHouseCluster) -> None
+
+    reg_url = "http://localhost:{}".format(started_cluster.schema_registry_port)
+    schema_registry_client = CachedSchemaRegistryClient({"url": reg_url})
+    serializer = MessageSerializer(schema_registry_client)
+
+    schema = avro.schema.make_avsc_object(
+        {
+            "name": "Outer",
+            "type": "record",
+            "fields": [
+                {"name": "value", "type": "long"},
+                {
+                    "name": "a",
+                    "type": {
+                        "type": "record",
+                        "name": "Inner",
+                        "fields": [{"name": "x", "type": "int"}],
+                    },
+                },
+                {"name": "b", "type": "Inner"},
+            ],
+        }
+    )
+
+    data = serializer.encode_record_with_schema(
+        "test_subject_skip_symbolic",
+        schema,
+        {"value": 0, "a": {"x": 0}, "b": {"x": 0}},
+    )
+
+    instance = started_cluster.instances["dummy"]  # type: ClickHouseInstance
+    schema_registry_url = "http://{}:{}".format(
+        started_cluster.schema_registry_host, started_cluster.schema_registry_port
+    )
+    settings = {"format_avro_schema_registry_url": schema_registry_url}
+    run_query(
+        instance,
+        "create table avro_data_skip_symbolic(value Int64) engine = Memory()",
+    )
+    run_query(
+        instance,
+        "insert into avro_data_skip_symbolic format AvroConfluent",
+        data,
+        settings,
+    )
+    assert run_query(instance, "select value from avro_data_skip_symbolic").strip() == "0"
+
+
 def test_select_auth(started_cluster):
     # type: (ClickHouseCluster) -> None
 

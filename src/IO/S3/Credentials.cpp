@@ -116,12 +116,12 @@ struct ResolvedWebIdentitySettings
     String tmp_region;
 };
 
-ResolvedWebIdentitySettings resolveWebIdentitySettingsFromEnvironmentAndProfile(const String & role_arn_override)
+ResolvedWebIdentitySettings resolveWebIdentitySettingsFromEnvironmentAndProfile(const String & role_arn_)
 {
     ResolvedWebIdentitySettings resolved;
     // check environment variables
     resolved.tmp_region = Aws::Environment::GetEnv("AWS_DEFAULT_REGION");
-    resolved.role_arn = role_arn_override.empty() ? Aws::Environment::GetEnv("AWS_ROLE_ARN") : role_arn_override;
+    resolved.role_arn = role_arn_.empty() ? Aws::Environment::GetEnv("AWS_ROLE_ARN") : role_arn_;
     resolved.token_file = Aws::Environment::GetEnv("AWS_WEB_IDENTITY_TOKEN_FILE");
     resolved.session_name = Aws::Environment::GetEnv("AWS_ROLE_SESSION_NAME");
 
@@ -702,10 +702,11 @@ void AwsAuthSTSAssumeRoleWebIdentityCredentialsProvider::CacheKey::updateHash(Si
     hash.update(session_name);
 }
 
-bool AwsAuthSTSAssumeRoleWebIdentityCredentialsProvider::isWebIdentityConfigured(const String & kms_role_arn_override)
+bool AwsAuthSTSAssumeRoleWebIdentityCredentialsProvider::isWebIdentityConfigured(const String & role_arn_)
 {
-    auto resolved = resolveWebIdentitySettingsFromEnvironmentAndProfile(kms_role_arn_override);
-    return !resolved.token_file.empty() && !resolved.role_arn.empty();
+    auto resolved = resolveWebIdentitySettingsFromEnvironmentAndProfile(role_arn_);
+    // Either field set means that the operator likely intends web identity, so we still add the provider to warn about misconf. later
+    return !resolved.token_file.empty() || !resolved.role_arn.empty();
 }
 
 std::shared_ptr<Aws::Auth::AWSCredentialsProvider> AwsAuthSTSAssumeRoleWebIdentityCredentialsProvider::create(
@@ -1005,7 +1006,8 @@ S3CredentialsProviderChain::S3CredentialsProviderChain(
         ///
         /// AWS API tries credentials providers one by one. Some of providers (like ProfileConfigFileAWSCredentialsProvider) can be
         /// quite verbose even if nobody configured them. So we use our provider first and only after it use default providers.
-        /// STS web identity is added only when role ARN and token file are configured, so plain EC2/IMDS setups avoid extra warnings.
+        /// STS web identity is added only when role ARN or token file are configured (likely a misconfiguration)
+        //  additionally, plain EC2/IMDS setups avoid extra warning
         if (AwsAuthSTSAssumeRoleWebIdentityCredentialsProvider::isWebIdentityConfigured(credentials_configuration.kms_role_arn))
         {
             DB::S3::PocoHTTPClientConfiguration aws_client_configuration = DB::S3::ClientFactory::instance().createClientConfiguration(

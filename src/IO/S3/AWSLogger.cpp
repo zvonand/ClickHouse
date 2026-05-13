@@ -9,6 +9,7 @@
 
 #include <Core/SettingsEnums.h>
 #include <Common/logger_useful.h>
+#include <boost/algorithm/string/predicate.hpp>
 #include <aws/core/utils/logging/LogLevel.h>
 #include <Poco/Logger.h>
 
@@ -60,68 +61,39 @@ Aws::Utils::Logging::LogLevel AWSLogger::GetLogLevel() const
 
 namespace
 {
-/// This function helps to avoid reading the whole str when strlen is called
-bool startsWith(const char * str, const char * prefix)
-{
-    while (*prefix && *str == *prefix)
-    {
-        ++str;
-        ++prefix;
-    }
-    return *prefix == 0;
-}
-
-/// Case-insensitive substring search; right now only used on the cold 400-error path,
-/// so we don't worry about the implicit strlen here.
-bool containsCaseInsensitive(std::string_view haystack, std::string_view needle)
-{
-    const auto case_eq = [](char a, char b)
-    {
-        return std::tolower(static_cast<unsigned char>(a))
-            == std::tolower(static_cast<unsigned char>(b));
-    };
-    return std::search(haystack.begin(), haystack.end(), needle.begin(), needle.end(), case_eq) != haystack.end();
-}
 
 /// Mute logs from `AWSXMLClient::BuildAWSError` for S3 wrong-signing-region 400
-bool isWrongSigningRegionMuted(const char * message)
+bool isWrongSigningRegionMuted(const std::string_view message)
 {
-    static const char * prefix = "HTTP response code: 400";
-    if (!startsWith(message, prefix))
+    static constexpr std::string_view  prefix = "HTTP response code: 400";
+    if (!boost::starts_with(message, prefix))
         return false;
 
-    return containsCaseInsensitive(message, "x-amz-bucket-region");
+    return boost::icontains(message, "x-amz-bucket-region");
 }
 
     /// This is the way, how to mute scary logs from `AWSXMLClient::BuildAWSError`
     /// about 404 when 404 is the expected response
-bool is404Muted(const char * message)
+bool is404Muted(std::string_view message)
 {
     if (!Expect404ResponseScope::is404Expected())
         return false;
 
-    static const char * prefix_str = "HTTP response code: ";
-    static const size_t prefix_len = strlen(prefix_str);
-
-    if (!startsWith(message, prefix_str))
+    static constexpr std::string_view prefix = "HTTP response code: ";
+    if (!boost::starts_with(message, prefix))
         return false;
 
-    const char * code_str = message + prefix_len;
-    size_t code_len = 3;
-
-    // check that strlen(code_str) >= code_len
-    for (size_t i = 0; i < code_len; ++i)
-        if (!code_str[i])
-            return false;
+    if (message.size() < prefix.size() + 3)
+        return false;
 
     UInt64 code = 0;
-    if (!tryParse<UInt64>(code, code_str, code_len))
+    if (!tryParse<UInt64>(code, message.data() + prefix.size(), 3))
         return false;
 
     return code == Poco::Net::HTTPResponse::HTTP_NOT_FOUND;
 }
 
-bool isExpectedAwsHttpResponseMuted(const char * message)
+bool isExpectedAwsHttpResponseMuted(const std::string_view message)
 {
     return isWrongSigningRegionMuted(message) || is404Muted(message);
 }

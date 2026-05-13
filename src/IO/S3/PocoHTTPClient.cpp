@@ -666,13 +666,11 @@ void PocoHTTPClient::makeRequestInternalImpl(
             else if (isS3WrongSigningRegionBadRequest(status_code, poco_response))
             {
                 /// Wrong signing region: S3 returns 400 and `x-amz-bucket-region`; `getRegionForBucket` recovers.
-                const auto suggested_region = poco_response.get("x-amz-bucket-region");
                 LOG_INFO(
                     log,
-                    "Response status: {}, {}. Wrong signing region; server suggests bucket region '{}' in `x-amz-bucket-region`",
+                    "Response status: {}, {}. Wrong signing region.",
                     status_code,
-                    poco_response.getReason(),
-                    suggested_region);
+                    poco_response.getReason());
             }
             else if (Poco::Net::HTTPResponse::HTTP_NOT_FOUND != status_code || !Expect404ResponseScope::is404Expected())
             {

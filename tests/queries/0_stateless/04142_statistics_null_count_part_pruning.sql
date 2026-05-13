@@ -5,7 +5,6 @@ SET use_statistics_for_part_pruning = 1;
 SET enable_analyzer = 1;
 SET optimize_functions_to_subcolumns = 1;
 SET materialize_statistics_on_insert = 1;
-SET mutations_sync = 1;
 SET allow_suspicious_low_cardinality_types = 1;
 
 DROP TABLE IF EXISTS test_nullcount_pruning;
@@ -14,10 +13,10 @@ CREATE TABLE test_nullcount_pruning
 (
     bucket UInt8,
     id UInt64,
-    value Nullable(Int64),
-    value_for_range Nullable(Int64),
-    value_lc LowCardinality(Nullable(String)),
-    value_lc_num LowCardinality(Nullable(Int64))
+    value Nullable(Int64) STATISTICS(nullcount),
+    value_for_range Nullable(Int64) STATISTICS(minmax, nullcount),
+    value_lc LowCardinality(Nullable(String)) STATISTICS(nullcount),
+    value_lc_num LowCardinality(Nullable(Int64)) STATISTICS(minmax, nullcount)
 )
 ENGINE = MergeTree()
 PARTITION BY bucket
@@ -32,14 +31,6 @@ INSERT INTO test_nullcount_pruning VALUES (1, 2, 100, 100, 'a', 100), (1, 3, 101
 INSERT INTO test_nullcount_pruning VALUES (2, 4, 200, 200, 'c', 200), (2, 5, 201, 201, 'd', 201);
 -- Part 3: mixed NULL and non-NULL values, inside the range predicate.
 INSERT INTO test_nullcount_pruning VALUES (3, 6, NULL, NULL, NULL, NULL), (3, 7, 160, 160, 'e', 160), (3, 8, NULL, NULL, NULL, NULL), (3, 9, 161, 161, 'f', 161);
-
-ALTER TABLE test_nullcount_pruning ADD STATISTICS value TYPE nullcount;
-ALTER TABLE test_nullcount_pruning ADD STATISTICS value_for_range TYPE minmax;
-ALTER TABLE test_nullcount_pruning ADD STATISTICS value_for_range TYPE nullcount;
-ALTER TABLE test_nullcount_pruning ADD STATISTICS value_lc TYPE nullcount;
-ALTER TABLE test_nullcount_pruning ADD STATISTICS value_lc_num TYPE minmax;
-ALTER TABLE test_nullcount_pruning ADD STATISTICS value_lc_num TYPE nullcount;
-ALTER TABLE test_nullcount_pruning MATERIALIZE STATISTICS value, value_for_range, value_lc, value_lc_num;
 
 SELECT 'Test 1: `IS NULL` with `NullCount` prunes no-NULL parts';
 SELECT countIf(explain LIKE '%Statistics%') > 0, countIf(explain LIKE '%Parts: 2/4%') > 0

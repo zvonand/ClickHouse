@@ -174,20 +174,29 @@ def _capture_spark_hang_diagnostics(node):
 
     # 3. Socket state snapshot for UC port and Java connections.
     try:
-        # `set -o pipefail` is required so the pipeline's exit code reflects
-        # `ss`'s status, not `head`'s (which is always 0 once any bytes
-        # flow). Without it, the `|| echo ' no_matching_sockets'` sentinel
-        # is unreachable. `grep -E ... || true` swallows the exit-1 that
-        # `grep` produces on no matches, so the sentinel fires only when
-        # `ss` itself fails — which is the intended fallback semantics.
+        # Capture `ss`'s output into a shell variable first, then filter and
+        # truncate from that variable. Checking `ss`'s exit status directly
+        # (via the `if` test on the assignment) avoids the trap of the
+        # earlier `ss | grep | head || sentinel` pipeline: with
+        # `set -o pipefail` enabled, `head -50` closing the pipe early on
+        # outputs longer than 50 lines caused upstream commands to receive
+        # `SIGPIPE`, which made the pipeline status non-zero and falsely
+        # triggered the ` no_matching_sockets` sentinel; without `pipefail`,
+        # the sentinel was unreachable because `head`'s exit code (always
+        # 0 once any bytes flow) masked `ss`'s. Decoupling capture from
+        # truncation breaks both horns of that dilemma. `grep -E ... ||
+        # true` keeps the no-match case from producing an `exit 1` that
+        # would print confusing output, but plays no role in detecting
+        # `ss` failure.
         sockets = node.exec_in_container(
             [
                 "bash",
                 "-c",
-                "set -o pipefail;"
-                " ss -tnp 2>&1 | { grep -E ':8080|java' || true; }"
-                " | head -50"
-                " || echo ' no_matching_sockets'",
+                'if ss_output=$(ss -tnp 2>&1); then '
+                'echo "$ss_output" | { grep -E ":8080|java" || true; } | head -50; '
+                'else '
+                "echo ' no_matching_sockets'; "
+                'fi',
             ],
             nothrow=True,
             timeout=15,

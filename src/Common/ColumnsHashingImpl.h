@@ -231,11 +231,11 @@ public:
             /// after the first call (regardless of whether hashes were actually computed), so
             /// subsequent rows only do the one `can_precompute_hashes` check below.
             if (!derived.precomputed_hashes_initialized) [[unlikely]]
-                derived.initPrecomputedHashes(data);
+                derived.initPrecomputedHashes(data, row);
 
             if (derived.can_precompute_hashes)
             {
-                if (row == PrefetchingHelper::iterationsToMeasure())
+                if (row == derived.calibration_row)
                     derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
                 const auto & hashes = derived.precomputed_hashes;
                 if (row + derived.prefetch_look_ahead < hashes.size())
@@ -276,11 +276,11 @@ public:
         {
             /// See note in `emplaceKey`: single gate via `precomputed_hashes_initialized`.
             if (!derived.precomputed_hashes_initialized) [[unlikely]]
-                derived.initPrecomputedHashes(data);
+                derived.initPrecomputedHashes(data, row);
 
             if (derived.can_precompute_hashes)
             {
-                if (row == PrefetchingHelper::iterationsToMeasure())
+                if (row == derived.calibration_row)
                     derived.prefetch_look_ahead = derived.prefetching->calcPrefetchLookAhead();
                 const auto & hashes = derived.precomputed_hashes;
                 if (row + derived.prefetch_look_ahead < hashes.size())

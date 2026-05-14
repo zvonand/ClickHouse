@@ -391,6 +391,12 @@ struct HashMethodSerialized
 
     std::unique_ptr<PrefetchingHelper> prefetching;
     size_t prefetch_look_ahead = PrefetchingHelper::getInitialLookAheadValue();
+    /// Absolute row index at which `calcPrefetchLookAhead` should fire. Computed lazily as
+    /// `first_row + PrefetchingHelper::iterationsToMeasure()` so that calibration is
+    /// interval-relative — matches the pattern used in `Aggregator::executeImplBatch` and
+    /// remains correct when `emplaceKey`/`findKey` are called over sliced ranges
+    /// (e.g. `executeOnBlockSmall` with non-zero `row_begin`).
+    size_t calibration_row = PrefetchingHelper::iterationsToMeasure();
 
     HashMethodSerialized(const ColumnRawPtrs & key_columns_, const Sizes & /*key_sizes*/, const HashMethodContextPtr & context)
         : key_columns(key_columns_), keys_size(key_columns_.size())
@@ -480,10 +486,11 @@ struct HashMethodSerialized
     /// + prefetch path when the hash table is small enough to fit in caches. Matches
     /// `Aggregator::executeImpl`'s `prefetch` gate.
     template <typename Data>
-    NO_INLINE void initPrecomputedHashes(const Data & data)
+    NO_INLINE void initPrecomputedHashes(const Data & data, size_t first_row)
         requires(prealloc)
     {
         precomputed_hashes_initialized = true;
+        calibration_row = first_row + PrefetchingHelper::iterationsToMeasure();
 
         if (min_bytes_for_prefetch != 0 && data.getBufferSizeInBytes() <= min_bytes_for_prefetch)
         {

@@ -113,36 +113,40 @@ TEST(Context, TableFunctionResultsCopyRace)
     auto context = Context::createCopy(getContext().context);
     context->makeQueryContext();
 
-    /// Build a minimal `numbers(1)` AST -- the table function does not need a
-    /// real ClickHouse server backing to exercise the cache path; even if the
-    /// execution itself fails, the code path through `table_function_results`
-    /// is unchanged and is what we need to race against.
-    auto numbers_ast = makeASTFunction("numbers", make_intrusive<ASTLiteral>(Field(UInt64(1))));
-
-    /// Warm up so the table function machinery is initialized -- ignore any
-    /// errors, we only care about reaching the map.
+    /// Warm up the table-function machinery with a literal (`numbers(0)`)
+    /// distinct from the ones the writer loop will use, so the writer still
+    /// hits the cache-miss insertion path on every iteration.
     try
     {
-        (void)context->executeTableFunction(numbers_ast);
+        auto warmup_ast = makeASTFunction("numbers", make_intrusive<ASTLiteral>(Field(UInt64(0))));
+        (void)context->executeTableFunction(warmup_ast);
     }
-    catch (...) /// NOLINT(bugprone-empty-catch)
+    catch (...) // Ok: ignore execution failures, we only care about exercising the cache path  // NOLINT(bugprone-empty-catch)
     {
     }
 
     constexpr size_t num_iterations = 200;
     std::atomic<bool> stop{false};
 
-    /// Writer thread: keep calling executeTableFunction so `table_function_results`
-    /// keeps being mutated (insert into the map) under its mutex.
+    /// Writer thread: vary the integer literal each iteration so the
+    /// `executeTableFunction` call always hashes to a fresh key. This forces
+    /// the cache-miss path that inserts into `table_function_results` (under
+    /// `table_function_results_mutex`) on every iteration, which is the write
+    /// the copier thread must race against. Calling with the same AST would
+    /// hit the cache after the first call and not mutate the map -- making
+    /// the race read-vs-read and invisible to TSan even without the fix.
+    /// See the bot's inline review on PR #104879.
     std::thread writer([&]
     {
+        UInt64 i = 1;
         while (!stop.load(std::memory_order_relaxed))
         {
+            auto ast = makeASTFunction("numbers", make_intrusive<ASTLiteral>(Field(i++)));
             try
             {
-                (void)context->executeTableFunction(numbers_ast);
+                (void)context->executeTableFunction(ast);
             }
-            catch (...) /// NOLINT(bugprone-empty-catch)
+            catch (...) // Ok: ignore execution failures, we only care about exercising the cache path  // NOLINT(bugprone-empty-catch)
             {
             }
         }

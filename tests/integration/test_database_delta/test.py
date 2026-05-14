@@ -108,12 +108,24 @@ def _capture_spark_hang_diagnostics(node):
     """
     # 1. Thread dumps of running Spark JVMs.
     try:
+        # `[o]rg.apache.spark` is a character-class trick: it matches the
+        # literal string `org.apache.spark` (because `[o]` matches `o`) but
+        # the regex itself does NOT contain that string, so `pgrep` will
+        # not match its own command line (`pgrep -f '[o]rg.apache.spark'`).
+        # Without this, on shards where no Spark JVM is left the `bash -c`
+        # wrapper's own cmdline can match and `jstack` then runs against
+        # an unrelated shell PID.
         pids_out = node.exec_in_container(
-            ["bash", "-c", "pgrep -f 'org.apache.spark' || true"],
+            ["bash", "-c", "pgrep -f '[o]rg.apache.spark' || true"],
             nothrow=True,
             timeout=30,
         )
         pids = [p.strip() for p in (pids_out or "").splitlines() if p.strip()]
+        # Cap the number of jstack-ed PIDs at 3 so a hang affecting both
+        # the driver and several executors does not consume 30s per PID
+        # before the test fails. In practice there is one driver JVM per
+        # query; the cap is a belt for the pathological case.
+        pids = pids[:3]
         if not pids:
             print(
                 "Spark hang diag: no running 'org.apache.spark' processes"

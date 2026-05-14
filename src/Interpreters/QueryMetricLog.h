@@ -75,8 +75,7 @@ public:
         const String & query_id,
         const QueryStatusInfo & query_info,
         TimePoint query_info_time,
-        bool schedule_next,
-        bool is_final) TSA_REQUIRES(getMutex());
+        bool is_final = false) TSA_REQUIRES(getMutex());
 
 private:
     /// We need to be able to move it for the hash map, so we need to add an indirection here.

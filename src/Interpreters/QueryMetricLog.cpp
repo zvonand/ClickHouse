@@ -150,8 +150,7 @@ void QueryMetricLog::collectMetric(const ProcessList & process_list, String quer
     }
     global_lock.unlock();
 
-    auto elem = query_status.createLogMetricElement(
-        query_id, *query_info, current_time, /* schedule_next = */ true, /* is_final = */ false);
+    auto elem = query_status.createLogMetricElement(query_id, *query_info, current_time);
     if (elem)
         add(std::move(elem.value()));
 }
@@ -223,8 +222,7 @@ void QueryMetricLog::finishQuery(const String & query_id, TimePoint finish_time,
 
     if (query_info)
     {
-        auto elem = query_status.createLogMetricElement(
-            query_id, *query_info, finish_time, /* schedule_next = */ false, /* is_final = */ true);
+        auto elem = query_status.createLogMetricElement(query_id, *query_info, finish_time, /* is_final = */ true);
         if (elem)
             add(std::move(elem.value()));
     }
@@ -289,21 +287,26 @@ std::optional<QueryMetricLogElement> QueryMetricLogStatus::createLogMetricElemen
     const String & query_id,
     const QueryStatusInfo & query_info,
     TimePoint query_info_time,
-    bool schedule_next,
     bool is_final)
 {
     LOG_TEST(logger, "Collecting query_metric_log for query {} and interval {} ms with QueryStatusInfo from {}. Next collection time: {}",
         query_id, info.interval_milliseconds, timePointToString(query_info_time),
-        schedule_next ? timePointToString(info.next_collect_time + std::chrono::milliseconds(info.interval_milliseconds)) : "finished");
+        is_final ? "finished" : timePointToString(info.next_collect_time + std::chrono::milliseconds(info.interval_milliseconds)));
 
     /// Final rows must always be emitted, even when a late periodic row has already
     /// advanced `info.last_collect_time` past `finish_time`. Periodic rows keep the
     /// existing strict-monotonic dedup so duplicate/stale samples remain skipped.
-    if (!is_final && query_info_time <= info.last_collect_time)
+    if (query_info_time <= info.last_collect_time)
     {
-        LOG_TEST(logger, "Query {} has a more recent metrics collected at {}. This metrics are from {}. Skipping this one",
+        if (!is_final)
+        {
+            LOG_TEST(logger, "Query {} has a more recent metrics collected at {}. This metrics are from {}. Skipping this one",
+                query_id, timePointToString(info.last_collect_time), timePointToString(query_info_time));
+            return {};
+        }
+
+        LOG_TEST(logger, "Query {} has a more recent periodic metrics collected at {}. Final metrics are from {}. Emitting final metrics anyway",
             query_id, timePointToString(info.last_collect_time), timePointToString(query_info_time));
-        return {};
     }
 
     /// Preserve monotonicity of `last_collect_time` so an older final timestamp does
@@ -342,7 +345,7 @@ std::optional<QueryMetricLogElement> QueryMetricLogStatus::createLogMetricElemen
         elem.profile_events = std::vector<ProfileEvents::Count>(ProfileEvents::end());
     }
 
-    if (schedule_next)
+    if (!is_final)
         scheduleNext(query_id);
 
     return elem;

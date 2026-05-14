@@ -221,6 +221,11 @@ void FailPointInjection::pauseFailPoint(const String & fail_point_name)
     fiu_do_on(fail_point_name.c_str(), FailPointInjection::notifyPauseAndWaitForResume(fail_point_name););
 }
 
+bool FailPointInjection::hasAnyFailPointBeenRegistered()
+{
+    return atomic_load_explicit(&has_any_failpoint_been_registered, memory_order_relaxed) != 0;
+}
+
 void FailPointInjection::enableFailPoint(const String & fail_point_name)
 {
 #define SUB_M(NAME, flags, pause)                                                                               \
@@ -366,6 +371,11 @@ std::vector<FailPointInjection::FailPointInfo> FailPointInjection::getFailPoints
 
 void FailPointInjection::pauseFailPoint(const String &)
 {
+}
+
+bool FailPointInjection::hasAnyFailPointBeenRegistered()
+{
+    return false;
 }
 
 void FailPointInjection::enableFailPoint(const String &)

@@ -186,7 +186,8 @@ void QueryMetricLog::finishQuery(const String & query_id, TimePoint finish_time,
     /// The `query_info` gate filters `nullptr` finish paths. If a non-null phantom
     /// finish-call still reaches this failpoint, `it == queries.end()` after resume
     /// makes this function return immediately.
-    if (query_info && query_id.starts_with(query_metric_log_final_row_failpoint_query_id_prefix))
+    if (query_info && FailPointInjection::hasAnyFailPointBeenRegistered()
+        && query_id.starts_with(query_metric_log_final_row_failpoint_query_id_prefix))
         FailPointInjection::pauseFailPoint(FailPoints::query_metric_log_pause_before_finish);
 
     UniqueLock global_lock(queries_mutex);

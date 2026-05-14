@@ -121,14 +121,17 @@ def _capture_spark_hang_diagnostics(node):
             )
         for pid in pids:
             try:
-                # Prefer non-force jstack; fall back to ``-F`` if the JVM is
-                # unresponsive to the attach mechanism.
+                # Prefer non-force `jstack`; fall back to `-F` if the JVM is
+                # unresponsive to the attach mechanism. The fallback must
+                # happen BEFORE `head` truncates, otherwise `head`'s exit
+                # code (always 0 once any bytes flow) masks `jstack`'s and
+                # the `||` branch never fires.
                 dump = node.exec_in_container(
                     [
                         "bash",
                         "-c",
-                        f"jstack {pid} 2>&1 | head -500"
-                        f" || jstack -F {pid} 2>&1 | head -500",
+                        f"(jstack {pid} 2>&1 || jstack -F {pid} 2>&1)"
+                        f" | head -500",
                     ],
                     nothrow=True,
                     timeout=30,
@@ -159,11 +162,19 @@ def _capture_spark_hang_diagnostics(node):
 
     # 3. Socket state snapshot for UC port and Java connections.
     try:
+        # `set -o pipefail` is required so the pipeline's exit code reflects
+        # `ss`'s status, not `head`'s (which is always 0 once any bytes
+        # flow). Without it, the `|| echo ' no_matching_sockets'` sentinel
+        # is unreachable. `grep -E ... || true` swallows the exit-1 that
+        # `grep` produces on no matches, so the sentinel fires only when
+        # `ss` itself fails — which is the intended fallback semantics.
         sockets = node.exec_in_container(
             [
                 "bash",
                 "-c",
-                "ss -tnp 2>&1 | grep -E ':8080|java' | head -50"
+                "set -o pipefail;"
+                " ss -tnp 2>&1 | { grep -E ':8080|java' || true; }"
+                " | head -50"
                 " || echo ' no_matching_sockets'",
             ],
             nothrow=True,

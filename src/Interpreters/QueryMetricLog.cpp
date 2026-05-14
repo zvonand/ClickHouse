@@ -19,7 +19,6 @@
 #include <Parsers/ExpressionElementParsers.h>
 #include <Parsers/parseQuery.h>
 
-#include <algorithm>
 #include <chrono>
 #include <string_view>
 #include <fmt/chrono.h>
@@ -309,9 +308,7 @@ std::optional<QueryMetricLogElement> QueryMetricLogStatus::createLogMetricElemen
             query_id, timePointToString(info.last_collect_time), timePointToString(query_info_time));
     }
 
-    /// Preserve monotonicity of `last_collect_time` so an older final timestamp does
-    /// not move state backwards if a periodic row already used a later sample time.
-    info.last_collect_time = std::max(info.last_collect_time, query_info_time);
+    info.last_collect_time = query_info_time;
 
     QueryMetricLogElement elem;
     elem.event_time = timeInSeconds(query_info_time);

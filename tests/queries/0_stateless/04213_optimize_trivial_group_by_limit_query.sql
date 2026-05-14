@@ -5,8 +5,13 @@
 
 DROP TABLE IF EXISTS t_trivial_group_by_limit;
 
+-- Data size is kept small (10000 rows) to fit the time budget on slow storage
+-- backends (e.g. `s3 storage, meta in keeper` flaky check that reruns the test
+-- many times in sequence). The test asserts behavior, not data size — every
+-- query below either uses LIMIT independently of input size or relies on the
+-- input having at least 6 distinct keys.
 CREATE TABLE t_trivial_group_by_limit (k UInt64) ENGINE = MergeTree ORDER BY tuple();
-INSERT INTO t_trivial_group_by_limit SELECT number FROM numbers(1000000);
+INSERT INTO t_trivial_group_by_limit SELECT number FROM numbers(10000);
 
 -- With the optimization on or off, the projection always returns exactly LIMIT rows,
 -- so this query reports the same value either way; the difference is internal — the
@@ -20,9 +25,9 @@ SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k ORDER BY 
 
 -- Optimization is suppressed when the user has explicitly set `group_by_overflow_mode = 'throw'`
 -- (with any `max_rows_to_group_by`), because applying the optimization would silently override the
--- user's throw contract. The query has 1M distinct keys; with `max_rows_to_group_by = 1000000` and
--- `'throw'` the aggregation succeeds; with the optimization forcing `max_rows_to_group_by = 5` and
--- `'any'` it would silently truncate to 5 keys (or with `'throw'` retained it would throw).
+-- user's throw contract. With `max_rows_to_group_by = 1000000` and `'throw'` the aggregation
+-- succeeds (data fits within the cap); with the optimization forcing `max_rows_to_group_by = 5`
+-- and `'any'` it would silently truncate to 5 keys (or with `'throw'` retained it would throw).
 SELECT count() FROM (SELECT k FROM t_trivial_group_by_limit GROUP BY k LIMIT 5)
 SETTINGS optimize_trivial_group_by_limit_query = 1, max_rows_to_group_by = 1000000, group_by_overflow_mode = 'throw';
 

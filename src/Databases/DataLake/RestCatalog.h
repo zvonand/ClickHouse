@@ -64,6 +64,8 @@ public:
 
     std::optional<StorageType> getStorageType() const override;
 
+    std::optional<String> getDefaultBaseLocation() const override;
+
     DB::DatabaseDataLakeCatalogType getCatalogType() const override
     {
         return DB::DatabaseDataLakeCatalogType::ICEBERG_REST;

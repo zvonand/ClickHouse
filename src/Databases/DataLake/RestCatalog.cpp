@@ -534,6 +534,13 @@ std::optional<StorageType> RestCatalog::getStorageType() const
     return parseStorageTypeFromLocation(config.default_base_location);
 }
 
+std::optional<String> RestCatalog::getDefaultBaseLocation() const
+{
+    if (config.default_base_location.empty())
+        return std::nullopt;
+    return config.default_base_location;
+}
+
 DB::ReadWriteBufferFromHTTPPtr RestCatalog::createReadBuffer(
     const std::string & endpoint,
     const Poco::URI::QueryParameters & params,

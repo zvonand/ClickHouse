@@ -177,6 +177,9 @@ public:
     /// E.g. one of S3, Azure, Local, HDFS.
     virtual std::optional<StorageType> getStorageType() const = 0;
 
+    /// Catalog-wide base location for new tables, e.g. `s3://warehouse/data`. Empty if unknown.
+    virtual std::optional<String> getDefaultBaseLocation() const { return std::nullopt; }
+
     /// Creates new table in catalog.
     virtual void createTable(const String & namespace_name, const String & table_name, const String & new_metadata_path, Poco::JSON::Object::Ptr metadata_content) const;
 

@@ -129,6 +129,7 @@ def create_clickhouse_iceberg_database(
         "catalog_type": "rest",
         "warehouse": "demo",
         "storage_endpoint": "http://minio:9000/warehouse-rest",
+        "default_base_location": "s3://warehouse-rest/data",
     }
 
     settings.update(additional_settings)
@@ -469,6 +470,7 @@ def test_no_secrets_in_logs(started_cluster):
         "catalog_type": "rest",
         "warehouse": "demo",
         "storage_endpoint": "http://minio:9000/warehouse-rest",
+        "default_base_location": "s3://warehouse-rest/data",
     }
     qid_db = uuid.uuid4().hex
     node.query(f"DROP DATABASE IF EXISTS {db_name}")
@@ -591,7 +593,7 @@ def test_backup_database(started_cluster):
     node.query(f"RESTORE DATABASE backup_database FROM {backup_name}", settings={"allow_database_iceberg": 1})
     assert (
         node.query("SHOW CREATE DATABASE backup_database")
-        == "CREATE DATABASE backup_database\\nENGINE = DataLakeCatalog(\\'http://rest:8181/v1\\', \\'minio\\', \\'[HIDDEN]\\')\\nSETTINGS catalog_type = \\'rest\\', warehouse = \\'demo\\', storage_endpoint = \\'http://minio:9000/warehouse-rest\\'\n"
+        == "CREATE DATABASE backup_database\\nENGINE = DataLakeCatalog(\\'http://rest:8181/v1\\', \\'minio\\', \\'[HIDDEN]\\')\\nSETTINGS catalog_type = \\'rest\\', warehouse = \\'demo\\', storage_endpoint = \\'http://minio:9000/warehouse-rest\\', default_base_location = \\'s3://warehouse-rest/data\\'\n"
     )
 
 
@@ -1147,6 +1149,12 @@ def test_drop_table_purge(started_cluster):
 
     namespace = "test_drop_purge_ns"
     catalog = load_catalog_impl(started_cluster)
+    minio_client = Minio(
+        f"{started_cluster.get_instance_ip('minio')}:9000",
+        access_key=minio_access_key,
+        secret_key=minio_secret_key,
+        secure=False,
+    )
 
     create_clickhouse_iceberg_database(started_cluster, node, CATALOG_NAME)
 
@@ -1169,6 +1177,13 @@ def test_drop_table_purge(started_cluster):
     table_names = [t[1] for t in tables]
     assert "to_purge" in table_names
 
+    location = catalog.load_table(f"{namespace}.to_purge").location()
+    assert location.startswith("s3://warehouse-rest/")
+    prefix = location[len("s3://warehouse-rest/"):].rstrip("/") + "/"
+    assert list(
+        minio_client.list_objects("warehouse-rest", prefix=prefix, recursive=True)
+    ), f"Expected metadata under {prefix} before drop"
+
     node.query(
         f"DROP TABLE {CATALOG_NAME}.`{namespace}.to_purge` SETTINGS allow_database_iceberg=1, database_iceberg_purge_on_drop=1"
     )
@@ -1176,6 +1191,12 @@ def test_drop_table_purge(started_cluster):
     tables = catalog.list_tables(namespace)
     table_names = [t[1] for t in tables]
     assert "to_purge" not in table_names
+
+    remaining = [
+        o.object_name
+        for o in minio_client.list_objects("warehouse-rest", prefix=prefix, recursive=True)
+    ]
+    assert not remaining, f"Expected purge to remove objects under {prefix}, found: {remaining}"
 
 
 def test_gcs(started_cluster):

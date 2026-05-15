@@ -62,6 +62,7 @@ namespace DatabaseDataLakeSetting
     extern const DatabaseDataLakeSettingsString auth_header;
     extern const DatabaseDataLakeSettingsString auth_scope;
     extern const DatabaseDataLakeSettingsString storage_endpoint;
+    extern const DatabaseDataLakeSettingsString default_base_location;
     extern const DatabaseDataLakeSettingsS3UriStyle storage_uri_style;
     extern const DatabaseDataLakeSettingsString oauth_server_uri;
     extern const DatabaseDataLakeSettingsBool oauth_server_use_request_body;
@@ -126,29 +127,38 @@ namespace FailPoints
 namespace
 {
 
-String getLocationSchemeForTableCreation(const std::shared_ptr<DataLake::ICatalog> & catalog)
+String storageTypeToLocationScheme(DatabaseDataLakeStorageType type)
+{
+    switch (type)
+    {
+        case DatabaseDataLakeStorageType::S3:
+            return "s3";
+        case DatabaseDataLakeStorageType::Azure:
+            return "abfss";
+        case DatabaseDataLakeStorageType::Local:
+            return "file";
+        case DatabaseDataLakeStorageType::HDFS:
+            return "hdfs";
+        case DatabaseDataLakeStorageType::Other:
+            throw Exception(
+                ErrorCodes::BAD_ARGUMENTS,
+                "Cannot determine storage scheme for CREATE TABLE from storage type {}",
+                type);
+    }
+}
+
+String getLocationSchemeForTableCreation(
+    const std::shared_ptr<DataLake::ICatalog> & catalog,
+    const String & fallback_base_location)
 {
     /// Authoritative source: the catalog itself reports the backing storage type
     /// (typically derived from the catalog config's `default-base-location`).
     if (auto storage_type = catalog->getStorageType(); storage_type.has_value())
-    {
-        switch (*storage_type)
-        {
-            case DatabaseDataLakeStorageType::S3:
-                return "s3";
-            case DatabaseDataLakeStorageType::Azure:
-                return "abfss";
-            case DatabaseDataLakeStorageType::Local:
-                return "file";
-            case DatabaseDataLakeStorageType::HDFS:
-                return "hdfs";
-            case DatabaseDataLakeStorageType::Other:
-                throw Exception(
-                    ErrorCodes::BAD_ARGUMENTS,
-                    "Cannot determine storage scheme for CREATE TABLE from storage type {}",
-                    *storage_type);
-        }
-    }
+        return storageTypeToLocationScheme(*storage_type);
+
+    /// Explicit user override for catalogs that don't expose `default-base-location` in `/v1/config`.
+    if (!fallback_base_location.empty())
+        return storageTypeToLocationScheme(DataLake::parseStorageTypeFromLocation(fallback_base_location));
 
     /// Per-catalog-type fallback for catalogs that do not expose the storage type.
     /// This is only safe for catalogs whose backing storage is fixed by the catalog
@@ -173,8 +183,9 @@ String getLocationSchemeForTableCreation(const std::shared_ptr<DataLake::ICatalo
             throw Exception(
                 ErrorCodes::BAD_ARGUMENTS,
                 "Cannot determine storage scheme for CREATE TABLE for catalog type '{}': the catalog does not "
-                "report a backing storage type. Configure the catalog so that it exposes its storage type "
-                "(for Iceberg REST, set `default-base-location` in the catalog config) and try again.",
+                "report a backing storage type. Either configure the catalog so that it exposes its storage type "
+                "(for Iceberg REST, set `default-base-location` in the catalog config) or set the database setting "
+                "`default_base_location` (e.g. 's3://warehouse/data') and try again.",
                 catalog->getCatalogType());
     }
 
@@ -829,7 +840,8 @@ void DatabaseDataLake::createTable(
             ErrorCodes::BAD_ARGUMENTS,
             "CREATE TABLE in DataLakeCatalog requires `storage_endpoint` to be set on the database.");
 
-    const auto location_scheme = getLocationSchemeForTableCreation(catalog);
+    const auto location_scheme = getLocationSchemeForTableCreation(
+        catalog, settings[DatabaseDataLakeSetting::default_base_location].value);
     const String location = DataLake::constructTableLocation(location_scheme, storage_endpoint, namespace_name, table_name);
 
     auto [metadata_content, metadata_str] = Iceberg::createEmptyMetadataFile(
